@@ -205,3 +205,44 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ─── Node / Next.js ───────────────────────────
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ─── Environment Variables ────────────────────
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ─── macOS ────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ─── IDEs ─────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Database ─────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+
+# ─── Setup / Utility Scripts ──────────────────
+setup.sh
+db_setup.sh
+frontend_setup.sh
+run_tests.sh
