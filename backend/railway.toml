@@ -1,46 +1,7 @@
-# Railway configuration for the AdvisoryBoard backend (FastAPI + PostgreSQL).
-#
-# Set these environment variables in the Railway service dashboard:
-#
-#   DATABASE_URL               — Postgres connection string (Railway auto-sets
-#                                this when you attach a Postgres plugin)
-#   ENVIRONMENT                — production
-#   CLERK_FRONTEND_API_URL     — https://your-app.clerk.accounts.dev
-#   CLERK_SECRET_KEY           — sk_live_...
-#   OPENAI_API_KEY             — sk-...
-#   ALLOWED_ORIGINS            — https://your-frontend.railway.app  (comma-sep)
-#
-# ── File storage — choose ONE of the two options below ──────────────────────
-#
-# Option A: Railway Object Storage  (recommended for Railway deployments)
-#   Railway injects these automatically when you attach an Object Storage
-#   service; you only need to copy them into this service's environment.
-#   RAILWAY_STORAGE_ACCESS_KEY_ID     — from the Object Storage service vars
-#   RAILWAY_STORAGE_SECRET_ACCESS_KEY — from the Object Storage service vars
-#   RAILWAY_STORAGE_ENDPOINT_URL      — from the Object Storage service vars
-#   RAILWAY_STORAGE_BUCKET_NAME       — from the Object Storage service vars
-#
-# Option B: AWS S3
-#   AWS_ACCESS_KEY_ID          — your AWS key
-#   AWS_SECRET_ACCESS_KEY      — your AWS secret
-#   AWS_REGION                 — us-east-1  (or your bucket's region)
-#   S3_BUCKET_NAME             — advisoryboard-uploads-prod
-#
-# If neither option is configured the backend falls back to the local
-# uploads/ directory (created by the start command below).
-
 [build]
 builder = "nixpacks"
 
 [deploy]
-# 1. Ensure uploads/ exists for the local filesystem fallback.
-# 2. Run Alembic migrations to bring the schema up to date.
-# 3. Start Uvicorn; Railway injects $PORT (falls back to 8000 otherwise).
-startCommand = "mkdir -p uploads && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
-
-# Railway health-checks this path after each deploy; must return 2xx.
+startCommand = "cd backend && mkdir -p uploads && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
-
-restartPolicyType = "on-failure"
-restartPolicyMaxRetries = 5
