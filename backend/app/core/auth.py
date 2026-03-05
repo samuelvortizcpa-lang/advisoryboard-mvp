@@ -87,7 +87,45 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
     Verify a Clerk JWT and return its decoded payload.
 
     Raises HTTPException 401 on any failure.
+
+    TEST_MODE bypass: when TEST_MODE=true in .env, sending the CLERK_SECRET_KEY
+    value as the Bearer token skips Clerk verification and returns a fixed test user.
+    This makes automated tests runnable without short-lived JWTs.
+
+    NOTE: get_settings() is @lru_cache'd.  If you add/change TEST_MODE or
+    CLERK_SECRET_KEY in .env while the server is running, you must restart
+    the server for the new values to take effect.
     """
+    settings = get_settings()
+
+    # ── TEST_MODE bypass ────────────────────────────────────────────────────
+    # This block must stay ABOVE all JWT parsing so that the Clerk-secret-key
+    # bearer token never reaches get_unverified_header().
+    if settings.test_mode:
+        if settings.clerk_secret_key and token.strip() == settings.clerk_secret_key.strip():
+            logger.warning(
+                "TEST_MODE: secret-key bearer accepted — returning fixed test user "
+                "(user_test_isolation).  This bypass must never reach production."
+            )
+            return {
+                "sub": "user_test_isolation",
+                "email": "test-isolation@advisoryboard.test",
+                "email_verified": True,
+                "first_name": "Test",
+                "last_name": "Isolation",
+                "sid": "sess_test_isolation",
+            }
+        # test_mode is ON but the token didn't match — log details to help diagnose
+        logger.warning(
+            "TEST_MODE is enabled but the bearer token did NOT match CLERK_SECRET_KEY. "
+            "token_len=%d  key_len=%d  keys_match=%s  key_set=%s",
+            len(token.strip()),
+            len(settings.clerk_secret_key.strip()),
+            token.strip() == settings.clerk_secret_key.strip(),
+            bool(settings.clerk_secret_key),
+        )
+    # ── End TEST_MODE bypass ────────────────────────────────────────────────
+
     try:
         header = get_unverified_header(token)
     except InvalidTokenError:

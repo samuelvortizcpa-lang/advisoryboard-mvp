@@ -1,0 +1,114 @@
+"""
+Timeline API router.
+
+Endpoints:
+  GET /clients/{client_id}/timeline   chronological list of documents + action items
+"""
+
+from datetime import date
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session, joinedload
+
+from app.core.auth import get_current_user
+from app.core.database import get_db
+from app.models.action_item import ActionItem
+from app.models.client import Client
+from app.models.document import Document
+from app.schemas.timeline import (
+    ActionItemTimelineItem,
+    DocumentTimelineItem,
+    TimelineItem,
+    TimelineResponse,
+)
+from app.services import user_service
+
+router = APIRouter()
+
+
+@router.get(
+    "/clients/{client_id}/timeline",
+    response_model=TimelineResponse,
+    summary="Get chronological timeline of all client interactions",
+)
+async def get_client_timeline(
+    client_id: UUID,
+    types: Optional[List[str]] = Query(default=None),  # ["document", "action_item"]
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    limit: int = 50,
+    skip: int = 0,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> TimelineResponse:
+    user = user_service.get_or_create_user(db, current_user)
+
+    # Verify client ownership
+    client = (
+        db.query(Client)
+        .filter(Client.id == client_id, Client.owner_id == user.id)
+        .first()
+    )
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
+
+    include_documents = not types or "document" in types
+    include_action_items = not types or "action_item" in types
+
+    items: List[TimelineItem] = []
+
+    # Fetch documents
+    if include_documents:
+        doc_query = db.query(Document).filter(Document.client_id == client_id)
+        if start_date:
+            doc_query = doc_query.filter(Document.upload_date >= start_date)
+        if end_date:
+            doc_query = doc_query.filter(Document.upload_date <= end_date)
+        for doc in doc_query.all():
+            items.append(
+                DocumentTimelineItem(
+                    type="document",
+                    id=doc.id,
+                    date=doc.upload_date,
+                    filename=doc.filename,
+                    file_type=doc.file_type,
+                    file_size=doc.file_size,
+                    processed=doc.processed,
+                )
+            )
+
+    # Fetch action items
+    if include_action_items:
+        ai_query = (
+            db.query(ActionItem)
+            .filter(ActionItem.client_id == client_id)
+            .options(joinedload(ActionItem.document))
+        )
+        if start_date:
+            ai_query = ai_query.filter(ActionItem.created_at >= start_date)
+        if end_date:
+            ai_query = ai_query.filter(ActionItem.created_at <= end_date)
+        for ai in ai_query.all():
+            items.append(
+                ActionItemTimelineItem(
+                    type="action_item",
+                    id=ai.id,
+                    date=ai.created_at,
+                    text=ai.text,
+                    status=ai.status,
+                    priority=ai.priority,
+                    source_doc=ai.document.filename if ai.document else None,
+                )
+            )
+
+    # Sort newest first
+    items.sort(key=lambda x: x.date, reverse=True)
+
+    total = len(items)
+    paginated = items[skip : skip + limit]
+
+    return TimelineResponse(items=paginated, total=total, skip=skip, limit=limit)

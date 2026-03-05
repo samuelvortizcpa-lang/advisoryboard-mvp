@@ -3,9 +3,9 @@
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChangeEvent, FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
-import { ClientCreateData, createClientsApi } from "@/lib/api";
+import { ClientCreateData, ClientType, createClientTypesApi, createClientsApi } from "@/lib/api";
 
 const ENTITY_TYPES = [
   "LLC",
@@ -19,6 +19,14 @@ const ENTITY_TYPES = [
   "Other",
 ];
 
+const TYPE_COLOR_CLASSES: Record<string, string> = {
+  blue: "bg-blue-100 text-blue-700",
+  green: "bg-green-100 text-green-700",
+  purple: "bg-purple-100 text-purple-700",
+  red: "bg-red-100 text-red-700",
+  gray: "bg-gray-100 text-gray-700",
+};
+
 type FormState = {
   name: string;
   email: string;
@@ -26,6 +34,8 @@ type FormState = {
   entity_type: string;
   industry: string;
   notes: string;
+  client_type_id: string;
+  custom_instructions: string;
 };
 
 const empty: FormState = {
@@ -35,6 +45,8 @@ const empty: FormState = {
   entity_type: "",
   industry: "",
   notes: "",
+  client_type_id: "",
+  custom_instructions: "",
 };
 
 export default function NewClientPage() {
@@ -45,11 +57,22 @@ export default function NewClientPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [clientTypes, setClientTypes] = useState<ClientType[]>([]);
+
+  useEffect(() => {
+    createClientTypesApi(getToken)
+      .list()
+      .then((res) => setClientTypes(res.types))
+      .catch(() => {/* non-fatal */});
+  }, [getToken]);
+
   function setField(field: keyof FormState) {
     return (
       e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
     ) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
   }
+
+  const selectedType = clientTypes.find((t) => t.id === form.client_type_id) ?? null;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -57,13 +80,14 @@ export default function NewClientPage() {
     setError(null);
 
     try {
-      // Omit empty optional strings so the backend gets null, not ""
       const payload: ClientCreateData = { name: form.name };
       if (form.email) payload.email = form.email;
       if (form.business_name) payload.business_name = form.business_name;
       if (form.entity_type) payload.entity_type = form.entity_type;
       if (form.industry) payload.industry = form.industry;
       if (form.notes) payload.notes = form.notes;
+      if (form.client_type_id) payload.client_type_id = form.client_type_id;
+      if (form.custom_instructions) payload.custom_instructions = form.custom_instructions;
 
       await createClientsApi(getToken).create(payload);
       router.push("/dashboard/clients");
@@ -77,30 +101,8 @@ export default function NewClientPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-2 text-sm">
-          <Link
-            href="/dashboard"
-            className="font-semibold text-gray-900 hover:text-gray-600 transition-colors"
-          >
-            AdvisoryBoard
-          </Link>
-          <span className="text-gray-300">/</span>
-          <Link
-            href="/dashboard/clients"
-            className="font-medium text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            Clients
-          </Link>
-          <span className="text-gray-300">/</span>
-          <span className="font-medium text-gray-900">New</span>
-        </div>
-      </header>
-
-      {/* Main */}
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="px-8 py-8">
+      <div className="max-w-2xl">
         <h1 className="mb-7 text-xl font-semibold text-gray-900">
           Add New Client
         </h1>
@@ -183,6 +185,50 @@ export default function NewClientPage() {
             />
           </Field>
 
+          {/* Client Type */}
+          <Field label="Client Type">
+            <div className="flex items-center gap-2">
+              <select
+                value={form.client_type_id}
+                onChange={setField("client_type_id")}
+                className={`${inputCls} flex-1`}
+              >
+                <option value="">No type selected</option>
+                {clientTypes.map((ct) => (
+                  <option key={ct.id} value={ct.id}>
+                    {ct.name}
+                  </option>
+                ))}
+              </select>
+              {selectedType && (
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    TYPE_COLOR_CLASSES[selectedType.color] ?? "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {selectedType.name}
+                </span>
+              )}
+            </div>
+            {selectedType && (
+              <p className="mt-1 text-xs text-gray-500">{selectedType.description}</p>
+            )}
+          </Field>
+
+          {/* Custom Instructions */}
+          <Field label="Custom AI Instructions">
+            <textarea
+              value={form.custom_instructions}
+              onChange={setField("custom_instructions")}
+              rows={3}
+              placeholder="e.g., Always focus on real estate investments for this client"
+              className={`${inputCls} resize-none`}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Custom AI instructions specific to this client (optional). These are appended to the client type prompt.
+            </p>
+          </Field>
+
           <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
             <Link
               href="/dashboard/clients"
@@ -206,7 +252,7 @@ export default function NewClientPage() {
             </button>
           </div>
         </form>
-      </main>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 #   - Application code can import from a single location
 
 from app.models.user import User
+from app.models.client_type import ClientType
 from app.models.client import Client
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk, EMBEDDING_DIM
@@ -10,6 +11,7 @@ from app.models.interaction import Interaction, INTERACTION_TYPES
 
 __all__ = [
     "User",
+    "ClientType",
     "Client",
     "Document",
     "DocumentChunk",

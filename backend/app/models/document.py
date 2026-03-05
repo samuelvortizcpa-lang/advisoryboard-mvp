@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.action_item import ActionItem
     from app.models.client import Client
     from app.models.document_chunk import DocumentChunk
     from app.models.user import User
@@ -80,6 +81,11 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="DocumentChunk.chunk_index",
+    )
+    action_items: Mapped[List["ActionItem"]] = relationship(
+        "ActionItem",
+        back_populates="document",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:
