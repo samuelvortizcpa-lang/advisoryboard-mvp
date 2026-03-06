@@ -95,10 +95,6 @@ export default function ActionItemList({
     // fetchItems is triggered by the useEffect dependency on `filter`
   }
 
-  // ── Counts for badge ──────────────────────────────────────────────────────
-
-  const _pendingCount = filter === "pending" ? total : items.filter((i) => i.status === "pending").length;
-
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
