@@ -230,7 +230,7 @@ export default function ClientChat({ clientId, documentCount }: Props) {
             {status.pending > 0 || (status.total_documents > 0 && status.processed < status.total_documents) ? (
               <button
                 onClick={handleProcess}
-                disabled={processing || hasPending}
+                disabled={processing || hasPending === true}
                 className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processing ? "Queuing…" : "Process Documents"}
