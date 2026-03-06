@@ -97,7 +97,7 @@ export default function ActionItemList({
 
   // ── Counts for badge ──────────────────────────────────────────────────────
 
-  const pendingCount = filter === "pending" ? total : items.filter((i) => i.status === "pending").length;
+  const _pendingCount = filter === "pending" ? total : items.filter((i) => i.status === "pending").length;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
