@@ -1,10 +1,15 @@
+import logging
 from typing import List, Tuple
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.models.client import Client
+from app.models.document import Document
 from app.schemas.client import ClientCreate, ClientUpdate
+from app.services import storage_service
+
+logger = logging.getLogger(__name__)
 
 
 def get_clients(
@@ -68,11 +73,22 @@ def update_client(
 def delete_client(db: Session, client_id: UUID, owner_id: UUID) -> bool:
     """
     Delete the client if owned by owner_id.
+    Removes all document files from Supabase Storage before the CASCADE
+    deletes the DB records.
     Returns True on success, False when not found or not owned.
     """
     client = get_client(db, client_id, owner_id)
     if client is None:
         return False
+
+    # Remove files from Supabase Storage before CASCADE deletes DB records
+    documents = db.query(Document).filter(Document.client_id == client_id).all()
+    for doc in documents:
+        if doc.file_path:
+            try:
+                storage_service.delete_file(doc.file_path)
+            except Exception:
+                logger.warning("Failed to delete storage file %s", doc.file_path)
 
     db.delete(client)
     db.commit()

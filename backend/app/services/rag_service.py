@@ -24,6 +24,7 @@ answer_question(db, client_id, question)
 from __future__ import annotations
 
 import logging
+import os
 from uuid import UUID
 
 from openai import AsyncOpenAI
@@ -124,19 +125,21 @@ async def process_document(db: Session, document: Document) -> None:
     logger.info("RAG: starting processing for %s", doc_label)
 
     try:
-        # 1. Extract text
-        # Use storage_service.local_path() so S3-hosted files are transparently
-        # downloaded to a temp path before text extraction; in local mode the
-        # file_path is yielded as-is (no copy).
+        # 1. Extract text — download from Supabase Storage to a temp file
+        temp_path = None
         try:
-            with storage_service.local_path(
-                document.file_path, suffix=f".{document.file_type}"
-            ) as local_file_path:
-                text = extract_text(local_file_path, document.file_type)
+            temp_path = storage_service.get_temp_local_path(document.file_path)
+            text = extract_text(temp_path, document.file_type)
         except UnsupportedFileType as exc:
             raise ValueError(str(exc)) from exc
         except ExtractionError as exc:
             raise ValueError(str(exc)) from exc
+        finally:
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
 
         if not text.strip():
             raise ValueError("No text could be extracted from this document.")

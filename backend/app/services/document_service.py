@@ -4,17 +4,13 @@ Document service: file storage + database operations.
 Upload flow:
   1. Validate file extension and size.
   2. Verify the target client belongs to the requesting user.
-  3. Upload bytes via storage_service (S3 or local filesystem).
+  3. Upload bytes via storage_service (Supabase Storage).
   4. Insert a Document row.  If the DB insert fails, delete the file.
 
 Storage:
-  When S3 credentials are set (AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY +
-  S3_BUCKET_NAME), files are stored in S3 and Document.file_path holds the
-  S3 object key.  Otherwise files go to  uploads/  on local disk and
-  Document.file_path holds the absolute path — so local dev works without
-  any AWS configuration.
-
-  Key / relative-path pattern:  {owner_id}/{client_id}/{uuid}_{filename}
+  Files are stored in Supabase Storage ("documents" bucket).
+  Document.file_path holds the storage path:
+      {owner_id}/{client_id}/{uuid}_{filename}
 """
 
 import uuid
@@ -80,7 +76,7 @@ async def save_document(
     owner_id: UUID,
     uploaded_by: UUID,
 ) -> Document:
-    """Validate, persist (S3 or local disk), and create a Document record."""
+    """Validate, upload to Supabase Storage, and create a Document record."""
     original_name = file.filename or "untitled"
 
     # --- validation ---
@@ -113,14 +109,18 @@ async def save_document(
     # --- ownership check ---
     _verify_client_ownership(db, client_id, owner_id)
 
-    # --- upload to storage (S3 or local filesystem) ---
-    # Key pattern: {owner_id}/{client_id}/{uuid}_{filename}
-    stored_name = f"{uuid.uuid4()}_{original_name}"
-    storage_key = f"{owner_id}/{client_id}/{stored_name}"
-    content_type = storage_service.content_type_for(original_name)
+    # --- upload to Supabase Storage ---
+    file_id = str(uuid.uuid4())
+    content_type = file.content_type or "application/octet-stream"
 
-    # stored_ref is the S3 key (S3 mode) or absolute local path (local mode)
-    stored_ref = storage_service.upload_file(content, storage_key, content_type)
+    storage_path = storage_service.upload_file(
+        user_id=str(owner_id),
+        client_id=str(client_id),
+        file_id=file_id,
+        filename=original_name,
+        file_bytes=content,
+        content_type=content_type,
+    )
 
     # --- insert DB record (roll back file on failure) ---
     try:
@@ -128,7 +128,7 @@ async def save_document(
             client_id=client_id,
             uploaded_by=uploaded_by,
             filename=original_name,
-            file_path=stored_ref,   # S3 key or absolute local path
+            file_path=storage_path,
             file_type=ext,
             file_size=file_size,
         )
@@ -136,7 +136,7 @@ async def save_document(
         db.commit()
         db.refresh(document)
     except Exception:
-        storage_service.delete_file(stored_ref)
+        storage_service.delete_file(storage_path)
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

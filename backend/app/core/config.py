@@ -29,21 +29,9 @@ class Settings(BaseSettings):
     # Automatically forced to False when ENVIRONMENT=production.
     test_mode: bool = False
 
-    # ── AWS S3 file storage ───────────────────────────────────────────────────
-    # All three must be set for AWS S3 to be used; otherwise falls back to
-    # Railway Object Storage (if configured) or local uploads/.
-    aws_access_key_id: str = ""
-    aws_secret_access_key: str = ""
-    aws_region: str = "us-east-1"
-    s3_bucket_name: str = ""
-
-    # ── Railway Object Storage (S3-compatible) ────────────────────────────────
-    # Railway auto-injects these when you attach an Object Storage service.
-    # Takes priority over AWS S3 when both sets of credentials are present.
-    railway_storage_access_key_id: str = ""
-    railway_storage_secret_access_key: str = ""
-    railway_storage_endpoint_url: str = ""    # e.g. https://….railway.app
-    railway_storage_bucket_name: str = ""
+    # ── Supabase ────────────────────────────────────────────────────────────
+    supabase_url: str = ""
+    supabase_service_key: str = ""
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins, e.g.:
@@ -66,30 +54,6 @@ class Settings(BaseSettings):
         return self
 
     # ── Derived helpers ───────────────────────────────────────────────────────
-
-    @property
-    def railway_storage_enabled(self) -> bool:
-        """True when all Railway Object Storage credentials are provided."""
-        return bool(
-            self.railway_storage_access_key_id
-            and self.railway_storage_secret_access_key
-            and self.railway_storage_endpoint_url
-            and self.railway_storage_bucket_name
-        )
-
-    @property
-    def aws_storage_enabled(self) -> bool:
-        """True when all AWS S3 credentials and bucket name are provided."""
-        return bool(
-            self.aws_access_key_id
-            and self.aws_secret_access_key
-            and self.s3_bucket_name
-        )
-
-    @property
-    def s3_enabled(self) -> bool:
-        """True when any cloud storage backend (Railway or AWS) is configured."""
-        return self.railway_storage_enabled or self.aws_storage_enabled
 
     @property
     def cors_origins(self) -> list[str]:

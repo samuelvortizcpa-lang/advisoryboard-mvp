@@ -44,10 +44,9 @@ async def _startup_log() -> None:
     settings = get_settings()
     logger.info(
         "AdvisoryBoard API started | environment=%s | test_mode=%s | "
-        "s3_enabled=%s | cors_origins=%s",
+        "storage=supabase | cors_origins=%s",
         settings.environment,
         settings.test_mode,
-        settings.s3_enabled,
         settings.cors_origins,
     )
     if settings.test_mode:
@@ -77,7 +76,6 @@ async def health():
         "status": "ok",
         "environment": settings.environment,
         "test_mode": settings.test_mode,
-        "s3_enabled": settings.s3_enabled,
     }
 
 

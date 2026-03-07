@@ -1,9 +1,8 @@
-from pathlib import Path
 from typing import Any, Dict
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -81,26 +80,20 @@ async def download_document(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
 
-    # S3 mode: redirect the client to a short-lived presigned URL
-    if storage_service.is_s3_enabled():
-        presigned_url = storage_service.get_presigned_url(
-            document.file_path,
-            expires=3600,
-            filename=document.filename,
-        )
-        return RedirectResponse(url=presigned_url, status_code=302)
-
-    # Local mode: stream the file from disk
-    file_path = Path(document.file_path)
-    if not file_path.exists():
+    try:
+        file_bytes = storage_service.download_file(document.file_path)
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found on disk",
+            detail="File not found in storage",
         )
-    return FileResponse(
-        path=str(file_path),
-        filename=document.filename,
+
+    return Response(
+        content=file_bytes,
         media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{document.filename}"'
+        },
     )
 
 
