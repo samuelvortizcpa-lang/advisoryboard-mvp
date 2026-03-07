@@ -29,3 +29,7 @@ boto3>=1.35.0
 
 # Supabase Storage
 supabase>=2.0.0
+
+# Google APIs (Gmail integration)
+google-api-python-client>=2.100.0
+google-auth>=2.23.0

@@ -522,3 +522,129 @@ export function createDocumentsApi(getToken: GetToken) {
     },
   };
 }
+
+// ─── Integration types ─────────────────────────────────────────────────────
+
+export interface IntegrationConnection {
+  id: string;
+  provider: string;
+  provider_email: string | null;
+  is_active: boolean;
+  scopes: string | null;
+  last_sync_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutingRule {
+  id: string;
+  user_id: string;
+  email_address: string;
+  client_id: string;
+  client_name: string;
+  match_type: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface SyncLog {
+  id: string;
+  connection_id: string;
+  sync_type: string | null;
+  status: string | null;
+  emails_found: number;
+  emails_ingested: number;
+  emails_skipped: number;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface RoutingRuleCreateData {
+  email_address: string;
+  client_id: string;
+  match_type: string;
+}
+
+// ─── Integrations API factory ──────────────────────────────────────────────
+
+export function createIntegrationsApi(getToken: GetToken) {
+  return {
+    // ── OAuth ──
+    getGoogleAuthUrl() {
+      return apiFetch<{ authorization_url: string }>(
+        getToken,
+        "/integrations/google/authorize"
+      );
+    },
+
+    // ── Connections ──
+    listConnections() {
+      return apiFetch<IntegrationConnection[]>(
+        getToken,
+        "/integrations/connections"
+      );
+    },
+
+    disconnect(connectionId: string) {
+      return apiFetch<void>(
+        getToken,
+        `/integrations/connections/${connectionId}`,
+        { method: "DELETE" }
+      );
+    },
+
+    // ── Sync ──
+    triggerSync(connectionId: string, maxResults = 50, sinceHours = 24) {
+      return apiFetch<SyncLog>(
+        getToken,
+        `/integrations/connections/${connectionId}/sync?max_results=${maxResults}&since_hours=${sinceHours}`,
+        { method: "POST" }
+      );
+    },
+
+    triggerDeepSync(connectionId: string) {
+      return apiFetch<SyncLog>(
+        getToken,
+        `/integrations/connections/${connectionId}/sync-all`,
+        { method: "POST" }
+      );
+    },
+
+    getSyncHistory(connectionId: string, limit = 20) {
+      return apiFetch<SyncLog[]>(
+        getToken,
+        `/integrations/connections/${connectionId}/sync-history?limit=${limit}`
+      );
+    },
+
+    // ── Routing rules ──
+    listRoutingRules() {
+      return apiFetch<RoutingRule[]>(
+        getToken,
+        "/integrations/routing-rules"
+      );
+    },
+
+    createRoutingRule(data: RoutingRuleCreateData) {
+      return apiFetch<RoutingRule>(getToken, "/integrations/routing-rules", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteRoutingRule(ruleId: string) {
+      return apiFetch<void>(getToken, `/integrations/routing-rules/${ruleId}`, {
+        method: "DELETE",
+      });
+    },
+
+    autoGenerateRules() {
+      return apiFetch<RoutingRule[]>(
+        getToken,
+        "/integrations/routing-rules/auto-generate",
+        { method: "POST" }
+      );
+    },
+  };
+}

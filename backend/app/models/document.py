@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,12 @@ class Document(Base):
     """
 
     __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id", "external_id",
+            name="uq_documents_client_external_id",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -51,6 +57,19 @@ class Document(Base):
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)   # e.g. "pdf", "docx"
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)      # bytes
+
+    # Gmail integration — prevents duplicate ingestion of the same email
+    gmail_message_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
+
+    # Source tracking for multi-integration ingestion
+    source: Mapped[str] = mapped_column(
+        String(20), server_default="upload", nullable=False, index=True
+    )  # 'upload', 'gmail', 'outlook', 'zoom'
+    external_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )  # Gmail message ID, Zoom recording ID, etc.
 
     upload_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

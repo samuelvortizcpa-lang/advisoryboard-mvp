@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_key: str = ""
 
+    # ── Google OAuth ─────────────────────────────────────────────────────────
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/integrations/google/callback"
+
+    # ── Encryption ───────────────────────────────────────────────────────────
+    encryption_key: str = ""
+
     # ── CORS ──────────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins, e.g.:
     #   ALLOWED_ORIGINS=https://yourapp.railway.app,https://yourapp.com

@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/clients", label: "Clients", Icon: PeopleIcon },
   { href: "/dashboard/actions", label: "Action Items", Icon: CheckboxIcon },
   { href: "/dashboard/calendar", label: "Calendar", Icon: CalendarIcon },
+  { href: "/dashboard/settings/integrations", label: "Email Sync", Icon: EmailSyncIcon },
   { href: "/dashboard/settings", label: "Settings", Icon: GearIcon },
 ] as const;
 
@@ -42,6 +43,8 @@ export default function Sidebar() {
           const isActive =
             href === "/dashboard/clients"
               ? pathname.startsWith("/dashboard/clients")
+              : href === "/dashboard/settings"
+              ? pathname === "/dashboard/settings"
               : pathname.startsWith(href);
 
           return (
@@ -180,6 +183,24 @@ function CalendarIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"
+      />
+    </svg>
+  );
+}
+
+function EmailSyncIcon() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
       />
     </svg>
   );
