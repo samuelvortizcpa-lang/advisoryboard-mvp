@@ -190,7 +190,10 @@ async def compare_documents(
     for doc in documents_sorted:
         chunks = (
             db.query(DocumentChunk)
-            .filter(DocumentChunk.document_id == doc.id)
+            .filter(
+                DocumentChunk.document_id == doc.id,
+                DocumentChunk.client_id == client_id,
+            )
             .order_by(DocumentChunk.chunk_index)
             .limit(CHUNKS_PER_DOCUMENT)
             .all()

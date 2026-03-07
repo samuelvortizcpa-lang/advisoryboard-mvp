@@ -235,22 +235,38 @@ async def search_chunks(
     """
     Return the *limit* most semantically similar DocumentChunks for *query*
     within the given client's documents.
+
+    Uses a JOIN through Document to double-verify client ownership — guards
+    against any data-integrity drift in the denormalised client_id column.
     """
     if not query.strip():
         return []
 
     query_embedding = await embed_text(query)
 
-    return (
+    results = (
         db.query(DocumentChunk)
+        .join(Document, DocumentChunk.document_id == Document.id)
         .filter(
             DocumentChunk.client_id == client_id,
+            Document.client_id == client_id,
             DocumentChunk.embedding.isnot(None),
         )
         .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
         .limit(limit)
         .all()
     )
+
+    # Defensive log: should never fire if data is consistent
+    for chunk in results:
+        if chunk.client_id != client_id:
+            logger.error(
+                "ISOLATION BREACH: chunk %s has client_id=%s but query "
+                "requested client_id=%s",
+                chunk.id, chunk.client_id, client_id,
+            )
+
+    return results
 
 
 # ---------------------------------------------------------------------------
