@@ -2,21 +2,27 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-async function fetchClientCount(token: string | null): Promise<number> {
-  if (!token) return 0;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+interface DashboardStats {
+  clients: number;
+  documents: number;
+  interactions: number;
+}
+
+async function fetchDashboardStats(
+  token: string | null
+): Promise<DashboardStats> {
+  if (!token) return { clients: 0, documents: 0, interactions: 0 };
   try {
-    const res = await fetch(
-      "http://localhost:8000/api/clients?skip=0&limit=1",
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      }
-    );
-    if (!res.ok) return 0;
-    const data = await res.json();
-    return data.total ?? 0;
+    const res = await fetch(`${API_BASE}/api/dashboard/stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return { clients: 0, documents: 0, interactions: 0 };
+    return await res.json();
   } catch {
-    return 0;
+    return { clients: 0, documents: 0, interactions: 0 };
   }
 }
 
@@ -32,7 +38,7 @@ export default async function DashboardPage() {
   const displayName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "there";
   const email = user?.emailAddresses[0]?.emailAddress ?? "";
-  const clientCount = await fetchClientCount(token);
+  const stats = await fetchDashboardStats(token);
 
   return (
     <div className="px-8 py-8">
@@ -55,21 +61,44 @@ export default async function DashboardPage() {
 
         {/* Stats */}
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {/* Clients — live count */}
+          {/* Clients */}
           <Link
             href="/dashboard/clients"
             className="group rounded-lg border border-gray-100 bg-gray-50 px-5 py-4 transition-colors hover:border-blue-200 hover:bg-blue-50"
           >
             <p className="text-2xl font-bold text-gray-900 transition-colors group-hover:text-blue-700">
-              {clientCount}
+              {stats.clients}
             </p>
             <p className="mt-0.5 text-sm text-gray-500 transition-colors group-hover:text-blue-600">
               Clients →
             </p>
           </Link>
 
-          <StatCard label="Interactions" value="—" />
-          <StatCard label="Documents" value="—" />
+          {/* Interactions (action items) */}
+          <Link
+            href="/dashboard/actions"
+            className="group rounded-lg border border-gray-100 bg-gray-50 px-5 py-4 transition-colors hover:border-blue-200 hover:bg-blue-50"
+          >
+            <p className="text-2xl font-bold text-gray-900 transition-colors group-hover:text-blue-700">
+              {stats.interactions}
+            </p>
+            <p className="mt-0.5 text-sm text-gray-500 transition-colors group-hover:text-blue-600">
+              Action Items →
+            </p>
+          </Link>
+
+          {/* Documents */}
+          <Link
+            href="/dashboard/clients"
+            className="group rounded-lg border border-gray-100 bg-gray-50 px-5 py-4 transition-colors hover:border-blue-200 hover:bg-blue-50"
+          >
+            <p className="text-2xl font-bold text-gray-900 transition-colors group-hover:text-blue-700">
+              {stats.documents}
+            </p>
+            <p className="mt-0.5 text-sm text-gray-500 transition-colors group-hover:text-blue-600">
+              Documents →
+            </p>
+          </Link>
         </div>
       </div>
 
@@ -105,15 +134,6 @@ export default async function DashboardPage() {
           <Row label="User ID" value={userId} mono />
         </dl>
       </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-gray-100 bg-gray-50 px-5 py-4">
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="mt-0.5 text-sm text-gray-500">{label}</p>
     </div>
   );
 }
