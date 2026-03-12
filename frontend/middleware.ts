@@ -1,27 +1,45 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse, NextFetchEvent } from "next/server";
 
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-]);
+const CLERK_FAPI = "https://clerk.myadvisoryboard.space";
+const PROXY_URL = "https://myadvisoryboard.space/__clerk";
 
-export default clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
-    await auth.protect();
+const clerkHandler = clerkMiddleware();
+
+export default async function middleware(req: NextRequest, event: NextFetchEvent) {
+  if (req.nextUrl.pathname.startsWith("/__clerk")) {
+    const clerkPath = req.nextUrl.pathname.replace("/__clerk", "") + req.nextUrl.search;
+    const target = `${CLERK_FAPI}${clerkPath}`;
+
+    const headers = new Headers(req.headers);
+    headers.set("Clerk-Proxy-Url", PROXY_URL);
+    headers.set("Clerk-Secret-Key", process.env.CLERK_SECRET_KEY || "");
+    headers.set("Host", new URL(CLERK_FAPI).host);
+    headers.delete("connection");
+
+    const res = await fetch(target, {
+      method: req.method,
+      headers,
+      body: req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined,
+      redirect: "manual",
+    });
+
+    const responseHeaders = new Headers(res.headers);
+    responseHeaders.delete("content-encoding");
+
+    return new NextResponse(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: responseHeaders,
+    });
   }
-});
+
+  return clerkHandler(req, event);
+}
 
 export const config = {
   matcher: [
-    /*
-     * Match all routes except:
-     *  - _next static files
-     *  - _next image optimization
-     *  - favicon.ico, sitemap.xml, robots.txt
-     *  - Static file extensions (images, fonts, etc.)
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)$).*)",
-    "/(api|trpc)(.*)",
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    '/(api|trpc)(.*)',
   ],
 };
