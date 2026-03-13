@@ -11,6 +11,8 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   sources?: RagSource[];
+  confidence_tier?: "high" | "medium" | "low";
+  confidence_score?: number;
   error?: boolean;
 }
 
@@ -135,6 +137,8 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           role: "assistant",
           content: response.answer,
           sources: response.sources,
+          confidence_tier: response.confidence_tier,
+          confidence_score: response.confidence_score,
         },
       ]);
     } catch (err) {
@@ -376,6 +380,57 @@ export default function ClientChat({ clientId, documentCount }: Props) {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
+function ConfidenceBadge({ tier, score }: { tier: string; score: number }) {
+  const config = {
+    high: { color: "bg-green-500", textColor: "text-green-700", bgColor: "bg-green-50", borderColor: "border-green-200", label: "High" },
+    medium: { color: "bg-amber-500", textColor: "text-amber-700", bgColor: "bg-amber-50", borderColor: "border-amber-200", label: "Medium" },
+    low: { color: "bg-red-400", textColor: "text-red-700", bgColor: "bg-red-50", borderColor: "border-red-200", label: "Low" },
+  }[tier] ?? { color: "bg-gray-400", textColor: "text-gray-700", bgColor: "bg-gray-50", borderColor: "border-gray-200", label: "Unknown" };
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border ${config.borderColor} ${config.bgColor} px-2 py-0.5 text-xs font-medium ${config.textColor}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${config.color}`} />
+      {config.label} · {Math.round(score)}%
+    </span>
+  );
+}
+
+function SourceCard({ source }: { source: RagSource }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => setExpanded(!expanded)}
+      className="w-full text-left rounded-lg border border-gray-200 bg-white px-3 py-2 transition-colors hover:border-gray-300 hover:bg-gray-50"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <DocIcon />
+          <span className="truncate text-xs font-medium text-gray-700">{source.filename}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={`text-xs font-medium ${source.score >= 70 ? "text-green-600" : source.score >= 50 ? "text-amber-600" : "text-red-500"}`}>
+            {Math.round(source.score)}%
+          </span>
+          <svg
+            className={`h-3 w-3 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+      {!expanded && (
+        <p className="mt-1 truncate text-xs text-gray-400">{source.chunk_text}</p>
+      )}
+      {expanded && (
+        <p className="mt-1.5 text-xs leading-relaxed text-gray-600 whitespace-pre-wrap">{source.chunk_text}</p>
+      )}
+    </button>
+  );
+}
+
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
@@ -384,6 +439,11 @@ function MessageBubble({ message }: { message: Message }) {
       {isUser ? <UserAvatar /> : <BotAvatar />}
 
       <div className={`max-w-[85%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1.5`}>
+        {/* Confidence badge for assistant messages */}
+        {!isUser && message.confidence_tier && (
+          <ConfidenceBadge tier={message.confidence_tier} score={message.confidence_score ?? 0} />
+        )}
+
         <div
           className={[
             "rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
@@ -397,18 +457,11 @@ function MessageBubble({ message }: { message: Message }) {
           {message.content}
         </div>
 
-        {/* Source citations */}
+        {/* Source cards */}
         {message.sources && message.sources.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {message.sources.map((src) => (
-              <span
-                key={src.document_id}
-                title={src.preview}
-                className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-xs text-gray-500"
-              >
-                <DocIcon />
-                {src.filename}
-              </span>
+          <div className="flex w-full flex-col gap-1.5">
+            {message.sources.map((src, idx) => (
+              <SourceCard key={`${src.document_id}-${src.chunk_index}-${idx}`} source={src} />
             ))}
           </div>
         )}

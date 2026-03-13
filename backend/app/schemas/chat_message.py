@@ -9,6 +9,9 @@ class ChatSourceItem(BaseModel):
     document_id: str
     filename: str
     preview: str
+    score: float = 0.0
+    chunk_text: str = ""
+    chunk_index: int = 0
 
 
 class ChatMessageResponse(BaseModel):

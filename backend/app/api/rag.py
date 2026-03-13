@@ -92,10 +92,15 @@ class SourceItem(BaseModel):
     document_id: str
     filename: str
     preview: str
+    score: float = 0.0
+    chunk_text: str = ""
+    chunk_index: int = 0
 
 
 class ChatResponse(BaseModel):
     answer: str
+    confidence_tier: str = "low"
+    confidence_score: float = 0.0
     sources: List[SourceItem]
 
 
@@ -307,9 +312,16 @@ async def chat(
         sources=None,
     ))
 
-    # Persist assistant answer with source metadata
+    # Persist assistant answer with source metadata (include new fields)
     sources_data = [
-        {"document_id": s["document_id"], "filename": s["filename"], "preview": s["preview"]}
+        {
+            "document_id": s["document_id"],
+            "filename": s["filename"],
+            "preview": s["preview"],
+            "score": s["score"],
+            "chunk_text": s["chunk_text"],
+            "chunk_index": s["chunk_index"],
+        }
         for s in result["sources"]
     ]
     db.add(ChatMessage(
@@ -324,6 +336,8 @@ async def chat(
 
     return ChatResponse(
         answer=result["answer"],
+        confidence_tier=result["confidence_tier"],
+        confidence_score=result["confidence_score"],
         sources=[SourceItem(**s) for s in result["sources"]],
     )
 

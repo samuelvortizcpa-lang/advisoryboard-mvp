@@ -58,7 +58,9 @@ Your role is to help CPAs quickly understand their clients' financial and busine
 Answer questions using ONLY the context provided below.
 - If the answer is not in the context, say so clearly — do not guess.
 - Be concise, accurate, and professional.
-- When relevant, mention which document the information comes from.
+- Always name the specific document(s) you are drawing information from (e.g. "According to Q3-2024-PnL.pdf…").
+- Clearly distinguish between direct citations from documents and your own inferences or interpretations. Use phrases like "The document states…" for citations and "Based on this, it appears…" for inferences.
+- If no source passages are sufficiently relevant, decline to answer rather than speculate.
 
 Context:
 {context}
@@ -231,10 +233,10 @@ async def search_chunks(
     client_id: UUID,
     query: str,
     limit: int = TOP_K,
-) -> list[DocumentChunk]:
+) -> list[tuple[DocumentChunk, float]]:
     """
     Return the *limit* most semantically similar DocumentChunks for *query*
-    within the given client's documents.
+    within the given client's documents, along with a confidence score (0–100).
 
     Uses a JOIN through Document to double-verify client ownership — guards
     against any data-integrity drift in the denormalised client_id column.
@@ -244,21 +246,28 @@ async def search_chunks(
 
     query_embedding = await embed_text(query)
 
-    results = (
-        db.query(DocumentChunk)
+    distance_col = DocumentChunk.embedding.cosine_distance(query_embedding).label("distance")
+
+    rows = (
+        db.query(DocumentChunk, distance_col)
         .join(Document, DocumentChunk.document_id == Document.id)
         .filter(
             DocumentChunk.client_id == client_id,
             Document.client_id == client_id,
             DocumentChunk.embedding.isnot(None),
         )
-        .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
+        .order_by(distance_col)
         .limit(limit)
         .all()
     )
 
-    # Defensive log: should never fire if data is consistent
-    for chunk in results:
+    results: list[tuple[DocumentChunk, float]] = []
+    for chunk, distance in rows:
+        # Convert cosine distance (0–2) to confidence percentage (0–100)
+        confidence = (1 - distance / 2) * 100
+        results.append((chunk, round(confidence, 2)))
+
+        # Defensive log: should never fire if data is consistent
         if chunk.client_id != client_id:
             logger.error(
                 "ISOLATION BREACH: chunk %s has client_id=%s but query "
@@ -274,6 +283,27 @@ async def search_chunks(
 # ---------------------------------------------------------------------------
 
 
+def _compute_confidence_tier(scores: list[float]) -> str:
+    """
+    Determine confidence tier from a list of chunk confidence scores.
+
+    HIGH:   best score >= 85 AND at least 2 chunks above 70
+    MEDIUM: best score >= 65
+    LOW:    everything else
+    """
+    if not scores:
+        return "low"
+
+    best = max(scores)
+    above_70 = sum(1 for s in scores if s >= 70)
+
+    if best >= 85 and above_70 >= 2:
+        return "high"
+    if best >= 65:
+        return "medium"
+    return "low"
+
+
 async def answer_question(
     db: Session,
     client_id: UUID,
@@ -286,25 +316,36 @@ async def answer_question(
 
         {
             "answer": str,
-            "sources": [{"document_id": str, "filename": str, "preview": str}]
+            "confidence_tier": "high" | "medium" | "low",
+            "confidence_score": float,
+            "sources": [{"document_id": str, "filename": str, "preview": str,
+                         "score": float, "chunk_text": str, "chunk_index": int}]
         }
     """
-    chunks = await search_chunks(db, client_id, question, limit=TOP_K)
+    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
 
-    if not chunks:
+    if not chunk_results:
         return {
             "answer": (
                 "I couldn't find any processed documents for this client. "
                 "Please upload documents and click 'Process Documents' first."
             ),
+            "confidence_tier": "low",
+            "confidence_score": 0.0,
             "sources": [],
         }
 
+    scores = [score for _, score in chunk_results]
+    best_score = max(scores)
+    confidence_tier = _compute_confidence_tier(scores)
+
     # Build context with source labels
     context_parts: list[str] = []
-    for chunk in chunks:
+    for chunk, score in chunk_results:
         filename = chunk.document.filename if chunk.document else "unknown"
-        context_parts.append(f"[Source: {filename}]\n{chunk.chunk_text}")
+        context_parts.append(
+            f"[Source: {filename} | Relevance: {score:.1f}%]\n{chunk.chunk_text}"
+        )
 
     context = "\n\n---\n\n".join(context_parts)
 
@@ -327,6 +368,15 @@ async def answer_question(
             f"{db_client.custom_instructions}"
         )
 
+    # If no chunks score above 50%, let the model know it should decline
+    if best_score < 50:
+        system_prompt += (
+            "\n\nIMPORTANT: The retrieved context has very low relevance scores "
+            "(all below 50%). Politely decline to answer and explain that the "
+            "available documents do not contain sufficient information to "
+            "reliably answer this question."
+        )
+
     # Chat completion
     openai_client = _openai()
     response = await openai_client.chat.completions.create(
@@ -341,19 +391,25 @@ async def answer_question(
 
     answer = response.choices[0].message.content or "No answer generated."
 
-    # Build deduplicated source list
-    seen: set[str] = set()
+    # Build source list with scores (one entry per chunk, not deduplicated)
     sources: list[dict] = []
-    for chunk in chunks:
-        doc_id = str(chunk.document_id)
-        if doc_id not in seen:
-            seen.add(doc_id)
-            filename = chunk.document.filename if chunk.document else "unknown"
-            preview = chunk.chunk_text[:200]
-            if len(chunk.chunk_text) > 200:
-                preview += "…"
-            sources.append(
-                {"document_id": doc_id, "filename": filename, "preview": preview}
-            )
+    for chunk, score in chunk_results:
+        filename = chunk.document.filename if chunk.document else "unknown"
+        chunk_preview = chunk.chunk_text[:200]
+        if len(chunk.chunk_text) > 200:
+            chunk_preview += "…"
+        sources.append({
+            "document_id": str(chunk.document_id),
+            "filename": filename,
+            "preview": chunk_preview,
+            "score": score,
+            "chunk_text": chunk_preview,
+            "chunk_index": chunk.chunk_index,
+        })
 
-    return {"answer": answer, "sources": sources}
+    return {
+        "answer": answer,
+        "confidence_tier": confidence_tier,
+        "confidence_score": round(best_score, 2),
+        "sources": sources,
+    }

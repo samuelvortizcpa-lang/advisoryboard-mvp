@@ -214,10 +214,15 @@ export interface RagSource {
   document_id: string;
   filename: string;
   preview: string;
+  score: number;
+  chunk_text: string;
+  chunk_index: number;
 }
 
 export interface ChatApiResponse {
   answer: string;
+  confidence_tier: "high" | "medium" | "low";
+  confidence_score: number;
   sources: RagSource[];
 }
 
