@@ -112,6 +112,12 @@ export interface Document {
   upload_date: string;
   processed: boolean;
   processing_error: string | null;
+  document_type: string | null;
+  document_subtype: string | null;
+  document_period: string | null;
+  classification_confidence: number | null;
+  is_superseded: boolean;
+  superseded_by: string | null;
 }
 
 export interface DocumentListResponse {

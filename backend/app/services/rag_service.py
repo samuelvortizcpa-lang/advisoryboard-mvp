@@ -92,6 +92,45 @@ async def embed_text(text: str) -> list[float]:
 
 
 # ---------------------------------------------------------------------------
+# Document versioning
+# ---------------------------------------------------------------------------
+
+
+def _check_supersede(db: Session, new_doc: Document) -> None:
+    """
+    If an older document of the same type+subtype exists for the same client,
+    and the new document has a more recent period, mark the older one as
+    superseded.
+    """
+    older_docs = (
+        db.query(Document)
+        .filter(
+            Document.client_id == new_doc.client_id,
+            Document.id != new_doc.id,
+            Document.document_type == new_doc.document_type,
+            Document.document_subtype == new_doc.document_subtype,
+            Document.document_period.isnot(None),
+            Document.is_superseded == False,  # noqa: E712
+        )
+        .all()
+    )
+
+    for older in older_docs:
+        # Simple string comparison works for formats like "2023", "2024",
+        # "Q1 2024" < "Q2 2024", etc.
+        if (older.document_period or "") < (new_doc.document_period or ""):
+            older.is_superseded = True
+            older.superseded_by = new_doc.id
+            logger.info(
+                "Versioning: %s (%s) superseded by %s (%s)",
+                older.id, older.document_period,
+                new_doc.id, new_doc.document_period,
+            )
+
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
 # Document processing pipeline
 # ---------------------------------------------------------------------------
 
@@ -145,6 +184,28 @@ async def process_document(db: Session, document: Document) -> None:
 
         if not text.strip():
             raise ValueError("No text could be extracted from this document.")
+
+        # 1b. Classify document (best-effort — never fails the pipeline)
+        try:
+            from app.services.document_classifier import classify_document
+            classification = await classify_document(text)
+            document.document_type = classification["document_type"]
+            document.document_subtype = classification["document_subtype"]
+            document.document_period = classification["document_period"]
+            document.classification_confidence = classification["classification_confidence"]
+            db.flush()
+            logger.info(
+                "RAG: classified %s as %s / %s (%.0f%%)",
+                doc_label,
+                classification["document_type"],
+                classification["document_subtype"],
+                classification["classification_confidence"],
+            )
+        except Exception as cls_exc:
+            logger.warning(
+                "RAG: classification failed for %s (non-fatal): %s",
+                doc_label, cls_exc,
+            )
 
         # 2. Chunk
         chunks = chunk_text(text)
@@ -211,6 +272,16 @@ async def process_document(db: Session, document: Document) -> None:
                 ai_exc,
             )
 
+        # 7. Version check — supersede older documents of same type+subtype
+        try:
+            if document.document_type and document.document_period:
+                _check_supersede(db, document)
+        except Exception as ver_exc:
+            logger.warning(
+                "RAG: versioning check failed for %s (non-fatal): %s",
+                doc_label, ver_exc,
+            )
+
     except Exception as exc:
         logger.error("RAG: failed to process %s: %s", doc_label, exc)
         db.rollback()
@@ -265,6 +336,12 @@ async def search_chunks(
     for chunk, distance in rows:
         # Convert cosine distance (0–2) to confidence percentage (0–100)
         confidence = (1 - distance / 2) * 100
+
+        # Recency boost: +5% for chunks from non-superseded (current) documents
+        doc = chunk.document
+        if doc and not doc.is_superseded:
+            confidence = min(100.0, confidence + 5.0)
+
         results.append((chunk, round(confidence, 2)))
 
         # Defensive log: should never fire if data is consistent
@@ -339,13 +416,21 @@ async def answer_question(
     best_score = max(scores)
     confidence_tier = _compute_confidence_tier(scores)
 
-    # Build context with source labels
+    # Build context with source labels and document type
     context_parts: list[str] = []
     for chunk, score in chunk_results:
-        filename = chunk.document.filename if chunk.document else "unknown"
-        context_parts.append(
-            f"[Source: {filename} | Relevance: {score:.1f}%]\n{chunk.chunk_text}"
-        )
+        doc = chunk.document
+        filename = doc.filename if doc else "unknown"
+        doc_meta = f"Source: {filename} | Relevance: {score:.1f}%"
+        if doc and doc.document_type:
+            doc_meta += f" | Type: {doc.document_type}"
+            if doc.document_subtype:
+                doc_meta += f" ({doc.document_subtype})"
+            if doc.document_period:
+                doc_meta += f" | Period: {doc.document_period}"
+            if doc.is_superseded:
+                doc_meta += " | SUPERSEDED"
+        context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
 
     context = "\n\n---\n\n".join(context_parts)
 

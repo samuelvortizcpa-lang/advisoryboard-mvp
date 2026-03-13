@@ -15,6 +15,12 @@ class DocumentResponse(BaseModel):
     upload_date: datetime
     processed: bool
     processing_error: Optional[str]
+    document_type: Optional[str] = None
+    document_subtype: Optional[str] = None
+    document_period: Optional[str] = None
+    classification_confidence: Optional[float] = None
+    is_superseded: bool = False
+    superseded_by: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -84,6 +84,30 @@ class Document(Base):
         nullable=False,
     )
     processing_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Document intelligence — auto-classification
+    document_type: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, index=True
+    )
+    document_subtype: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True
+    )
+    document_period: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )
+    classification_confidence: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True
+    )
+
+    # Document versioning
+    superseded_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_superseded: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False, index=True
+    )
 
     # -----------------------------------------------------------------------
     # Relationships

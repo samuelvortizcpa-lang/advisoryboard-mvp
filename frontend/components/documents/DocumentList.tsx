@@ -94,9 +94,23 @@ export default function DocumentList({
             <FileIcon fileType={doc.file_type} />
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-gray-800">
-                {doc.filename}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-sm font-medium text-gray-800">
+                  {doc.filename}
+                </p>
+                {doc.document_type && doc.document_type !== "other" && (
+                  <DocTypeBadge type={doc.document_type} subtype={doc.document_subtype} />
+                )}
+                {doc.is_superseded && (
+                  <span
+                    title="A newer version of this document exists"
+                    className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                  >
+                    <SupersededIcon />
+                    Superseded
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-gray-400">
                 {formatBytes(doc.file_size)} ·{" "}
                 {new Date(doc.upload_date).toLocaleDateString("en-US", {
@@ -104,6 +118,9 @@ export default function DocumentList({
                   month: "short",
                   day: "numeric",
                 })}
+                {doc.document_period && (
+                  <span className="ml-1.5 text-gray-500">{doc.document_period}</span>
+                )}
                 {!doc.processed && (
                   <span className="ml-1.5 text-amber-500">(processing…)</span>
                 )}
@@ -231,5 +248,52 @@ function Spinner({ className = "" }: { className?: string }) {
     <span
       className={`block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`}
     />
+  );
+}
+
+const DOC_TYPE_COLORS: Record<string, string> = {
+  tax_return: "bg-red-50 text-red-700 border-red-200",
+  w2: "bg-red-50 text-red-700 border-red-200",
+  k1: "bg-red-50 text-red-700 border-red-200",
+  financial_statement: "bg-green-50 text-green-700 border-green-200",
+  bank_statement: "bg-green-50 text-green-700 border-green-200",
+  engagement_letter: "bg-blue-50 text-blue-700 border-blue-200",
+  contract: "bg-blue-50 text-blue-700 border-blue-200",
+  meeting_notes: "bg-purple-50 text-purple-700 border-purple-200",
+  email: "bg-gray-50 text-gray-600 border-gray-200",
+  invoice: "bg-amber-50 text-amber-700 border-amber-200",
+  receipt: "bg-amber-50 text-amber-700 border-amber-200",
+};
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  tax_return: "Tax Return",
+  w2: "W-2",
+  k1: "K-1",
+  financial_statement: "Financial",
+  bank_statement: "Bank Stmt",
+  engagement_letter: "Engagement",
+  contract: "Contract",
+  meeting_notes: "Notes",
+  email: "Email",
+  invoice: "Invoice",
+  receipt: "Receipt",
+};
+
+function DocTypeBadge({ type, subtype }: { type: string; subtype: string | null }) {
+  const colors = DOC_TYPE_COLORS[type] ?? "bg-gray-50 text-gray-600 border-gray-200";
+  const label = subtype || DOC_TYPE_LABELS[type] || type;
+
+  return (
+    <span className={`inline-flex shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none ${colors}`}>
+      {label}
+    </span>
+  );
+}
+
+function SupersededIcon() {
+  return (
+    <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+    </svg>
   );
 }
