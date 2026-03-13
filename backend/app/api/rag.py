@@ -29,7 +29,7 @@ from app.models.client import Client
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.schemas.chat_message import ChatHistoryResponse, ChatMessageResponse
-from app.services import rag_service, user_service
+from app.services import rag_service, storage_service, user_service
 
 router = APIRouter()
 
@@ -95,6 +95,8 @@ class SourceItem(BaseModel):
     score: float = 0.0
     chunk_text: str = ""
     chunk_index: int = 0
+    page_number: int | None = None
+    image_url: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -312,9 +314,12 @@ async def chat(
         sources=None,
     ))
 
-    # Persist assistant answer with source metadata (include new fields)
-    sources_data = [
-        {
+    # Generate signed URLs for page image sources and build persisted data
+    sources_data = []
+    response_sources = []
+    for s in result["sources"]:
+        # Persist source metadata (image_path stored for future URL regeneration)
+        persisted = {
             "document_id": s["document_id"],
             "filename": s["filename"],
             "preview": s["preview"],
@@ -322,8 +327,32 @@ async def chat(
             "chunk_text": s["chunk_text"],
             "chunk_index": s["chunk_index"],
         }
-        for s in result["sources"]
-    ]
+        if s.get("page_number") is not None:
+            persisted["page_number"] = s["page_number"]
+        if s.get("image_path"):
+            persisted["image_path"] = s["image_path"]
+        sources_data.append(persisted)
+
+        # Build response source with signed URL
+        response_source = {
+            "document_id": s["document_id"],
+            "filename": s["filename"],
+            "preview": s["preview"],
+            "score": s["score"],
+            "chunk_text": s["chunk_text"],
+            "chunk_index": s["chunk_index"],
+        }
+        if s.get("page_number") is not None:
+            response_source["page_number"] = s["page_number"]
+        if s.get("image_path"):
+            try:
+                response_source["image_url"] = storage_service.get_signed_url(
+                    s["image_path"], expires_in=3600
+                )
+            except Exception:
+                pass  # non-fatal: image URL generation failure
+        response_sources.append(response_source)
+
     db.add(ChatMessage(
         client_id=client_id,
         user_id=user.clerk_id,
@@ -338,7 +367,7 @@ async def chat(
         answer=result["answer"],
         confidence_tier=result["confidence_tier"],
         confidence_score=result["confidence_score"],
-        sources=[SourceItem(**s) for s in result["sources"]],
+        sources=[SourceItem(**s) for s in response_sources],
     )
 
 

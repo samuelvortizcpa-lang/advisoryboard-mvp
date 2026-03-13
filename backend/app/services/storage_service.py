@@ -88,6 +88,59 @@ def delete_file(storage_path: str) -> None:
         logger.exception("Failed to delete file %s/%s", BUCKET, storage_path)
 
 
+def upload_file_to_path(
+    storage_path: str,
+    file_bytes: bytes,
+    content_type: str,
+) -> str:
+    """
+    Upload file bytes to an explicit Supabase Storage path.
+
+    Unlike `upload_file()`, which builds the path from user/client/file IDs,
+    this function takes the full storage path directly.  Used for page images.
+
+    Returns the storage path string.
+    """
+    try:
+        client = _get_client()
+        client.storage.from_(BUCKET).upload(
+            path=storage_path,
+            file=file_bytes,
+            file_options={"content-type": content_type},
+        )
+        logger.info("Uploaded %d bytes to %s/%s", len(file_bytes), BUCKET, storage_path)
+        return storage_path
+    except Exception:
+        logger.exception("Failed to upload file to %s/%s", BUCKET, storage_path)
+        raise
+
+
+def get_signed_url(storage_path: str, expires_in: int = 3600) -> str:
+    """
+    Generate a time-limited signed URL for a file in Supabase Storage.
+
+    Args:
+        storage_path: The storage path of the file.
+        expires_in: Seconds until the URL expires (default 1 hour).
+
+    Returns:
+        A signed URL string for direct browser access.
+    """
+    try:
+        client = _get_client()
+        result = client.storage.from_(BUCKET).create_signed_url(
+            storage_path, expires_in
+        )
+        signed_url = result.get("signedURL") or result.get("signedUrl") or ""
+        if not signed_url:
+            raise ValueError(f"No signed URL returned for {storage_path}")
+        logger.debug("Generated signed URL for %s/%s (expires in %ds)", BUCKET, storage_path, expires_in)
+        return signed_url
+    except Exception:
+        logger.exception("Failed to generate signed URL for %s/%s", BUCKET, storage_path)
+        raise
+
+
 def get_temp_local_path(storage_path: str) -> str:
     """
     Download a file to a temporary local path and return that path.

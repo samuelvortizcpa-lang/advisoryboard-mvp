@@ -7,6 +7,7 @@ from app.models.client_type import ClientType
 from app.models.client import Client
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk, EMBEDDING_DIM
+from app.models.document_page_image import DocumentPageImage, IMAGE_EMBEDDING_DIM
 from app.models.interaction import Interaction, INTERACTION_TYPES
 from app.models.action_item import ActionItem
 from app.models.chat_message import ChatMessage
@@ -23,6 +24,8 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "EMBEDDING_DIM",
+    "DocumentPageImage",
+    "IMAGE_EMBEDDING_DIM",
     "Interaction",
     "INTERACTION_TYPES",
     "ActionItem",

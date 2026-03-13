@@ -41,6 +41,12 @@ export default function ClientChat({ clientId, documentCount }: Props) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
 
+  const [imageModal, setImageModal] = useState<{
+    url: string;
+    filename: string;
+    pageNumber: number;
+  } | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -293,7 +299,13 @@ export default function ClientChat({ clientId, documentCount }: Props) {
             <EmptyState hasDocuments={hasProcessed ?? false} />
           ) : (
             messages.map((msg, i) => (
-              <MessageBubble key={i} message={msg} />
+              <MessageBubble
+                key={i}
+                message={msg}
+                onImageClick={(url, filename, pageNumber) =>
+                  setImageModal({ url, filename, pageNumber })
+                }
+              />
             ))
           )}
 
@@ -374,6 +386,16 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           </div>
         </div>
       )}
+
+      {/* ── Page image lightbox modal ──────────────────────────────────────── */}
+      {imageModal && (
+        <PageImageModal
+          url={imageModal.url}
+          filename={imageModal.filename}
+          pageNumber={imageModal.pageNumber}
+          onClose={() => setImageModal(null)}
+        />
+      )}
     </>
   );
 }
@@ -395,8 +417,15 @@ function ConfidenceBadge({ tier, score }: { tier: string; score: number }) {
   );
 }
 
-function SourceCard({ source }: { source: RagSource }) {
+function SourceCard({
+  source,
+  onImageClick,
+}: {
+  source: RagSource;
+  onImageClick?: (url: string, filename: string, pageNumber: number) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const hasImage = Boolean(source.image_url);
 
   return (
     <button
@@ -406,8 +435,13 @@ function SourceCard({ source }: { source: RagSource }) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          <DocIcon />
-          <span className="truncate text-xs font-medium text-gray-700">{source.filename}</span>
+          {hasImage ? <ImageIcon /> : <DocIcon />}
+          <span className="truncate text-xs font-medium text-gray-700">
+            {source.filename}
+            {source.page_number != null && (
+              <span className="ml-1 text-gray-400">p.{source.page_number}</span>
+            )}
+          </span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className={`text-xs font-medium ${source.score >= 70 ? "text-green-600" : source.score >= 50 ? "text-amber-600" : "text-red-500"}`}>
@@ -421,17 +455,46 @@ function SourceCard({ source }: { source: RagSource }) {
           </svg>
         </div>
       </div>
-      {!expanded && (
+
+      {/* Page image thumbnail */}
+      {source.image_url && (
+        <div
+          className="mt-1.5 overflow-hidden rounded border border-gray-200 cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            onImageClick?.(source.image_url!, source.filename, source.page_number!);
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={source.image_url}
+            alt={`Page ${source.page_number} of ${source.filename}`}
+            className="h-24 w-full object-cover object-top transition-opacity hover:opacity-80"
+          />
+          <div className="bg-gray-50 px-2 py-0.5 text-[10px] text-gray-500">
+            Page {source.page_number} — click to enlarge
+          </div>
+        </div>
+      )}
+
+      {/* Text preview */}
+      {!hasImage && !expanded && (
         <p className="mt-1 truncate text-xs text-gray-400">{source.chunk_text}</p>
       )}
-      {expanded && (
+      {!hasImage && expanded && (
         <p className="mt-1.5 text-xs leading-relaxed text-gray-600 whitespace-pre-wrap">{source.chunk_text}</p>
       )}
     </button>
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({
+  message,
+  onImageClick,
+}: {
+  message: Message;
+  onImageClick?: (url: string, filename: string, pageNumber: number) => void;
+}) {
   const isUser = message.role === "user";
 
   return (
@@ -461,7 +524,11 @@ function MessageBubble({ message }: { message: Message }) {
         {message.sources && message.sources.length > 0 && (
           <div className="flex w-full flex-col gap-1.5">
             {message.sources.map((src, idx) => (
-              <SourceCard key={`${src.document_id}-${src.chunk_index}-${idx}`} source={src} />
+              <SourceCard
+                key={`${src.document_id}-${src.chunk_index}-${idx}`}
+                source={src}
+                onImageClick={onImageClick}
+              />
             ))}
           </div>
         )}
@@ -482,6 +549,62 @@ function EmptyState({ hasDocuments }: { hasDocuments: boolean }) {
           ? "Questions are answered using the client's uploaded documents."
           : "Upload and process documents first, then ask questions about financials, filings, and more."}
       </p>
+    </div>
+  );
+}
+
+function PageImageModal({
+  url,
+  filename,
+  pageNumber,
+  onClose,
+}: {
+  url: string;
+  filename: string;
+  pageNumber: number;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="mb-2 flex w-full items-center justify-between">
+          <span className="text-sm font-medium text-white">
+            {filename} — Page {pageNumber}
+          </span>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Close"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Image */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt={`Page ${pageNumber} of ${filename}`}
+          className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+        />
+      </div>
     </div>
   );
 }
@@ -536,6 +659,14 @@ function DocIcon() {
   return (
     <svg className="h-3 w-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  );
+}
+
+function ImageIcon() {
+  return (
+    <svg className="h-3 w-3 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a2.25 2.25 0 002.25-2.25V5.25a2.25 2.25 0 00-2.25-2.25H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
     </svg>
   );
 }

@@ -223,6 +223,8 @@ export interface RagSource {
   score: number;
   chunk_text: string;
   chunk_index: number;
+  page_number?: number;
+  image_url?: string;
 }
 
 export interface ChatApiResponse {

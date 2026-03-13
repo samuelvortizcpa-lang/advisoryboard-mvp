@@ -33,3 +33,7 @@ supabase>=2.0.0
 # Google APIs (Gmail integration)
 google-api-python-client>=2.100.0
 google-auth>=2.23.0
+
+# Multimodal RAG (Gemini page-image embeddings)
+google-genai>=1.0.0
+pdf2image>=1.17.0

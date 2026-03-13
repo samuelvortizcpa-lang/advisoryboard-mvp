@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.action_item import ActionItem
     from app.models.client import Client
     from app.models.document_chunk import DocumentChunk
+    from app.models.document_page_image import DocumentPageImage
     from app.models.user import User
 
 
@@ -129,6 +130,12 @@ class Document(Base):
         "ActionItem",
         back_populates="document",
         cascade="all, delete-orphan",
+    )
+    page_images: Mapped[List["DocumentPageImage"]] = relationship(
+        "DocumentPageImage",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentPageImage.page_number",
     )
 
     def __repr__(self) -> str:

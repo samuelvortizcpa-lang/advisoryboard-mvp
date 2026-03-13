@@ -36,7 +36,8 @@ from app.core.config import get_settings
 from app.models.client import Client
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
-from app.services import storage_service
+from app.models.document_page_image import DocumentPageImage
+from app.services import gemini_embeddings, storage_service
 from app.services.chunking import chunk_text
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
 
@@ -282,6 +283,17 @@ async def process_document(db: Session, document: Document) -> None:
                 doc_label, ver_exc,
             )
 
+        # 8. Page image processing for PDFs (best-effort — multimodal RAG)
+        if document.file_type == "pdf":
+            try:
+                from app.services.page_image_service import process_page_images
+                await process_page_images(db, document)
+            except Exception as img_exc:
+                logger.warning(
+                    "RAG: page image processing failed for %s (non-fatal): %s",
+                    doc_label, img_exc,
+                )
+
     except Exception as exc:
         logger.error("RAG: failed to process %s: %s", doc_label, exc)
         db.rollback()
@@ -356,6 +368,61 @@ async def search_chunks(
 
 
 # ---------------------------------------------------------------------------
+# Visual page image search (Gemini multimodal)
+# ---------------------------------------------------------------------------
+
+IMAGE_TOP_K = 3   # page images retrieved per query
+
+
+async def search_page_images(
+    db: Session,
+    client_id: UUID,
+    query: str,
+    limit: int = IMAGE_TOP_K,
+) -> list[tuple[DocumentPageImage, float]]:
+    """
+    Return the most visually similar document page images for *query*.
+
+    Uses Gemini text embeddings to search against page image embeddings.
+    Returns an empty list when Gemini is not configured (graceful fallback).
+    """
+    if not query.strip():
+        return []
+
+    if not gemini_embeddings.is_available():
+        return []
+
+    try:
+        query_embedding = gemini_embeddings.embed_text(query)
+    except Exception as exc:
+        logger.warning("Page image search: Gemini embed failed: %s", exc)
+        return []
+
+    distance_col = DocumentPageImage.image_embedding.cosine_distance(
+        query_embedding
+    ).label("distance")
+
+    rows = (
+        db.query(DocumentPageImage, distance_col)
+        .join(Document, DocumentPageImage.document_id == Document.id)
+        .filter(
+            Document.client_id == client_id,
+            DocumentPageImage.image_embedding.isnot(None),
+        )
+        .order_by(distance_col)
+        .limit(limit)
+        .all()
+    )
+
+    results: list[tuple[DocumentPageImage, float]] = []
+    for page_img, distance in rows:
+        confidence = (1 - distance / 2) * 100
+        results.append((page_img, round(confidence, 2)))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Q&A
 # ---------------------------------------------------------------------------
 
@@ -399,9 +466,11 @@ async def answer_question(
                          "score": float, "chunk_text": str, "chunk_index": int}]
         }
     """
+    # Run text chunk search and page image search
     chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
+    image_results = await search_page_images(db, client_id, question)
 
-    if not chunk_results:
+    if not chunk_results and not image_results:
         return {
             "answer": (
                 "I couldn't find any processed documents for this client. "
@@ -412,11 +481,11 @@ async def answer_question(
             "sources": [],
         }
 
-    scores = [score for _, score in chunk_results]
-    best_score = max(scores)
-    confidence_tier = _compute_confidence_tier(scores)
+    all_scores = [score for _, score in chunk_results] + [score for _, score in image_results]
+    best_score = max(all_scores) if all_scores else 0.0
+    confidence_tier = _compute_confidence_tier(all_scores)
 
-    # Build context with source labels and document type
+    # Build context with source labels and document type (text chunks only)
     context_parts: list[str] = []
     for chunk, score in chunk_results:
         doc = chunk.document
@@ -431,6 +500,15 @@ async def answer_question(
             if doc.is_superseded:
                 doc_meta += " | SUPERSEDED"
         context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
+
+    # Add page image references to context (visual source markers)
+    for page_img, score in image_results:
+        doc = page_img.document
+        filename = doc.filename if doc else "unknown"
+        context_parts.append(
+            f"[Source: {filename}, Page {page_img.page_number} | "
+            f"Relevance: {score:.1f}% | Visual page reference]"
+        )
 
     context = "\n\n---\n\n".join(context_parts)
 
@@ -491,6 +569,24 @@ async def answer_question(
             "chunk_text": chunk_preview,
             "chunk_index": chunk.chunk_index,
         })
+
+    # Add page image sources
+    for page_img, score in image_results:
+        doc = page_img.document
+        filename = doc.filename if doc else "unknown"
+        sources.append({
+            "document_id": str(page_img.document_id),
+            "filename": filename,
+            "preview": f"Page {page_img.page_number} of {filename}",
+            "score": score,
+            "chunk_text": f"[Visual: Page {page_img.page_number}]",
+            "chunk_index": 0,
+            "page_number": page_img.page_number,
+            "image_path": page_img.image_path,
+        })
+
+    # Sort all sources by score descending
+    sources.sort(key=lambda s: s["score"], reverse=True)
 
     return {
         "answer": answer,
