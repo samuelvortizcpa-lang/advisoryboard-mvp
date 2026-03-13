@@ -29,25 +29,23 @@ DPI = 150             # Render resolution (balances quality vs file size)
 
 async def process_page_images(db: Session, document: Document) -> None:
     """
-    Extract page images from a PDF document, upload to Supabase, embed with
-    Gemini, and store in the database.
+    Extract page images from a PDF document, upload to Supabase, and store
+    in the database.  Gemini embeddings are generated when available but are
+    optional — page images are always stored so the frontend can display them
+    even without Gemini.
 
-    Skips silently if:
-    - Document is not a PDF
-    - Gemini API is not configured
+    Skips silently if the document is not a PDF.
     """
     if document.file_type != "pdf":
         return
 
-    if not gemini_embeddings.is_available():
-        logger.info(
-            "Page images: skipping %s — Gemini API not configured",
-            document.id,
-        )
-        return
+    gemini_available = gemini_embeddings.is_available()
 
     doc_label = f"{document.id} ({document.filename!r})"
-    logger.info("Page images: starting extraction for %s (file_type=%s)", doc_label, document.file_type)
+    logger.info(
+        "Page images: starting extraction for %s (file_type=%s, gemini=%s)",
+        doc_label, document.file_type, gemini_available,
+    )
 
     temp_path = None
     try:
@@ -111,19 +109,20 @@ async def process_page_images(db: Session, document: Document) -> None:
                 )
                 continue
 
-            # Generate Gemini embedding
+            # Generate Gemini embedding (optional — images are stored regardless)
             embedding = None
-            try:
-                embedding = gemini_embeddings.embed_image(jpeg_bytes)
-                logger.info(
-                    "Page images: embedded page %d for %s (768-dim vector)",
-                    page_number, doc_label,
-                )
-            except Exception as embed_exc:
-                logger.warning(
-                    "Page images: embedding failed for %s page %d: %s",
-                    doc_label, page_number, embed_exc,
-                )
+            if gemini_available:
+                try:
+                    embedding = gemini_embeddings.embed_image(jpeg_bytes)
+                    logger.info(
+                        "Page images: embedded page %d for %s (768-dim vector)",
+                        page_number, doc_label,
+                    )
+                except Exception as embed_exc:
+                    logger.warning(
+                        "Page images: embedding failed for %s page %d: %s",
+                        doc_label, page_number, embed_exc,
+                    )
 
             page_image_rows.append(
                 DocumentPageImage(

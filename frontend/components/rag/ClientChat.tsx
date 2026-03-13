@@ -427,6 +427,45 @@ function SourceCard({
   const [expanded, setExpanded] = useState(false);
   const hasImage = Boolean(source.image_url);
 
+  // Image source card — compact row with thumbnail on the left
+  if (hasImage) {
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          onImageClick?.(source.image_url!, source.filename, source.page_number ?? 1)
+        }
+        className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-left transition-colors hover:border-blue-300 hover:bg-blue-50/40"
+      >
+        {/* Thumbnail */}
+        <div className="h-[52px] w-[40px] flex-shrink-0 overflow-hidden rounded border border-gray-200 bg-gray-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={source.image_url}
+            alt={`Page ${source.page_number}`}
+            className="h-full w-full object-cover object-top"
+          />
+        </div>
+
+        {/* Info */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-xs font-medium text-gray-700">
+            {source.filename}
+          </span>
+          <span className="text-[10px] text-gray-400">
+            Page {source.page_number} — click to view
+          </span>
+        </div>
+
+        {/* Score */}
+        <span className={`flex-shrink-0 text-xs font-medium ${source.score >= 70 ? "text-green-600" : source.score >= 50 ? "text-amber-600" : "text-red-500"}`}>
+          {Math.round(source.score)}%
+        </span>
+      </button>
+    );
+  }
+
+  // Text-only source card — compact with expandable preview
   return (
     <button
       type="button"
@@ -435,7 +474,7 @@ function SourceCard({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          {hasImage ? <ImageIcon /> : <DocIcon />}
+          <DocIcon />
           <span className="truncate text-xs font-medium text-gray-700">
             {source.filename}
             {source.page_number != null && (
@@ -456,32 +495,10 @@ function SourceCard({
         </div>
       </div>
 
-      {/* Page image thumbnail */}
-      {source.image_url && (
-        <div
-          className="mt-1.5 overflow-hidden rounded border border-gray-200 cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation();
-            onImageClick?.(source.image_url!, source.filename, source.page_number!);
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={source.image_url}
-            alt={`Page ${source.page_number} of ${source.filename}`}
-            className="h-24 w-full object-cover object-top transition-opacity hover:opacity-80"
-          />
-          <div className="bg-gray-50 px-2 py-0.5 text-[10px] text-gray-500">
-            Page {source.page_number} — click to enlarge
-          </div>
-        </div>
-      )}
-
-      {/* Text preview */}
-      {!hasImage && !expanded && (
+      {!expanded && (
         <p className="mt-1 truncate text-xs text-gray-400">{source.chunk_text}</p>
       )}
-      {!hasImage && expanded && (
+      {expanded && (
         <p className="mt-1.5 text-xs leading-relaxed text-gray-600 whitespace-pre-wrap">{source.chunk_text}</p>
       )}
     </button>
@@ -525,7 +542,7 @@ function MessageBubble({
           <div className="flex w-full flex-col gap-1.5">
             {message.sources.map((src, idx) => (
               <SourceCard
-                key={`${src.document_id}-${src.chunk_index}-${idx}`}
+                key={`${src.document_id}-${src.page_number ?? src.chunk_index}-${idx}`}
                 source={src}
                 onImageClick={onImageClick}
               />
@@ -659,14 +676,6 @@ function DocIcon() {
   return (
     <svg className="h-3 w-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
-  );
-}
-
-function ImageIcon() {
-  return (
-    <svg className="h-3 w-3 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a2.25 2.25 0 002.25-2.25V5.25a2.25 2.25 0 00-2.25-2.25H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
     </svg>
   );
 }

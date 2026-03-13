@@ -584,28 +584,105 @@ async def answer_question(
 
     answer = response.choices[0].message.content or "No answer generated."
 
-    # Build source list with scores (one entry per chunk, not deduplicated)
-    sources: list[dict] = []
+    # ------------------------------------------------------------------
+    # Build deduplicated source list (1 card per unique document page)
+    # ------------------------------------------------------------------
+
+    # Collect all page images for the documents in our results so we can
+    # map text chunks to their corresponding page thumbnails.
+    doc_ids_in_results = set(
+        str(chunk.document_id) for chunk, _ in chunk_results
+    ) | set(
+        str(pi.document_id) for pi, _ in image_results
+    )
+
+    # Pre-load page images for those documents (cheap query, already indexed)
+    page_images_by_doc: dict[str, list[DocumentPageImage]] = {}
+    if doc_ids_in_results:
+        all_page_imgs = (
+            db.query(DocumentPageImage)
+            .filter(DocumentPageImage.document_id.in_(
+                [UUID(did) for did in doc_ids_in_results]
+            ))
+            .order_by(DocumentPageImage.page_number)
+            .all()
+        )
+        for pi in all_page_imgs:
+            page_images_by_doc.setdefault(str(pi.document_id), []).append(pi)
+
+    def _estimate_page(chunk_index: int, total_chunks: int, total_pages: int) -> int:
+        """Estimate 1-based page number from chunk position."""
+        if total_pages <= 0:
+            return 1
+        if total_chunks <= 0:
+            return 1
+        chunks_per_page = max(1, total_chunks / total_pages)
+        return min(total_pages, int(chunk_index / chunks_per_page) + 1)
+
+    def _find_page_image(
+        doc_id: str, target_page: int
+    ) -> DocumentPageImage | None:
+        """Find the closest page image for a document page."""
+        pages = page_images_by_doc.get(doc_id, [])
+        if not pages:
+            return None
+        # Exact match first
+        for pi in pages:
+            if pi.page_number == target_page:
+                return pi
+        # Closest page
+        return min(pages, key=lambda pi: abs(pi.page_number - target_page))
+
+    # Dict keyed by (document_id, page_number) → best source
+    deduped: dict[tuple[str, int], dict] = {}
+
+    # Process text chunk sources first
     for chunk, score in chunk_results:
-        filename = chunk.document.filename if chunk.document else "unknown"
+        doc = chunk.document
+        doc_id_str = str(chunk.document_id)
+        filename = doc.filename if doc else "unknown"
+
+        # Count total chunks and pages for this document
+        total_chunks = len(chunk_results)  # approximate from result set
+        doc_pages = page_images_by_doc.get(doc_id_str, [])
+        total_pages = len(doc_pages) if doc_pages else 1
+
+        est_page = _estimate_page(chunk.chunk_index, total_chunks, total_pages)
+        page_img = _find_page_image(doc_id_str, est_page)
+
         chunk_preview = chunk.chunk_text[:200]
         if len(chunk.chunk_text) > 200:
             chunk_preview += "…"
-        sources.append({
-            "document_id": str(chunk.document_id),
+
+        source_entry: dict = {
+            "document_id": doc_id_str,
             "filename": filename,
             "preview": chunk_preview,
             "score": score,
             "chunk_text": chunk_preview,
             "chunk_index": chunk.chunk_index,
-        })
+        }
 
-    # Add page image sources
+        # Attach page image if found
+        if page_img:
+            source_entry["page_number"] = page_img.page_number
+            source_entry["image_path"] = page_img.image_path
+            est_page = page_img.page_number  # use actual page number
+
+        key = (doc_id_str, est_page)
+        existing = deduped.get(key)
+        if not existing or score > existing["score"]:
+            deduped[key] = source_entry
+
+    # Process page image sources (prefer these over text chunks for same page)
     for page_img, score in image_results:
         doc = page_img.document
+        doc_id_str = str(page_img.document_id)
         filename = doc.filename if doc else "unknown"
-        sources.append({
-            "document_id": str(page_img.document_id),
+        key = (doc_id_str, page_img.page_number)
+
+        source_entry = {
+            "document_id": doc_id_str,
             "filename": filename,
             "preview": f"Page {page_img.page_number} of {filename}",
             "score": score,
@@ -613,10 +690,21 @@ async def answer_question(
             "chunk_index": 0,
             "page_number": page_img.page_number,
             "image_path": page_img.image_path,
-        })
+        }
 
-    # Sort all sources by score descending
-    sources.sort(key=lambda s: s["score"], reverse=True)
+        existing = deduped.get(key)
+        if not existing:
+            deduped[key] = source_entry
+        else:
+            # Merge: keep the higher score, but always attach the image_path
+            if "image_path" not in existing:
+                existing["image_path"] = page_img.image_path
+                existing["page_number"] = page_img.page_number
+            if score > existing["score"]:
+                existing["score"] = score
+
+    # Sort by score descending, cap at 4 unique source cards
+    sources = sorted(deduped.values(), key=lambda s: s["score"], reverse=True)[:4]
 
     return {
         "answer": answer,
