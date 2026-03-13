@@ -426,9 +426,17 @@ function SourceCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasImage = Boolean(source.image_url);
+  const isPdf = source.filename.toLowerCase().endsWith(".pdf");
 
-  // Image source card — compact row with thumbnail on the left
-  if (hasImage) {
+  const scoreColor =
+    source.score >= 70
+      ? "text-green-600"
+      : source.score >= 50
+      ? "text-amber-600"
+      : "text-red-500";
+
+  // PDF source card with real thumbnail — clickable to open lightbox
+  if (isPdf && hasImage) {
     return (
       <button
         type="button"
@@ -437,7 +445,6 @@ function SourceCard({
         }
         className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-left transition-colors hover:border-blue-300 hover:bg-blue-50/40"
       >
-        {/* Thumbnail */}
         <div className="h-[52px] w-[40px] flex-shrink-0 overflow-hidden rounded border border-gray-200 bg-gray-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -446,8 +453,6 @@ function SourceCard({
             className="h-full w-full object-cover object-top"
           />
         </div>
-
-        {/* Info */}
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-xs font-medium text-gray-700">
             {source.filename}
@@ -456,16 +461,44 @@ function SourceCard({
             Page {source.page_number} — click to view
           </span>
         </div>
-
-        {/* Score */}
-        <span className={`flex-shrink-0 text-xs font-medium ${source.score >= 70 ? "text-green-600" : source.score >= 50 ? "text-amber-600" : "text-red-500"}`}>
+        <span className={`flex-shrink-0 text-xs font-medium ${scoreColor}`}>
           {Math.round(source.score)}%
         </span>
       </button>
     );
   }
 
-  // Text-only source card — compact with expandable preview
+  // PDF source card WITHOUT image — placeholder thumbnail
+  if (isPdf && !hasImage) {
+    return (
+      <div
+        className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-left"
+        title="Re-process this document to enable page preview"
+      >
+        <div className="flex h-[52px] w-[40px] flex-shrink-0 flex-col items-center justify-center rounded border border-gray-200 bg-gray-100">
+          <PdfPlaceholderIcon />
+          <span className="mt-0.5 text-[7px] leading-none text-gray-400">
+            No preview
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-xs font-medium text-gray-700">
+            {source.filename}
+          </span>
+          <span className="text-[10px] text-gray-400">
+            {source.page_number != null
+              ? `Page ${source.page_number}`
+              : "Re-process to enable preview"}
+          </span>
+        </div>
+        <span className={`flex-shrink-0 text-xs font-medium ${scoreColor}`}>
+          {Math.round(source.score)}%
+        </span>
+      </div>
+    );
+  }
+
+  // Non-PDF source card — text-based with expandable preview
   return (
     <button
       type="button"
@@ -477,13 +510,10 @@ function SourceCard({
           <DocIcon />
           <span className="truncate text-xs font-medium text-gray-700">
             {source.filename}
-            {source.page_number != null && (
-              <span className="ml-1 text-gray-400">p.{source.page_number}</span>
-            )}
           </span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`text-xs font-medium ${source.score >= 70 ? "text-green-600" : source.score >= 50 ? "text-amber-600" : "text-red-500"}`}>
+          <span className={`text-xs font-medium ${scoreColor}`}>
             {Math.round(source.score)}%
           </span>
           <svg
@@ -676,6 +706,14 @@ function DocIcon() {
   return (
     <svg className="h-3 w-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  );
+}
+
+function PdfPlaceholderIcon() {
+  return (
+    <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
     </svg>
   );
 }

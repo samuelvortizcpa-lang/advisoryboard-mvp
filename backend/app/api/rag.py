@@ -28,6 +28,7 @@ from app.models.chat_message import ChatMessage
 from app.models.client import Client
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
+from app.models.document_page_image import DocumentPageImage
 from app.schemas.chat_message import ChatHistoryResponse, ChatMessageResponse
 from app.services import rag_service, storage_service, user_service
 
@@ -236,6 +237,82 @@ async def process_single_document(
     background_tasks.add_task(rag_service.process_document_task, document.id)
 
     return ProcessResponse(queued=1, message="Document queued for processing.")
+
+
+# ---------------------------------------------------------------------------
+# Backfill page images for legacy PDFs
+# ---------------------------------------------------------------------------
+
+
+class BackfillResponse(BaseModel):
+    processed: int
+    skipped: int
+    total_pages: int
+    message: str
+
+
+@router.post(
+    "/documents/backfill-pages",
+    response_model=BackfillResponse,
+    summary="Backfill page images for PDFs missing them",
+)
+async def backfill_page_images(
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> BackfillResponse:
+    """
+    Find all PDF documents that have no rows in document_page_images
+    and run page image processing on them.
+    """
+    from app.services.page_image_service import process_page_images
+
+    user = user_service.get_or_create_user(db, current_user)
+
+    # Find all PDF documents owned by this user
+    pdf_docs = (
+        db.query(Document)
+        .join(Client, Document.client_id == Client.id)
+        .filter(
+            Client.owner_id == user.id,
+            Document.file_type == "pdf",
+            Document.processed == True,  # noqa: E712
+        )
+        .all()
+    )
+
+    processed = 0
+    skipped = 0
+    total_pages = 0
+
+    for doc in pdf_docs:
+        # Check if page images already exist
+        existing = (
+            db.query(DocumentPageImage)
+            .filter(DocumentPageImage.document_id == doc.id)
+            .count()
+        )
+        if existing > 0:
+            skipped += 1
+            continue
+
+        try:
+            await process_page_images(db, doc)
+            page_count = (
+                db.query(DocumentPageImage)
+                .filter(DocumentPageImage.document_id == doc.id)
+                .count()
+            )
+            total_pages += page_count
+            processed += 1
+        except Exception:
+            pass  # logged inside process_page_images
+
+    return BackfillResponse(
+        processed=processed,
+        skipped=skipped,
+        total_pages=total_pages,
+        message=f"Processed {processed} PDF(s), generated {total_pages} page images. Skipped {skipped} already done.",
+    )
 
 
 # ---------------------------------------------------------------------------

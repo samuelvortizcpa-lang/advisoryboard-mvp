@@ -68,6 +68,15 @@ Financial document precision:
 - For W-2s and K-1s, reference specific box numbers (e.g. "Box 1: Wages" or "Box 14: Self-employment earnings").
 - If a visual page image is available, note the page number for the user's reference (e.g. "See page 3 of the return").
 
+IRS Form 1040 line reference:
+- Line 9 = Total Income (sum of all income sources before adjustments).
+- Line 11 = Adjusted Gross Income (AGI, after above-the-line adjustments).
+- Line 15 = Taxable Income (after deductions).
+These are DIFFERENT values. When asked about "total income", report Line 9.
+When asked about "taxable income", report Line 15.
+When asked about "AGI" or "adjusted gross income", report Line 11.
+Always include the line number and exact dollar amount in your response.
+
 Context:
 {context}
 """

@@ -327,7 +327,20 @@ export function createRagApi(getToken: GetToken) {
         body: JSON.stringify({ document_ids: documentIds, comparison_type: comparisonType }),
       });
     },
+
+    backfillPages() {
+      return apiFetch<BackfillResponse>(getToken, `/documents/backfill-pages`, {
+        method: "POST",
+      });
+    },
   };
+}
+
+export interface BackfillResponse {
+  processed: number;
+  skipped: number;
+  total_pages: number;
+  message: string;
 }
 
 // ─── Brief types ───────────────────────────────────────────────────────────────

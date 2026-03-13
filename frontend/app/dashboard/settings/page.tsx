@@ -1,6 +1,10 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
+import { useState } from "react";
+
+import { createRagApi } from "@/lib/api";
 
 const settingsCards = [
   {
@@ -11,6 +15,27 @@ const settingsCards = [
 ];
 
 export default function SettingsPage() {
+  const { getToken } = useAuth();
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<string | null>(null);
+  const [backfillError, setBackfillError] = useState<string | null>(null);
+
+  async function handleBackfill() {
+    setBackfillLoading(true);
+    setBackfillResult(null);
+    setBackfillError(null);
+    try {
+      const res = await createRagApi(getToken).backfillPages();
+      setBackfillResult(res.message);
+    } catch (err) {
+      setBackfillError(
+        err instanceof Error ? err.message : "Backfill failed"
+      );
+    } finally {
+      setBackfillLoading(false);
+    }
+  }
+
   return (
     <div className="px-8 py-8 space-y-6">
       <div>
@@ -38,6 +63,37 @@ export default function SettingsPage() {
             </p>
           </Link>
         ))}
+
+        {/* Reprocess PDF Pages card */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="text-base font-semibold text-gray-900">
+            Reprocess PDF Pages
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Generate page thumbnails for PDFs uploaded before the page image
+            feature was added.
+          </p>
+          <button
+            onClick={handleBackfill}
+            disabled={backfillLoading}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {backfillLoading ? (
+              <>
+                <span className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                Processing…
+              </>
+            ) : (
+              "Reprocess PDF Pages"
+            )}
+          </button>
+          {backfillResult && (
+            <p className="mt-3 text-sm text-green-600">{backfillResult}</p>
+          )}
+          {backfillError && (
+            <p className="mt-3 text-sm text-red-600">{backfillError}</p>
+          )}
+        </div>
       </div>
     </div>
   );
