@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python313", "ffmpeg", "poppler_utils"]
+nixPkgs = ["python313", "ffmpeg", "poppler_utils", "tesseract"]
 
 [phases.install]
 cmds = ["pip install -r backend/requirements.txt"]

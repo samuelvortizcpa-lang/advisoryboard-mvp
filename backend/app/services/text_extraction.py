@@ -3,6 +3,7 @@ Text extraction from uploaded documents.
 
 Supported types:
   pdf        → pdfplumber (handles scanned-light PDFs, tables, columns)
+               with automatic Tesseract OCR fallback for garbled output
   docx       → python-docx (paragraphs + tables)
   doc        → falls back to docx attempt, raises clear error if it fails
   txt        → plain UTF-8 read  (Fathom .txt exports work out of the box)
@@ -93,16 +94,99 @@ def extract_text(file_path: str, file_type: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Garbled-text detection (for PDF OCR fallback)
+# ---------------------------------------------------------------------------
+
+_COMMON_WORDS = {
+    "the", "be", "to", "of", "and", "a", "in", "that", "have", "i",
+    "it", "for", "not", "on", "with", "he", "as", "you", "do", "at",
+    "this", "but", "his", "by", "from", "they", "we", "say", "her",
+    "she", "or", "an", "will", "my", "one", "all", "would", "there",
+    "their", "what", "so", "up", "out", "if", "about", "who", "get",
+    "which", "go", "me", "when", "make", "can", "like", "time", "no",
+    "just", "him", "know", "take", "people", "into", "year", "your",
+    "good", "some", "could", "them", "see", "other", "than", "then",
+    "now", "look", "only", "come", "its", "over", "think", "also",
+    "back", "after", "use", "two", "how", "our", "work", "first",
+    "well", "way", "even", "new", "want", "because", "any", "these",
+    "give", "day", "most", "us", "is", "are", "was", "were", "been",
+    "has", "had", "did", "does", "may", "shall", "should", "must",
+    "form", "income", "tax", "total", "adjusted", "gross", "wages",
+    "filing", "status", "exemptions", "deductions", "credits",
+    "payment", "refund", "amount", "line", "schedule", "return",
+    "federal", "state", "social", "security", "medicare", "withholding",
+    "estimated", "balance", "due", "overpaid", "taxable", "net",
+    "name", "address", "number", "date", "signature", "page",
+    "department", "treasury", "internal", "revenue", "service",
+}
+
+
+def _is_garbled(text: str, threshold: float = 0.15) -> bool:
+    """Detect whether extracted PDF text is garbled."""
+    import re as _re
+
+    if not text or len(text.strip()) < 20:
+        return True
+
+    words = _re.findall(r"[A-Za-z]{2,}", text)
+    if len(words) < 5:
+        return True
+
+    # Check for reversed words (strong signal — e.g. "mroF" for "Form")
+    reversed_hits = 0
+    for w in words:
+        if w.lower()[::-1] in _COMMON_WORDS and w.lower() not in _COMMON_WORDS:
+            reversed_hits += 1
+    if reversed_hits >= 2:
+        logger.info(f"Garbled detection: found {reversed_hits} reversed words")
+        return True
+
+    # Check ratio of recognised words
+    recognised = sum(1 for w in words if w.lower() in _COMMON_WORDS)
+    ratio = recognised / len(words)
+    if ratio < threshold:
+        logger.info(
+            f"Garbled detection: only {ratio:.1%} recognised words "
+            f"({recognised}/{len(words)})"
+        )
+        return True
+
+    return False
+
+
+def _extract_pdf_ocr(path: Path) -> str:
+    """Extract text from PDF using Tesseract OCR via pdf2image."""
+    from pdf2image import convert_from_path
+    import pytesseract
+
+    logger.info(f"Running OCR extraction on {path.name}")
+    pages: list[str] = []
+    images = convert_from_path(str(path), dpi=150)
+
+    for i, image in enumerate(images):
+        page_text = pytesseract.image_to_string(image, config="--psm 6")
+        if page_text and page_text.strip():
+            pages.append(page_text.strip())
+        logger.debug(f"OCR page {i + 1}: {len(page_text)} chars")
+
+    full_text = "\n\n".join(pages)
+    logger.info(f"OCR complete: {len(images)} pages, {len(full_text)} chars")
+    return full_text
+
+
+# ---------------------------------------------------------------------------
 # Per-format extractors
 # ---------------------------------------------------------------------------
 
 
 def _extract_pdf(path: Path) -> str:
+    """Extract text from PDF with automatic OCR fallback for garbled output."""
     try:
         import pdfplumber
     except ImportError as exc:
         raise ExtractionError("pdfplumber is not installed") from exc
 
+    # Step 1: Try pdfplumber
     pages: list[str] = []
     try:
         with pdfplumber.open(str(path)) as pdf:
@@ -113,7 +197,32 @@ def _extract_pdf(path: Path) -> str:
     except Exception as exc:
         raise ExtractionError(f"PDF extraction failed: {exc}") from exc
 
-    return "\n\n".join(pages)
+    pdfplumber_text = "\n\n".join(pages)
+
+    # Step 2: Check quality — if pdfplumber output looks good, use it
+    if not _is_garbled(pdfplumber_text):
+        logger.info(f"PDF extraction: pdfplumber output OK for {path.name}")
+        return pdfplumber_text
+
+    # Step 3: Fall back to Tesseract OCR
+    logger.warning(
+        f"PDF extraction: pdfplumber output garbled for {path.name}, "
+        "falling back to Tesseract OCR"
+    )
+    try:
+        ocr_text = _extract_pdf_ocr(path)
+        if ocr_text and not _is_garbled(ocr_text, threshold=0.10):
+            logger.info("OCR produced good output")
+            return ocr_text
+        elif ocr_text and len(ocr_text.strip()) > len(pdfplumber_text.strip()):
+            logger.warning("OCR output also marginal; using it (longer than pdfplumber)")
+            return ocr_text
+        else:
+            logger.warning("OCR output also poor; returning pdfplumber result")
+            return pdfplumber_text
+    except Exception as e:
+        logger.error(f"OCR fallback failed: {e}. Using pdfplumber output.")
+        return pdfplumber_text
 
 
 def _extract_docx(path: Path) -> str:
