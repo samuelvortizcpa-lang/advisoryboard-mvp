@@ -12,6 +12,9 @@ class ChatSourceItem(BaseModel):
     score: float = 0.0
     chunk_text: str = ""
     chunk_index: int = 0
+    page_number: Optional[int] = None
+    image_url: Optional[str] = None
+    image_path: Optional[str] = None
 
 
 class ChatMessageResponse(BaseModel):

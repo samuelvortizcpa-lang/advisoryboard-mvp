@@ -452,8 +452,23 @@ async def get_chat_history(
         .all()
     )
 
+    # Regenerate signed URLs for any page image sources in history
+    validated_messages = []
+    for m in messages:
+        msg = ChatMessageResponse.model_validate(m)
+        if msg.sources:
+            for src in msg.sources:
+                if src.image_path and not src.image_url:
+                    try:
+                        src.image_url = storage_service.get_signed_url(
+                            src.image_path, expires_in=3600
+                        )
+                    except Exception:
+                        pass  # non-fatal
+        validated_messages.append(msg)
+
     return ChatHistoryResponse(
-        messages=[ChatMessageResponse.model_validate(m) for m in messages],
+        messages=validated_messages,
         total=total,
         skip=skip,
         limit=limit,

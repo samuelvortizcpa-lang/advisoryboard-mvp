@@ -47,12 +47,14 @@ async def process_page_images(db: Session, document: Document) -> None:
         return
 
     doc_label = f"{document.id} ({document.filename!r})"
-    logger.info("Page images: starting extraction for %s", doc_label)
+    logger.info("Page images: starting extraction for %s (file_type=%s)", doc_label, document.file_type)
 
     temp_path = None
     try:
         # 1. Download PDF to temp file
+        logger.info("Page images: downloading PDF from storage: %s", document.file_path)
         temp_path = storage_service.get_temp_local_path(document.file_path)
+        logger.info("Page images: downloaded to temp file: %s", temp_path)
 
         # 2. Convert pages to PIL images
         from pdf2image import convert_from_path
@@ -66,6 +68,7 @@ async def process_page_images(db: Session, document: Document) -> None:
 
         total_pages = len(pil_images)
         pages_to_process = min(total_pages, MAX_PAGES)
+        logger.info("Page images: converted PDF to %d page image(s)", total_pages)
 
         if total_pages > MAX_PAGES:
             logger.info(
@@ -97,6 +100,10 @@ async def process_page_images(db: Session, document: Document) -> None:
                 storage_service.upload_file_to_path(
                     storage_path, jpeg_bytes, "image/jpeg"
                 )
+                logger.info(
+                    "Page images: uploaded page %d/%d for %s (%d bytes)",
+                    page_number, pages_to_process, doc_label, len(jpeg_bytes),
+                )
             except Exception as upload_exc:
                 logger.warning(
                     "Page images: upload failed for %s page %d: %s",
@@ -108,6 +115,10 @@ async def process_page_images(db: Session, document: Document) -> None:
             embedding = None
             try:
                 embedding = gemini_embeddings.embed_image(jpeg_bytes)
+                logger.info(
+                    "Page images: embedded page %d for %s (768-dim vector)",
+                    page_number, doc_label,
+                )
             except Exception as embed_exc:
                 logger.warning(
                     "Page images: embedding failed for %s page %d: %s",

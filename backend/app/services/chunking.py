@@ -12,18 +12,45 @@ Strategy
 
 Tuning
 ------
-CHUNK_SIZE   = 1 500 chars  ≈ 375 tokens  (good balance for gpt-4o-mini context)
-CHUNK_OVERLAP = 200 chars   ≈ 50  tokens  (enough to preserve sentence context)
+Default:  1 500 chars / 200 overlap  (good for narrative documents)
+Financial: 500 chars / 100 overlap   (preserves line-item structure on
+           tax returns, W-2s, K-1s, invoices, and financial statements)
 MIN_CHUNK_LEN = 50  chars   — discard tiny noise fragments
 """
 
 from __future__ import annotations
 
 import re
+from typing import Optional
 
 CHUNK_SIZE = 1_500
 CHUNK_OVERLAP = 200
 MIN_CHUNK_LEN = 50
+
+# Smaller chunks for structured financial documents so that individual
+# line items, box values, and table rows stay intact within a single chunk.
+FINANCIAL_CHUNK_SIZE = 500
+FINANCIAL_CHUNK_OVERLAP = 100
+
+FINANCIAL_DOC_TYPES: set[str] = {
+    "tax_return",
+    "w2",
+    "k1",
+    "financial_statement",
+    "invoice",
+}
+
+
+def get_chunk_params(document_type: Optional[str] = None) -> tuple[int, int]:
+    """
+    Return (chunk_size, overlap) appropriate for the document type.
+
+    Financial document types get smaller chunks to preserve line-item
+    structure (500/100); everything else uses the default (1500/200).
+    """
+    if document_type and document_type.lower() in FINANCIAL_DOC_TYPES:
+        return FINANCIAL_CHUNK_SIZE, FINANCIAL_CHUNK_OVERLAP
+    return CHUNK_SIZE, CHUNK_OVERLAP
 
 
 # ---------------------------------------------------------------------------

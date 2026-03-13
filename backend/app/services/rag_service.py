@@ -23,14 +23,13 @@ answer_question(db, client_id, question)
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 from uuid import UUID
 
 from openai import AsyncOpenAI
-from sqlalchemy.orm import Session
-
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import get_settings
 from app.models.client import Client
@@ -38,7 +37,7 @@ from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page_image import DocumentPageImage
 from app.services import gemini_embeddings, storage_service
-from app.services.chunking import chunk_text
+from app.services.chunking import chunk_text, get_chunk_params
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
 
 logger = logging.getLogger(__name__)
@@ -48,7 +47,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 EMBEDDING_MODEL = "text-embedding-3-small"   # 1 536 dims, matches schema
-CHAT_MODEL = "gpt-4o-mini"
+CHAT_MODEL = "gpt-4o"
 TOP_K = 5          # chunks retrieved per query
 EMBED_BATCH = 100  # OpenAI allows up to 2 048 inputs per call
 
@@ -62,6 +61,12 @@ Answer questions using ONLY the context provided below.
 - Always name the specific document(s) you are drawing information from (e.g. "According to Q3-2024-PnL.pdf…").
 - Clearly distinguish between direct citations from documents and your own inferences or interpretations. Use phrases like "The document states…" for citations and "Based on this, it appears…" for inferences.
 - If no source passages are sufficiently relevant, decline to answer rather than speculate.
+
+Financial document precision:
+- When referencing tax returns, cite specific line numbers, box numbers, or schedule names (e.g. "Form 1040, Line 11" or "Schedule C, Line 31").
+- Always quote exact dollar amounts as they appear in the source (e.g. "$142,350" not "about $142k").
+- For W-2s and K-1s, reference specific box numbers (e.g. "Box 1: Wages" or "Box 14: Self-employment earnings").
+- If a visual page image is available, note the page number for the user's reference (e.g. "See page 3 of the return").
 
 Context:
 {context}
@@ -208,13 +213,16 @@ async def process_document(db: Session, document: Document) -> None:
                 doc_label, cls_exc,
             )
 
-        # 2. Chunk
-        chunks = chunk_text(text)
+        # 2. Chunk (use smaller chunks for financial documents)
+        chunk_size, chunk_overlap = get_chunk_params(document.document_type)
+        chunks = chunk_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
         if not chunks:
             raise ValueError("Document produced no usable text chunks after extraction.")
 
         logger.info(
-            "RAG: %s → %d chars, %d chunks", doc_label, len(text), len(chunks)
+            "RAG: %s → %d chars, %d chunks (size=%d, overlap=%d, type=%s)",
+            doc_label, len(text), len(chunks), chunk_size, chunk_overlap,
+            document.document_type or "default",
         )
 
         # 3. Delete stale chunks (handles re-processing)
@@ -540,16 +548,38 @@ async def answer_question(
             "reliably answer this question."
         )
 
-    # Chat completion
+    # Build user message content — include page images for GPT-4o vision
+    user_content: list[dict] = [{"type": "text", "text": question}]
+
+    # Include top 2 page images as base64 for visual grounding
+    images_included = 0
+    for page_img, _score in image_results:
+        if images_included >= 2:
+            break
+        try:
+            img_bytes = storage_service.download_file(page_img.image_path)
+            b64 = base64.b64encode(img_bytes).decode("utf-8")
+            user_content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{b64}",
+                    "detail": "high",
+                },
+            })
+            images_included += 1
+        except Exception as img_exc:
+            logger.warning("Vision: failed to load page image %s: %s", page_img.image_path, img_exc)
+
+    # Chat completion (GPT-4o with vision when images are available)
     openai_client = _openai()
     response = await openai_client.chat.completions.create(
         model=CHAT_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question},
+            {"role": "user", "content": user_content},
         ],
         temperature=0.1,
-        max_tokens=1_000,
+        max_tokens=1_500,
     )
 
     answer = response.choices[0].message.content or "No answer generated."

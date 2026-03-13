@@ -94,10 +94,11 @@ def upload_file_to_path(
     content_type: str,
 ) -> str:
     """
-    Upload file bytes to an explicit Supabase Storage path.
+    Upload file bytes to an explicit Supabase Storage path (upsert mode).
 
     Unlike `upload_file()`, which builds the path from user/client/file IDs,
     this function takes the full storage path directly.  Used for page images.
+    Uses upsert so re-processing a document overwrites existing page images.
 
     Returns the storage path string.
     """
@@ -106,7 +107,7 @@ def upload_file_to_path(
         client.storage.from_(BUCKET).upload(
             path=storage_path,
             file=file_bytes,
-            file_options={"content-type": content_type},
+            file_options={"content-type": content_type, "upsert": "true"},
         )
         logger.info("Uploaded %d bytes to %s/%s", len(file_bytes), BUCKET, storage_path)
         return storage_path
