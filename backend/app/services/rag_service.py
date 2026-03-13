@@ -502,6 +502,16 @@ async def answer_question(
     best_score = max(all_scores)
     confidence_tier = _compute_confidence_tier(all_scores)
 
+    # DEBUG: log what text GPT-4o will actually receive
+    for i, (chunk, score) in enumerate(chunk_results):
+        doc = chunk.document
+        fname = doc.filename if doc else "?"
+        preview = chunk.chunk_text[:300].replace("\n", " ")
+        logger.info(
+            "RAG-DEBUG chunk %d/%d [%.1f%%] %s idx=%d: %s",
+            i + 1, len(chunk_results), score, fname, chunk.chunk_index, preview,
+        )
+
     # ------------------------------------------------------------------
     # Pre-load page images for documents in results (for chunk→page mapping)
     # ------------------------------------------------------------------

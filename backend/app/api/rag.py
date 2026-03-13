@@ -316,6 +316,65 @@ async def backfill_page_images(
 
 
 # ---------------------------------------------------------------------------
+# Debug: inspect chunks for a document
+# ---------------------------------------------------------------------------
+
+
+class DebugChunkItem(BaseModel):
+    chunk_index: int
+    chunk_text: str
+
+
+class DebugChunksResponse(BaseModel):
+    document_id: str
+    filename: str
+    total_chunks: int
+    chunks: List[DebugChunkItem]
+
+
+@router.get(
+    "/documents/{document_id}/chunks",
+    response_model=DebugChunksResponse,
+    summary="[DEBUG] Return all chunks for a document",
+)
+async def debug_get_chunks(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> DebugChunksResponse:
+    user = user_service.get_or_create_user(db, current_user)
+
+    # Verify the document belongs to a client owned by this user
+    document = (
+        db.query(Document)
+        .join(Client, Document.client_id == Client.id)
+        .filter(Document.id == document_id, Client.owner_id == user.id)
+        .first()
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    chunks = (
+        db.query(DocumentChunk)
+        .filter(DocumentChunk.document_id == document_id)
+        .order_by(DocumentChunk.chunk_index)
+        .all()
+    )
+
+    return DebugChunksResponse(
+        document_id=str(document_id),
+        filename=document.filename,
+        total_chunks=len(chunks),
+        chunks=[
+            DebugChunkItem(chunk_index=c.chunk_index, chunk_text=c.chunk_text)
+            for c in chunks
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Semantic search
 # ---------------------------------------------------------------------------
 
