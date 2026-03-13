@@ -18,14 +18,14 @@ search_chunks(db, client_id, query, limit)
   └─ embed query → cosine-distance ORDER BY → top-k DocumentChunks
 
 answer_question(db, client_id, question)
-  └─ search_chunks → build context → gpt-4o-mini chat completion
+  └─ search_chunks → build context → gpt-4o chat completion (text only)
 """
 
 from __future__ import annotations
 
-import base64
 import logging
 import os
+import re
 from uuid import UUID
 
 from openai import AsyncOpenAI
@@ -522,19 +522,23 @@ async def answer_question(
         for pi in all_page_imgs:
             page_images_by_doc.setdefault(str(pi.document_id), []).append(pi)
 
+    def _normalize_words(text: str) -> set[str]:
+        """Lowercase, strip punctuation, return word set."""
+        return set(re.sub(r"[^\w\s]", "", text.lower()).split())
+
     def _match_chunk_to_page(
         chunk_text_val: str, doc_id: str
     ) -> DocumentPageImage | None:
         """
         Match a text chunk to the best page using word overlap with
-        page_text_preview.  Returns None if no page images exist or
-        no preview text is available.
+        page_text_preview.  Returns None if no confident match is found
+        (we'd rather show no page than a wrong page).
         """
         pages = page_images_by_doc.get(doc_id, [])
         if not pages:
             return None
 
-        chunk_words = set(chunk_text_val.lower().split())
+        chunk_words = _normalize_words(chunk_text_val)
         if not chunk_words:
             return None
 
@@ -544,22 +548,22 @@ async def answer_question(
         for pi in pages:
             if not pi.page_text_preview:
                 continue
-            page_words = set(pi.page_text_preview.lower().split())
+            page_words = _normalize_words(pi.page_text_preview)
             overlap = len(chunk_words & page_words)
             if overlap > best_overlap:
                 best_overlap = overlap
                 best_page = pi
 
-        # Require at least 5 overlapping words to consider a match
-        if best_overlap >= 5:
+        # Require at least 10 overlapping words for confident match —
+        # better to show no page number than a wrong one.
+        if best_overlap >= 10:
             return best_page
         return None
 
     # ------------------------------------------------------------------
-    # Build text-only context (PRIMARY source for GPT-4o answers)
+    # Build text-only context for GPT-4o (NO vision images — text only)
     # ------------------------------------------------------------------
     context_parts: list[str] = []
-    matched_page_images: list[DocumentPageImage] = []  # for vision supplement
 
     for chunk, score in chunk_results:
         doc = chunk.document
@@ -573,14 +577,6 @@ async def answer_question(
                 doc_meta += f" | Period: {doc.document_period}"
             if doc.is_superseded:
                 doc_meta += " | SUPERSEDED"
-
-        # Match chunk to a page for the source card
-        page_img = _match_chunk_to_page(chunk.chunk_text, str(chunk.document_id))
-        if page_img:
-            doc_meta += f" | Page: {page_img.page_number}"
-            # Collect unique matched pages for vision (no duplicates)
-            if page_img not in matched_page_images:
-                matched_page_images.append(page_img)
 
         context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
 
@@ -614,48 +610,15 @@ async def answer_question(
             "reliably answer this question."
         )
 
-    # Build user message — text question first, then SUPPLEMENTARY page images
-    # only for pages that actually match the retrieved text chunks.
-    user_content: list[dict] = [{"type": "text", "text": question}]
-
-    # Only include page images that were matched to text chunks (max 2)
-    images_included = 0
-    for page_img in matched_page_images[:2]:
-        try:
-            img_bytes = storage_service.download_file(page_img.image_path)
-            b64 = base64.b64encode(img_bytes).decode("utf-8")
-            user_content.append({
-                "type": "text",
-                "text": (
-                    f"Additionally, here is page {page_img.page_number} of the "
-                    f"document for visual reference:"
-                ),
-            })
-            user_content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{b64}",
-                    "detail": "high",
-                },
-            })
-            images_included += 1
-            logger.info(
-                "Vision: attached page %d for %s",
-                page_img.page_number, page_img.document_id,
-            )
-        except Exception as img_exc:
-            logger.warning(
-                "Vision: failed to load page image %s: %s",
-                page_img.image_path, img_exc,
-            )
-
-    # Chat completion (GPT-4o with vision when matched images are available)
+    # Chat completion — TEXT ONLY (no vision images sent to GPT-4o).
+    # Page images caused GPT-4o to ignore text context and say "not provided".
+    # Images are kept for UI display only (source card thumbnails + lightbox).
     openai_client = _openai()
     response = await openai_client.chat.completions.create(
         model=CHAT_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
+            {"role": "user", "content": question},
         ],
         temperature=0.1,
         max_tokens=1_500,
@@ -669,6 +632,11 @@ async def answer_question(
     # _match_chunk_to_page) instead of the old chunk_index heuristic.
     # ------------------------------------------------------------------
 
+    # Year-based relevance boost: if the question mentions a specific year,
+    # boost sources from documents whose period matches that year by +10%.
+    year_match = re.search(r"\b(20\d{2})\b", question)
+    question_year = year_match.group(1) if year_match else None
+
     # Dict keyed by (document_id, page_number) → best source
     deduped: dict[tuple[str, int], dict] = {}
 
@@ -681,11 +649,17 @@ async def answer_question(
         if len(chunk.chunk_text) > 200:
             chunk_preview += "…"
 
+        # Year-based boost: +10% if question mentions a year and doc period matches
+        boosted_score = score
+        if question_year and doc and doc.document_period:
+            if question_year in doc.document_period:
+                boosted_score = min(100.0, score + 10.0)
+
         source_entry: dict = {
             "document_id": doc_id_str,
             "filename": filename,
             "preview": chunk_preview,
-            "score": score,
+            "score": boosted_score,
             "chunk_text": chunk_preview,
             "chunk_index": chunk.chunk_index,
         }
@@ -700,7 +674,7 @@ async def answer_question(
 
         key = (doc_id_str, page_num)
         existing = deduped.get(key)
-        if not existing or score > existing["score"]:
+        if not existing or boosted_score > existing["score"]:
             deduped[key] = source_entry
 
     # Sort by score descending, cap at 4 unique source cards
