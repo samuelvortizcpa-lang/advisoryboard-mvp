@@ -474,11 +474,11 @@ async def answer_question(
                          "score": float, "chunk_text": str, "chunk_index": int}]
         }
     """
-    # Run text chunk search and page image search
+    # Text chunk search is the PRIMARY retrieval method.
+    # Page images are looked up after to supplement matching chunks.
     chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
-    image_results = await search_page_images(db, client_id, question)
 
-    if not chunk_results and not image_results:
+    if not chunk_results:
         return {
             "answer": (
                 "I couldn't find any processed documents for this client. "
@@ -489,12 +489,69 @@ async def answer_question(
             "sources": [],
         }
 
-    all_scores = [score for _, score in chunk_results] + [score for _, score in image_results]
-    best_score = max(all_scores) if all_scores else 0.0
+    all_scores = [score for _, score in chunk_results]
+    best_score = max(all_scores)
     confidence_tier = _compute_confidence_tier(all_scores)
 
-    # Build context with source labels and document type (text chunks only)
+    # ------------------------------------------------------------------
+    # Pre-load page images for documents in results (for chunk→page mapping)
+    # ------------------------------------------------------------------
+    doc_ids_in_results = set(
+        str(chunk.document_id) for chunk, _ in chunk_results
+    )
+
+    page_images_by_doc: dict[str, list[DocumentPageImage]] = {}
+    if doc_ids_in_results:
+        all_page_imgs = (
+            db.query(DocumentPageImage)
+            .filter(DocumentPageImage.document_id.in_(
+                [UUID(did) for did in doc_ids_in_results]
+            ))
+            .order_by(DocumentPageImage.page_number)
+            .all()
+        )
+        for pi in all_page_imgs:
+            page_images_by_doc.setdefault(str(pi.document_id), []).append(pi)
+
+    def _match_chunk_to_page(
+        chunk_text_val: str, doc_id: str
+    ) -> DocumentPageImage | None:
+        """
+        Match a text chunk to the best page using word overlap with
+        page_text_preview.  Returns None if no page images exist or
+        no preview text is available.
+        """
+        pages = page_images_by_doc.get(doc_id, [])
+        if not pages:
+            return None
+
+        chunk_words = set(chunk_text_val.lower().split())
+        if not chunk_words:
+            return None
+
+        best_page: DocumentPageImage | None = None
+        best_overlap = 0
+
+        for pi in pages:
+            if not pi.page_text_preview:
+                continue
+            page_words = set(pi.page_text_preview.lower().split())
+            overlap = len(chunk_words & page_words)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_page = pi
+
+        # Require at least 5 overlapping words to consider a match
+        if best_overlap >= 5:
+            return best_page
+        return None
+
+    # ------------------------------------------------------------------
+    # Build text-only context (PRIMARY source for GPT-4o answers)
+    # ------------------------------------------------------------------
     context_parts: list[str] = []
+    matched_page_images: list[DocumentPageImage] = []  # for vision supplement
+
     for chunk, score in chunk_results:
         doc = chunk.document
         filename = doc.filename if doc else "unknown"
@@ -507,16 +564,16 @@ async def answer_question(
                 doc_meta += f" | Period: {doc.document_period}"
             if doc.is_superseded:
                 doc_meta += " | SUPERSEDED"
-        context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
 
-    # Add page image references to context (visual source markers)
-    for page_img, score in image_results:
-        doc = page_img.document
-        filename = doc.filename if doc else "unknown"
-        context_parts.append(
-            f"[Source: {filename}, Page {page_img.page_number} | "
-            f"Relevance: {score:.1f}% | Visual page reference]"
-        )
+        # Match chunk to a page for the source card
+        page_img = _match_chunk_to_page(chunk.chunk_text, str(chunk.document_id))
+        if page_img:
+            doc_meta += f" | Page: {page_img.page_number}"
+            # Collect unique matched pages for vision (no duplicates)
+            if page_img not in matched_page_images:
+                matched_page_images.append(page_img)
+
+        context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
 
     context = "\n\n---\n\n".join(context_parts)
 
@@ -548,17 +605,23 @@ async def answer_question(
             "reliably answer this question."
         )
 
-    # Build user message content — include page images for GPT-4o vision
+    # Build user message — text question first, then SUPPLEMENTARY page images
+    # only for pages that actually match the retrieved text chunks.
     user_content: list[dict] = [{"type": "text", "text": question}]
 
-    # Include top 2 page images as base64 for visual grounding
+    # Only include page images that were matched to text chunks (max 2)
     images_included = 0
-    for page_img, _score in image_results:
-        if images_included >= 2:
-            break
+    for page_img in matched_page_images[:2]:
         try:
             img_bytes = storage_service.download_file(page_img.image_path)
             b64 = base64.b64encode(img_bytes).decode("utf-8")
+            user_content.append({
+                "type": "text",
+                "text": (
+                    f"Additionally, here is page {page_img.page_number} of the "
+                    f"document for visual reference:"
+                ),
+            })
             user_content.append({
                 "type": "image_url",
                 "image_url": {
@@ -567,10 +630,17 @@ async def answer_question(
                 },
             })
             images_included += 1
+            logger.info(
+                "Vision: attached page %d for %s",
+                page_img.page_number, page_img.document_id,
+            )
         except Exception as img_exc:
-            logger.warning("Vision: failed to load page image %s: %s", page_img.image_path, img_exc)
+            logger.warning(
+                "Vision: failed to load page image %s: %s",
+                page_img.image_path, img_exc,
+            )
 
-    # Chat completion (GPT-4o with vision when images are available)
+    # Chat completion (GPT-4o with vision when matched images are available)
     openai_client = _openai()
     response = await openai_client.chat.completions.create(
         model=CHAT_MODEL,
@@ -586,69 +656,17 @@ async def answer_question(
 
     # ------------------------------------------------------------------
     # Build deduplicated source list (1 card per unique document page)
+    # Uses text-overlap matching (already computed above via
+    # _match_chunk_to_page) instead of the old chunk_index heuristic.
     # ------------------------------------------------------------------
-
-    # Collect all page images for the documents in our results so we can
-    # map text chunks to their corresponding page thumbnails.
-    doc_ids_in_results = set(
-        str(chunk.document_id) for chunk, _ in chunk_results
-    ) | set(
-        str(pi.document_id) for pi, _ in image_results
-    )
-
-    # Pre-load page images for those documents (cheap query, already indexed)
-    page_images_by_doc: dict[str, list[DocumentPageImage]] = {}
-    if doc_ids_in_results:
-        all_page_imgs = (
-            db.query(DocumentPageImage)
-            .filter(DocumentPageImage.document_id.in_(
-                [UUID(did) for did in doc_ids_in_results]
-            ))
-            .order_by(DocumentPageImage.page_number)
-            .all()
-        )
-        for pi in all_page_imgs:
-            page_images_by_doc.setdefault(str(pi.document_id), []).append(pi)
-
-    def _estimate_page(chunk_index: int, total_chunks: int, total_pages: int) -> int:
-        """Estimate 1-based page number from chunk position."""
-        if total_pages <= 0:
-            return 1
-        if total_chunks <= 0:
-            return 1
-        chunks_per_page = max(1, total_chunks / total_pages)
-        return min(total_pages, int(chunk_index / chunks_per_page) + 1)
-
-    def _find_page_image(
-        doc_id: str, target_page: int
-    ) -> DocumentPageImage | None:
-        """Find the closest page image for a document page."""
-        pages = page_images_by_doc.get(doc_id, [])
-        if not pages:
-            return None
-        # Exact match first
-        for pi in pages:
-            if pi.page_number == target_page:
-                return pi
-        # Closest page
-        return min(pages, key=lambda pi: abs(pi.page_number - target_page))
 
     # Dict keyed by (document_id, page_number) → best source
     deduped: dict[tuple[str, int], dict] = {}
 
-    # Process text chunk sources first
     for chunk, score in chunk_results:
         doc = chunk.document
         doc_id_str = str(chunk.document_id)
         filename = doc.filename if doc else "unknown"
-
-        # Count total chunks and pages for this document
-        total_chunks = len(chunk_results)  # approximate from result set
-        doc_pages = page_images_by_doc.get(doc_id_str, [])
-        total_pages = len(doc_pages) if doc_pages else 1
-
-        est_page = _estimate_page(chunk.chunk_index, total_chunks, total_pages)
-        page_img = _find_page_image(doc_id_str, est_page)
 
         chunk_preview = chunk.chunk_text[:200]
         if len(chunk.chunk_text) > 200:
@@ -663,45 +681,18 @@ async def answer_question(
             "chunk_index": chunk.chunk_index,
         }
 
-        # Attach page image if found
+        # Match chunk to page via text overlap (same function used above)
+        page_img = _match_chunk_to_page(chunk.chunk_text, doc_id_str)
+        page_num = page_img.page_number if page_img else 0
+
         if page_img:
             source_entry["page_number"] = page_img.page_number
             source_entry["image_path"] = page_img.image_path
-            est_page = page_img.page_number  # use actual page number
 
-        key = (doc_id_str, est_page)
+        key = (doc_id_str, page_num)
         existing = deduped.get(key)
         if not existing or score > existing["score"]:
             deduped[key] = source_entry
-
-    # Process page image sources (prefer these over text chunks for same page)
-    for page_img, score in image_results:
-        doc = page_img.document
-        doc_id_str = str(page_img.document_id)
-        filename = doc.filename if doc else "unknown"
-        key = (doc_id_str, page_img.page_number)
-
-        source_entry = {
-            "document_id": doc_id_str,
-            "filename": filename,
-            "preview": f"Page {page_img.page_number} of {filename}",
-            "score": score,
-            "chunk_text": f"[Visual: Page {page_img.page_number}]",
-            "chunk_index": 0,
-            "page_number": page_img.page_number,
-            "image_path": page_img.image_path,
-        }
-
-        existing = deduped.get(key)
-        if not existing:
-            deduped[key] = source_entry
-        else:
-            # Merge: keep the higher score, but always attach the image_path
-            if "image_path" not in existing:
-                existing["image_path"] = page_img.image_path
-                existing["page_number"] = page_img.page_number
-            if score > existing["score"]:
-                existing["score"] = score
 
     # Sort by score descending, cap at 4 unique source cards
     sources = sorted(deduped.values(), key=lambda s: s["score"], reverse=True)[:4]

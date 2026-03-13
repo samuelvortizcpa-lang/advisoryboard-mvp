@@ -50,6 +50,9 @@ class DocumentPageImage(Base):
     # Supabase Storage path, e.g. "page_images/{doc_id}/page_1.jpg"
     image_path: Mapped[str] = mapped_column(Text, nullable=False)
 
+    # First ~500 chars of text extracted from this page (for chunk→page matching)
+    page_text_preview: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # 768-dim Gemini multimodal embedding (NULL until embedded)
     image_embedding: Mapped[Optional[list[float]]] = mapped_column(
         Vector(IMAGE_EMBEDDING_DIM),

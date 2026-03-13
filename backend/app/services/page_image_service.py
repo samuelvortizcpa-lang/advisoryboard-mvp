@@ -54,7 +54,27 @@ async def process_page_images(db: Session, document: Document) -> None:
         temp_path = storage_service.get_temp_local_path(document.file_path)
         logger.info("Page images: downloaded to temp file: %s", temp_path)
 
-        # 2. Convert pages to PIL images
+        # 2a. Extract per-page text using pdfplumber (for chunk→page matching)
+        import pdfplumber
+
+        page_texts: dict[int, str] = {}  # 1-indexed page_number → text preview
+        try:
+            with pdfplumber.open(temp_path) as pdf:
+                for pg_idx, page in enumerate(pdf.pages):
+                    pg_num = pg_idx + 1
+                    raw = page.extract_text() or ""
+                    page_texts[pg_num] = raw[:500]
+            logger.info(
+                "Page images: extracted text previews for %d pages of %s",
+                len(page_texts), doc_label,
+            )
+        except Exception as plumber_exc:
+            logger.warning(
+                "Page images: pdfplumber text extraction failed for %s: %s",
+                doc_label, plumber_exc,
+            )
+
+        # 2b. Convert pages to PIL images
         from pdf2image import convert_from_path
 
         pil_images = convert_from_path(
@@ -124,12 +144,20 @@ async def process_page_images(db: Session, document: Document) -> None:
                         doc_label, page_number, embed_exc,
                     )
 
+            text_preview = page_texts.get(page_number)
+            if text_preview:
+                logger.info(
+                    "Page images: page text preview stored for page %d (%d chars)",
+                    page_number, len(text_preview),
+                )
+
             page_image_rows.append(
                 DocumentPageImage(
                     document_id=document.id,
                     page_number=page_number,
                     image_path=storage_path,
                     image_embedding=embedding,
+                    page_text_preview=text_preview,
                 )
             )
 
