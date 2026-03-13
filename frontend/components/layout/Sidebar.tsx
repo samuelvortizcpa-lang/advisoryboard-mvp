@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
+import { useEffect, useState } from "react";
+
+import { createAlertsApi } from "@/lib/api";
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
@@ -19,6 +22,17 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useUser();
+  const { getToken } = useAuth();
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    createAlertsApi(getToken)
+      .summary()
+      .then((res) => {
+        setAlertCount(res.critical + res.warning);
+      })
+      .catch(() => {/* non-fatal */});
+  }, [getToken]);
 
   const displayName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -34,6 +48,11 @@ export default function Sidebar() {
           <span className="truncate text-sm font-semibold text-gray-900">
             AdvisoryBoard
           </span>
+          {alertCount > 0 && (
+            <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+              {alertCount > 99 ? "99+" : alertCount}
+            </span>
+          )}
         </Link>
       </div>
 

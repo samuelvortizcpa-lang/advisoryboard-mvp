@@ -2,6 +2,8 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import AlertsList from "@/components/alerts/AlertsList";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface DashboardStats {
@@ -100,6 +102,11 @@ export default async function DashboardPage() {
             </p>
           </Link>
         </div>
+      </div>
+
+      {/* Smart Alerts */}
+      <div className="mt-6">
+        <AlertsList />
       </div>
 
       {/* Quick actions */}

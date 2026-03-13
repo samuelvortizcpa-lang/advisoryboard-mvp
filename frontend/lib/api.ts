@@ -356,6 +356,55 @@ export function createBriefsApi(getToken: GetToken) {
   };
 }
 
+// ─── Alert types ───────────────────────────────────────────────────────────────
+
+export type AlertSeverity = "critical" | "warning" | "info";
+export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document";
+
+export interface Alert {
+  id: string;
+  type: AlertType;
+  severity: AlertSeverity;
+  client_id: string;
+  client_name: string;
+  message: string;
+  related_id: string;
+  created_at: string;
+}
+
+export interface AlertsListResponse {
+  alerts: Alert[];
+  total: number;
+}
+
+export interface AlertsSummaryResponse {
+  critical: number;
+  warning: number;
+  info: number;
+  total: number;
+}
+
+// ─── Alerts API factory ────────────────────────────────────────────────────────
+
+export function createAlertsApi(getToken: GetToken) {
+  return {
+    list() {
+      return apiFetch<AlertsListResponse>(getToken, "/alerts");
+    },
+
+    summary() {
+      return apiFetch<AlertsSummaryResponse>(getToken, "/alerts/summary");
+    },
+
+    dismiss(alertType: string, relatedId: string) {
+      return apiFetch<{ dismissed: boolean }>(getToken, "/alerts/dismiss", {
+        method: "POST",
+        body: JSON.stringify({ alert_type: alertType, related_id: relatedId }),
+      });
+    },
+  };
+}
+
 // ─── Action item types ────────────────────────────────────────────────────────
 
 export interface ActionItem {

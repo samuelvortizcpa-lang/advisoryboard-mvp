@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.action_items import router as action_items_router
+from app.api.alerts import router as alerts_router
 from app.api.client_types import router as client_types_router
 from app.api.clients import router as clients_router
 from app.api.dashboard import router as dashboard_router
@@ -94,5 +95,6 @@ app.include_router(documents_router,    prefix="/api", tags=["documents"])
 app.include_router(integrations_router, prefix="/api", tags=["integrations"])
 app.include_router(rag_router,          prefix="/api", tags=["rag"])
 app.include_router(action_items_router, prefix="/api", tags=["action-items"])
+app.include_router(alerts_router,       prefix="/api", tags=["alerts"])
 app.include_router(briefs_router,       prefix="/api", tags=["briefs"])
 app.include_router(timeline_router,     prefix="/api", tags=["timeline"])
