@@ -328,6 +328,34 @@ export function createRagApi(getToken: GetToken) {
   };
 }
 
+// ─── Brief types ───────────────────────────────────────────────────────────────
+
+export interface ClientBrief {
+  id: string;
+  client_id: string;
+  content: string;
+  generated_at: string;
+  document_count: number | null;
+  action_item_count: number | null;
+  metadata_: Record<string, unknown> | null;
+}
+
+// ─── Briefs API factory ────────────────────────────────────────────────────────
+
+export function createBriefsApi(getToken: GetToken) {
+  return {
+    generate(clientId: string) {
+      return apiFetch<ClientBrief>(getToken, `/clients/${clientId}/briefs/generate`, {
+        method: "POST",
+      });
+    },
+
+    getLatest(clientId: string) {
+      return apiFetch<ClientBrief | null>(getToken, `/clients/${clientId}/briefs/latest`);
+    },
+  };
+}
+
 // ─── Action item types ────────────────────────────────────────────────────────
 
 export interface ActionItem {

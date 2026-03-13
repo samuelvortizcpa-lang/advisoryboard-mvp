@@ -6,12 +6,14 @@ import { ChangeEvent, FormEvent, Suspense, useEffect, useState } from "react";
 
 import {
   Client,
+  ClientBrief,
   ClientType,
   ClientUpdateData,
   CompareResponse,
   ComparisonType,
   Document,
   createActionItemsApi,
+  createBriefsApi,
   createClientTypesApi,
   createClientsApi,
   createDocumentsApi,
@@ -19,6 +21,7 @@ import {
 } from "@/lib/api";
 import ActionItemList from "@/components/action-items/ActionItemList";
 import DeadlineWidget from "@/components/action-items/DeadlineWidget";
+import BriefPanel from "@/components/briefs/BriefPanel";
 import DocumentList from "@/components/documents/DocumentList";
 import DocumentComparisonReport from "@/components/documents/DocumentComparisonReport";
 import DocumentUpload from "@/components/documents/DocumentUpload";
@@ -123,6 +126,12 @@ function ClientDetailContent() {
   const [comparing, setComparing] = useState(false);
   const [comparisonResult, setComparisonResult] = useState<CompareResponse | null>(null);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
+
+  // ── Brief state ────────────────────────────────────────────────────────────
+  const [brief, setBrief] = useState<ClientBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const [showBriefPanel, setShowBriefPanel] = useState(false);
 
   // ── Shared refresh key ──────────────────────────────────────────────────────
   const [actionItemsRefreshKey, setActionItemsRefreshKey] = useState(0);
@@ -289,6 +298,20 @@ function ClientDetailContent() {
       setError(err instanceof Error ? err.message : "Failed to delete client");
       setShowDeleteModal(false);
       setDeleting(false);
+    }
+  }
+
+  async function handleGenerateBrief() {
+    setBriefLoading(true);
+    setBriefError(null);
+    try {
+      const result = await createBriefsApi(getToken).generate(id);
+      setBrief(result);
+      setShowBriefPanel(true);
+    } catch (err) {
+      setBriefError(err instanceof Error ? err.message : "Failed to generate brief");
+    } finally {
+      setBriefLoading(false);
     }
   }
 
@@ -475,6 +498,23 @@ function ClientDetailContent() {
                 )}
               </div>
               <div className="flex shrink-0 gap-2">
+                <button
+                  onClick={handleGenerateBrief}
+                  disabled={briefLoading}
+                  className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {briefLoading ? (
+                    <>
+                      <BriefSpinner />
+                      Generating…
+                    </>
+                  ) : (
+                    <>
+                      <BriefIcon />
+                      Generate Brief
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={() => setEditing(true)}
                   className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
@@ -817,6 +857,25 @@ function ClientDetailContent() {
         </>
       )}
 
+      {/* ── Brief error banner ─────────────────────────────────────────────── */}
+      {briefError && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-lg">
+          <div className="flex items-center justify-between gap-2">
+            <span>{briefError}</span>
+            <button onClick={() => setBriefError(null)} className="text-red-400 hover:text-red-600">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Brief slide-over panel ─────────────────────────────────────────── */}
+      {showBriefPanel && brief && (
+        <BriefPanel brief={brief} onClose={() => setShowBriefPanel(false)} />
+      )}
+
       {/* ── Delete confirmation modal ─────────────────────────────────────── */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -960,6 +1019,20 @@ function Spinner() {
 function CompareSpinner() {
   return (
     <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+  );
+}
+
+function BriefSpinner() {
+  return (
+    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+  );
+}
+
+function BriefIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
   );
 }
 

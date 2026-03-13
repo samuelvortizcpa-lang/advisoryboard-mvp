@@ -11,6 +11,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.action_item import ActionItem
     from app.models.chat_message import ChatMessage
+    from app.models.client_brief import ClientBrief
     from app.models.client_type import ClientType
     from app.models.document import Document
     from app.models.interaction import Interaction
@@ -111,6 +112,12 @@ class Client(Base):
         back_populates="client",
         cascade="all, delete-orphan",
         order_by="ChatMessage.created_at.asc()",
+    )
+    briefs: Mapped[List["ClientBrief"]] = relationship(
+        "ClientBrief",
+        back_populates="client",
+        cascade="all, delete-orphan",
+        order_by="ClientBrief.generated_at.desc()",
     )
 
     def __repr__(self) -> str:

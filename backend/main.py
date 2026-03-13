@@ -13,6 +13,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.documents import router as documents_router
 from app.api.integrations import router as integrations_router
 from app.api.rag import router as rag_router
+from app.api.briefs import router as briefs_router
 from app.api.timeline import router as timeline_router
 from app.core.config import get_settings
 
@@ -93,4 +94,5 @@ app.include_router(documents_router,    prefix="/api", tags=["documents"])
 app.include_router(integrations_router, prefix="/api", tags=["integrations"])
 app.include_router(rag_router,          prefix="/api", tags=["rag"])
 app.include_router(action_items_router, prefix="/api", tags=["action-items"])
+app.include_router(briefs_router,       prefix="/api", tags=["briefs"])
 app.include_router(timeline_router,     prefix="/api", tags=["timeline"])

@@ -13,6 +13,7 @@ from app.models.chat_message import ChatMessage
 from app.models.integration_connection import IntegrationConnection
 from app.models.email_routing_rule import EmailRoutingRule
 from app.models.sync_log import SyncLog
+from app.models.client_brief import ClientBrief
 
 __all__ = [
     "User",
@@ -28,4 +29,5 @@ __all__ = [
     "IntegrationConnection",
     "EmailRoutingRule",
     "SyncLog",
+    "ClientBrief",
 ]
