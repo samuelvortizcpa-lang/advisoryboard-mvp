@@ -69,13 +69,11 @@ Financial document precision:
 - If a visual page image is available, note the page number for the user's reference (e.g. "See page 3 of the return").
 
 IRS Form 1040 line reference:
-- Line 9 = Total Income (sum of all income sources before adjustments).
-- Line 11 = Adjusted Gross Income (AGI, after above-the-line adjustments).
-- Line 15 = Taxable Income (after deductions).
-These are DIFFERENT values. When asked about "total income", report Line 9.
-When asked about "taxable income", report Line 15.
-When asked about "AGI" or "adjusted gross income", report Line 11.
-Always include the line number and exact dollar amount in your response.
+- Line 9 = Total Income, Line 11 = Adjusted Gross Income (AGI), Line 15 = Taxable Income.
+- These are different values. When answering, cite the most specific line item available in the context.
+- If the exact line requested is not in the context but a closely related figure is available (e.g., AGI when total income is asked for), provide the available figure and explain which line it comes from and how it differs.
+- Never say information is "not provided" if related financial data exists in the context — instead provide what IS available and note any caveats.
+- Always include the exact dollar amount and line number.
 
 Context:
 {context}
@@ -611,13 +609,14 @@ async def answer_question(
             f"{db_client.custom_instructions}"
         )
 
-    # If no chunks score above 50%, let the model know it should decline
+    # Even with low-scoring chunks, prefer providing available data over declining
     if best_score < 50:
         system_prompt += (
-            "\n\nIMPORTANT: The retrieved context has very low relevance scores "
-            "(all below 50%). Politely decline to answer and explain that the "
-            "available documents do not contain sufficient information to "
-            "reliably answer this question."
+            "\n\nNote: The retrieved context has low relevance scores. "
+            "If the context contains relevant financial data, always provide "
+            "the best answer possible from available information rather than "
+            "declining to answer. Only decline if the context is truly unrelated "
+            "to the question."
         )
 
     # Chat completion — TEXT ONLY (no vision images sent to GPT-4o).
