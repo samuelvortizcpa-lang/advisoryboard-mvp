@@ -705,22 +705,36 @@ async def answer_question(
     if line_match:
         question_phrases.append(line_match.group(0).lower())
 
-    def _page_relevance_score(page_text: str) -> int:
+    def _page_relevance_score(page_text: str, page_number: int = 1) -> int:
         """
         Score a page's text preview by how many answer values and question
-        phrases it contains.  Answer-value matches are worth 10 points each
-        (these directly verify the page shows the number the AI cited).
-        Question-phrase matches are worth 3 points each.
+        phrases it contains.
+
+        Scoring:
+        - Each answer-value match:  10 pts
+        - Each question-phrase match: 3 pts
+        - If a page has BOTH value + phrase hits: 2× multiplier on value pts
+          (the page where the line item lives, not just a cross-reference)
+        - Small tiebreaker bonus for lower page numbers (1040 summary is p1-2)
         """
         pt = page_text.lower()
-        score = 0
+        value_pts = 0
         for val in answer_values:
             if val in pt:
-                score += 10
+                value_pts += 10
+        phrase_pts = 0
         for phrase in question_phrases:
             if phrase in pt:
-                score += 3
-        return score
+                phrase_pts += 3
+
+        # 2× multiplier on value points when the page also has phrase matches
+        if value_pts and phrase_pts:
+            value_pts *= 2
+
+        # Small tiebreaker: prefer earlier pages (max 1 bonus point)
+        page_bonus = max(0, 1 - (page_number - 1) * 0.1)
+
+        return value_pts + phrase_pts + round(page_bonus)
 
     # --- Collect candidate documents (year-filtered) ---
     doc_map: dict[str, Document] = {}       # doc_id_str → Document
@@ -763,7 +777,7 @@ async def answer_question(
         for pi in pages:
             if not pi.page_text_preview:
                 continue
-            rel = _page_relevance_score(pi.page_text_preview)
+            rel = _page_relevance_score(pi.page_text_preview, pi.page_number)
             if rel > 0:
                 scored_pages.append((rel, pi.page_number, doc_id_str, pi))
 
