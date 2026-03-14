@@ -211,7 +211,7 @@ def _extract_pdf(path: Path) -> str:
     )
     try:
         ocr_text = _extract_pdf_ocr(path)
-        if ocr_text and not _is_garbled(ocr_text, threshold=0.10):
+        if ocr_text and len(ocr_text.strip()) > 100:
             logger.info("OCR produced good output")
             return ocr_text
         elif ocr_text and len(ocr_text.strip()) > len(pdfplumber_text.strip()):
