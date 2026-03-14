@@ -518,6 +518,47 @@ async def answer_question(
     # Page images are looked up after to supplement matching chunks.
     chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
 
+    # ---- Keyword fallback: direct text search for specific phrases ----
+    # Vector search alone struggles with structured forms (tax returns) where
+    # many chunks have near-identical embeddings.  If the question contains
+    # identifiable key phrases, also fetch chunks via SQL ILIKE and merge
+    # them into the result set so the LLM has the best possible context.
+    import re as _re_kw
+    _kw_tokens = question.lower().split()
+    _kw_bigrams = [
+        " ".join(_kw_tokens[i:i+2])
+        for i in range(len(_kw_tokens) - 1)
+    ]
+    # Keep only meaningful bigrams (skip stop-word pairs)
+    _stop_bigrams = {"what is", "is the", "of the", "on the", "in the", "for the", "from the"}
+    _kw_bigrams = [b for b in _kw_bigrams if b not in _stop_bigrams and len(b) > 5]
+
+    if _kw_bigrams:
+        existing_chunk_ids = {id(c) for c, _ in chunk_results}
+        for bigram in _kw_bigrams[:3]:  # limit to top 3 phrases
+            pattern = f"%{bigram}%"
+            keyword_rows = (
+                db.query(DocumentChunk)
+                .join(Document, DocumentChunk.document_id == Document.id)
+                .filter(
+                    DocumentChunk.client_id == client_id,
+                    Document.client_id == client_id,
+                    DocumentChunk.chunk_text.ilike(pattern),
+                )
+                .limit(5)
+                .all()
+            )
+            for kw_chunk in keyword_rows:
+                if id(kw_chunk) not in existing_chunk_ids:
+                    existing_chunk_ids.add(id(kw_chunk))
+                    chunk_results.append((kw_chunk, 90.0))
+                    logger.info(
+                        "Keyword fallback: added chunk %d from %s (matched '%s')",
+                        kw_chunk.chunk_index,
+                        kw_chunk.document.filename if kw_chunk.document else "?",
+                        bigram,
+                    )
+
     if not chunk_results:
         return {
             "answer": (
