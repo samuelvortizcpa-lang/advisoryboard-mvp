@@ -1,0 +1,3 @@
+[phases.setup]
+nixPkgs = ["tesseract4", "poppler_utils"]
+aptPkgs = ["tesseract-ocr", "tesseract-ocr-eng"]
