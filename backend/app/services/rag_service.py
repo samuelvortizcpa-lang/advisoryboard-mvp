@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL = "text-embedding-3-small"   # 1 536 dims, matches schema
 CHAT_MODEL = "gpt-4o"
-TOP_K = 5          # chunks retrieved per query
+TOP_K = 10          # chunks retrieved per query
 EMBED_BATCH = 100  # OpenAI allows up to 2 048 inputs per call
 
 DEFAULT_SYSTEM_PROMPT = """\
