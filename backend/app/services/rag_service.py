@@ -608,62 +608,6 @@ async def answer_question(
         for pi in all_page_imgs:
             page_images_by_doc.setdefault(str(pi.document_id), []).append(pi)
 
-    def _normalize_words(text: str) -> set[str]:
-        """Lowercase, strip punctuation, return word set."""
-        return set(re.sub(r"[^\w\s]", "", text.lower()).split())
-
-    def _match_chunk_to_page(
-        chunk_text_val: str, doc_id: str
-    ) -> DocumentPageImage | None:
-        """
-        Match a text chunk to the best page using word overlap with
-        page_text_preview.  Returns None if no confident match is found
-        (we'd rather show no page than a wrong page).
-        """
-        pages = page_images_by_doc.get(doc_id, [])
-        if not pages:
-            return None
-
-        chunk_words = _normalize_words(chunk_text_val)
-        if not chunk_words:
-            return None
-
-        best_page: DocumentPageImage | None = None
-        best_overlap = 0
-
-        for pi in pages:
-            if not pi.page_text_preview:
-                continue
-            page_words = _normalize_words(pi.page_text_preview)
-            overlap = len(chunk_words & page_words)
-            if overlap > best_overlap:
-                best_overlap = overlap
-                best_page = pi
-
-        # Require at least 10 overlapping words for confident match —
-        # better to show no page number than a wrong one.
-        if best_overlap >= 10:
-            return best_page
-        return None
-
-    def _match_chunk_to_page_by_keyword(
-        keyword: str, doc_id: str
-    ) -> DocumentPageImage | None:
-        """
-        Match a keyword fallback chunk to the page whose page_text_preview
-        contains the keyword phrase.  When multiple pages match, prefer the
-        lowest page number (e.g. page 1 of a 1040 has the summary lines).
-        """
-        pages = page_images_by_doc.get(doc_id, [])
-        if not pages:
-            return None
-
-        kw_lower = keyword.lower()
-        for pi in pages:                       # already sorted by page_number
-            if pi.page_text_preview and kw_lower in pi.page_text_preview.lower():
-                return pi
-        return None
-
     # ------------------------------------------------------------------
     # Build text-only context for GPT-4o (NO vision images — text only)
     # ------------------------------------------------------------------
@@ -732,93 +676,145 @@ async def answer_question(
     answer = response.choices[0].message.content or "No answer generated."
 
     # ------------------------------------------------------------------
-    # Build deduplicated source list (1 card per unique document page)
-    # Uses text-overlap matching (already computed above via
-    # _match_chunk_to_page) instead of the old chunk_index heuristic.
+    # Build deduplicated source list — answer-aware page matching
+    #
+    # Instead of mapping chunks→pages (unreliable on tax forms where many
+    # pages share vocabulary), we directly scan page_text_preview for:
+    #   (a) dollar values extracted from the AI answer
+    #   (b) key phrases from the question (reuse _kw_bigrams)
+    # Pages that contain the actual answer values are prioritised.
     # ------------------------------------------------------------------
 
-    # Year-based relevance boost: if the question mentions a specific year,
-    # boost sources from documents whose period matches that year by +10%.
     year_match = re.search(r"\b(20\d{2})\b", question)
     question_year = year_match.group(1) if year_match else None
 
-    # Dict keyed by (document_id, page_number) → best source
-    deduped: dict[tuple[str, int], dict] = {}
+    # --- Extract dollar values from the AI answer ---
+    # "$164,195" → {"164,195", "164195"}
+    answer_dollar_hits = re.findall(r"\$[\d,]+(?:\.\d+)?", answer)
+    answer_values: set[str] = set()
+    for raw in answer_dollar_hits:
+        cleaned = raw.lstrip("$")           # "164,195"
+        answer_values.add(cleaned)
+        answer_values.add(cleaned.replace(",", ""))  # "164195"
+
+    # --- Build relevance phrases from the question ---
+    # Reuse _kw_bigrams (e.g. "total income", "line 9") already computed above.
+    # Also extract standalone "line N" patterns.
+    question_phrases: list[str] = list(_kw_bigrams)
+    line_match = re.search(r"line\s+\d+", question, re.IGNORECASE)
+    if line_match:
+        question_phrases.append(line_match.group(0).lower())
+
+    def _page_relevance_score(page_text: str) -> int:
+        """
+        Score a page's text preview by how many answer values and question
+        phrases it contains.  Answer-value matches are worth 10 points each
+        (these directly verify the page shows the number the AI cited).
+        Question-phrase matches are worth 3 points each.
+        """
+        pt = page_text.lower()
+        score = 0
+        for val in answer_values:
+            if val in pt:
+                score += 10
+        for phrase in question_phrases:
+            if phrase in pt:
+                score += 3
+        return score
+
+    # --- Collect candidate documents (year-filtered) ---
+    doc_map: dict[str, Document] = {}       # doc_id_str → Document
+    best_chunk_score: dict[str, float] = {} # doc_id_str → best boosted score
+    best_chunk_preview: dict[str, str] = {} # doc_id_str → preview text
+    best_chunk_index: dict[str, int] = {}   # doc_id_str → chunk_index
 
     for chunk, score in chunk_results:
         doc = chunk.document
         doc_id_str = str(chunk.document_id)
         filename = doc.filename if doc else "unknown"
 
-        chunk_preview = chunk.chunk_text[:200]
-        if len(chunk.chunk_text) > 200:
-            chunk_preview += "…"
-
-        # Year-based boost: +10% if question mentions a year and doc period matches
-        boosted_score = score
-        if question_year and doc and doc.document_period:
-            if question_year in doc.document_period:
-                boosted_score = min(100.0, score + 10.0)
-
-        source_entry: dict = {
-            "document_id": doc_id_str,
-            "filename": filename,
-            "preview": chunk_preview,
-            "score": boosted_score,
-            "chunk_text": chunk_preview,
-            "chunk_index": chunk.chunk_index,
-        }
-
-        # Year filtering: skip documents that don't match the requested year
+        # Year filtering
         if question_year:
             year_in_filename = question_year in filename
             year_in_period = doc and doc.document_period and question_year in doc.document_period
             if not year_in_filename and not year_in_period:
                 continue
 
-        # Match chunk to page — try keyword-based matching first for
-        # keyword fallback chunks, then fall back to word-overlap matching.
-        page_img = None
-        matched_keyword = _keyword_for_chunk.get(id(chunk))
-        if matched_keyword:
-            page_img = _match_chunk_to_page_by_keyword(matched_keyword, doc_id_str)
-        if not page_img:
-            page_img = _match_chunk_to_page(chunk.chunk_text, doc_id_str)
+        boosted_score = score
+        if question_year and doc and doc.document_period:
+            if question_year in doc.document_period:
+                boosted_score = min(100.0, score + 10.0)
 
-        page_num = page_img.page_number if page_img else 0
+        doc_map[doc_id_str] = doc
+        if boosted_score > best_chunk_score.get(doc_id_str, 0):
+            best_chunk_score[doc_id_str] = boosted_score
+            preview = chunk.chunk_text[:200]
+            if len(chunk.chunk_text) > 200:
+                preview += "…"
+            best_chunk_preview[doc_id_str] = preview
+            best_chunk_index[doc_id_str] = chunk.chunk_index
 
-        if page_img:
-            source_entry["page_number"] = page_img.page_number
-            source_entry["image_path"] = page_img.image_path
-        else:
-            # Estimate page number from chunk position when no page images exist
-            avg_chars_per_page = 3000
-            chunk_size = len(chunk.chunk_text)
-            estimated_page = (chunk.chunk_index * chunk_size) // avg_chars_per_page + 1
-            source_entry["page_number"] = estimated_page
+    # --- Score every page of each candidate document ---
+    scored_pages: list[tuple[int, int, str, DocumentPageImage]] = []
+    # Each tuple: (relevance_score, page_number, doc_id_str, page_image)
 
-        key = (doc_id_str, page_num)
-        existing = deduped.get(key)
-        if not existing or boosted_score > existing["score"]:
-            deduped[key] = source_entry
+    for doc_id_str in doc_map:
+        pages = page_images_by_doc.get(doc_id_str, [])
+        for pi in pages:
+            if not pi.page_text_preview:
+                continue
+            rel = _page_relevance_score(pi.page_text_preview)
+            if rel > 0:
+                scored_pages.append((rel, pi.page_number, doc_id_str, pi))
 
-    # Sort by score descending, then prefer distinct pages within the same doc.
-    # When multiple cards point to the same document, show the top-scoring
-    # entry plus distinct pages rather than duplicating the same page.
-    all_sources = sorted(deduped.values(), key=lambda s: s["score"], reverse=True)
+    # Sort: highest relevance first, then lowest page number (earlier pages
+    # preferred — e.g. page 1 of 1040 has summary lines).
+    scored_pages.sort(key=lambda t: (-t[0], t[1]))
+
+    # --- Build source cards from the best pages ---
     sources: list[dict] = []
-    seen_pages: dict[str, set[int]] = {}   # doc_id → set of page_numbers shown
-    for src in all_sources:
+    seen_doc_pages: set[tuple[str, int]] = set()
+
+    for rel, page_num, doc_id_str, pi in scored_pages:
         if len(sources) >= 4:
             break
-        doc_id = src["document_id"]
-        page = src.get("page_number", 0)
-        doc_pages = seen_pages.setdefault(doc_id, set())
-        # Allow the first entry for any doc, then only distinct pages
-        if page in doc_pages and page != 0:
+        key = (doc_id_str, page_num)
+        if key in seen_doc_pages:
             continue
-        doc_pages.add(page)
-        sources.append(src)
+        seen_doc_pages.add(key)
+
+        doc = doc_map[doc_id_str]
+        # Use page text preview snippet as the card preview
+        page_preview = pi.page_text_preview[:200]
+        if len(pi.page_text_preview) > 200:
+            page_preview += "…"
+
+        sources.append({
+            "document_id": doc_id_str,
+            "filename": doc.filename if doc else "unknown",
+            "preview": page_preview,
+            "score": best_chunk_score.get(doc_id_str, 0),
+            "chunk_text": best_chunk_preview.get(doc_id_str, page_preview),
+            "chunk_index": best_chunk_index.get(doc_id_str, 0),
+            "page_number": pi.page_number,
+            "image_path": pi.image_path,
+        })
+
+    # --- Fallback for documents with no page images (e.g. not yet processed) ---
+    if not sources:
+        for doc_id_str, doc in doc_map.items():
+            if len(sources) >= 4:
+                break
+            preview = best_chunk_preview.get(doc_id_str, "")
+            sources.append({
+                "document_id": doc_id_str,
+                "filename": doc.filename if doc else "unknown",
+                "preview": preview,
+                "score": best_chunk_score.get(doc_id_str, 0),
+                "chunk_text": preview,
+                "chunk_index": best_chunk_index.get(doc_id_str, 0),
+                "page_number": 1,
+            })
 
     return {
         "answer": answer,
