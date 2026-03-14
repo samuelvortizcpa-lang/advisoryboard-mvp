@@ -9,6 +9,7 @@ prevent the main text-based RAG pipeline from completing.
 
 from __future__ import annotations
 
+import gc
 import io
 import logging
 import os
@@ -22,9 +23,9 @@ from app.services import gemini_embeddings, storage_service
 
 logger = logging.getLogger(__name__)
 
-MAX_PAGES = 50        # Cap to prevent runaway processing on large PDFs
+MAX_PAGES = 15        # Cap to prevent runaway processing on large PDFs
 JPEG_QUALITY = 85     # JPEG compression quality
-DPI = 150             # Render resolution (balances quality vs file size)
+DPI = 100             # Render resolution (balances quality vs memory usage)
 
 
 async def process_page_images(db: Session, document: Document) -> None:
@@ -54,43 +55,18 @@ async def process_page_images(db: Session, document: Document) -> None:
         temp_path = storage_service.get_temp_local_path(document.file_path)
         logger.info("Page images: downloaded to temp file: %s", temp_path)
 
-        # 2. Convert pages to PIL images (used for both OCR and JPEG upload)
-        from pdf2image import convert_from_path
+        # 2. Get total page count without loading images into memory
+        from pdf2image import convert_from_path, pdfinfo_from_path
         import pytesseract
 
-        pil_images = convert_from_path(
-            temp_path,
-            dpi=DPI,
-            fmt="jpeg",
-            thread_count=2,
-        )
-
-        # 2a. Extract per-page text using Tesseract OCR on the rendered images.
-        # This produces accurate text that matches what's visually on each page,
-        # unlike pdfplumber which garbles IRS form text and misassigns content.
-        page_texts: dict[int, str] = {}  # 1-indexed page_number → text preview
-        for pg_idx, pil_img in enumerate(pil_images):
-            pg_num = pg_idx + 1
-            try:
-                raw = pytesseract.image_to_string(pil_img) or ""
-                page_texts[pg_num] = raw[:500]
-            except Exception as ocr_exc:
-                logger.warning(
-                    "Page images: Tesseract OCR failed for %s page %d: %s",
-                    doc_label, pg_num, ocr_exc,
-                )
-        if page_texts:
-            logger.info(
-                "Page images: OCR text previews extracted for %d pages of %s",
-                len(page_texts), doc_label,
-            )
-
-        total_pages = len(pil_images)
+        info = pdfinfo_from_path(temp_path)
+        total_pages = info["Pages"]
         pages_to_process = min(total_pages, MAX_PAGES)
-        logger.info("Page images: converted PDF to %d page image(s)", total_pages)
+
+        logger.info("Page images: PDF has %d pages, will process %d", total_pages, pages_to_process)
 
         if total_pages > MAX_PAGES:
-            logger.info(
+            logger.warning(
                 "Page images: %s has %d pages, capping at %d",
                 doc_label, total_pages, MAX_PAGES,
             )
@@ -101,66 +77,106 @@ async def process_page_images(db: Session, document: Document) -> None:
         ).delete()
         db.flush()
 
-        # 4. Process each page
+        # 4. Process each page ONE AT A TIME to avoid OOM
         page_image_rows: list[DocumentPageImage] = []
 
-        for page_idx in range(pages_to_process):
-            page_number = page_idx + 1  # 1-indexed
-            pil_img = pil_images[page_idx]
-
-            # Convert PIL image to JPEG bytes
-            buf = io.BytesIO()
-            pil_img.save(buf, format="JPEG", quality=JPEG_QUALITY)
-            jpeg_bytes = buf.getvalue()
-
-            # Upload to Supabase Storage
-            storage_path = f"page_images/{document.id}/page_{page_number}.jpg"
+        for page_num in range(1, pages_to_process + 1):
             try:
-                storage_service.upload_file_to_path(
-                    storage_path, jpeg_bytes, "image/jpeg"
-                )
                 logger.info(
-                    "Page images: uploaded page %d/%d for %s (%d bytes)",
-                    page_number, pages_to_process, doc_label, len(jpeg_bytes),
+                    "Page images: processing page %d/%d for document %s",
+                    page_num, pages_to_process, document.id,
                 )
-            except Exception as upload_exc:
-                logger.warning(
-                    "Page images: upload failed for %s page %d: %s",
-                    doc_label, page_number, upload_exc,
+
+                # Convert ONE page at a time
+                images = convert_from_path(
+                    temp_path,
+                    first_page=page_num,
+                    last_page=page_num,
+                    dpi=DPI,
+                    fmt="jpeg",
+                    thread_count=2,
+                )
+                image = images[0]
+
+                # OCR this page for text preview
+                text_preview = None
+                try:
+                    raw = pytesseract.image_to_string(image) or ""
+                    text_preview = raw[:500] if raw.strip() else None
+                except Exception as ocr_exc:
+                    logger.warning(
+                        "Page images: Tesseract OCR failed for %s page %d: %s",
+                        doc_label, page_num, ocr_exc,
+                    )
+
+                # Convert PIL image to JPEG bytes
+                buf = io.BytesIO()
+                image.save(buf, format="JPEG", quality=JPEG_QUALITY)
+                jpeg_bytes = buf.getvalue()
+
+                # Upload to Supabase Storage
+                storage_path = f"page_images/{document.id}/page_{page_num}.jpg"
+                try:
+                    storage_service.upload_file_to_path(
+                        storage_path, jpeg_bytes, "image/jpeg"
+                    )
+                    logger.info(
+                        "Page images: uploaded page %d/%d for %s (%d bytes)",
+                        page_num, pages_to_process, doc_label, len(jpeg_bytes),
+                    )
+                except Exception as upload_exc:
+                    logger.warning(
+                        "Page images: upload failed for %s page %d: %s",
+                        doc_label, page_num, upload_exc,
+                    )
+                    # Free memory before continuing
+                    image.close()
+                    del image, images
+                    gc.collect()
+                    continue
+
+                # Generate Gemini embedding (optional — images are stored regardless)
+                embedding = None
+                if gemini_available:
+                    try:
+                        embedding = gemini_embeddings.embed_image(jpeg_bytes)
+                        logger.info(
+                            "Page images: embedded page %d for %s (768-dim vector)",
+                            page_num, doc_label,
+                        )
+                    except Exception as embed_exc:
+                        logger.warning(
+                            "Page images: embedding failed for %s page %d: %s",
+                            doc_label, page_num, embed_exc,
+                        )
+
+                if text_preview:
+                    logger.info(
+                        "Page images: page text preview stored for page %d (%d chars)",
+                        page_num, len(text_preview),
+                    )
+
+                page_image_rows.append(
+                    DocumentPageImage(
+                        document_id=document.id,
+                        page_number=page_num,
+                        image_path=storage_path,
+                        image_embedding=embedding,
+                        page_text_preview=text_preview,
+                    )
+                )
+
+                # Explicitly free memory after each page
+                image.close()
+                del image, images
+                gc.collect()
+
+            except Exception as e:
+                logger.error(
+                    "Failed to process page %d of document %s: %s",
+                    page_num, document.id, e,
                 )
                 continue
-
-            # Generate Gemini embedding (optional — images are stored regardless)
-            embedding = None
-            if gemini_available:
-                try:
-                    embedding = gemini_embeddings.embed_image(jpeg_bytes)
-                    logger.info(
-                        "Page images: embedded page %d for %s (768-dim vector)",
-                        page_number, doc_label,
-                    )
-                except Exception as embed_exc:
-                    logger.warning(
-                        "Page images: embedding failed for %s page %d: %s",
-                        doc_label, page_number, embed_exc,
-                    )
-
-            text_preview = page_texts.get(page_number)
-            if text_preview:
-                logger.info(
-                    "Page images: page text preview stored for page %d (%d chars)",
-                    page_number, len(text_preview),
-                )
-
-            page_image_rows.append(
-                DocumentPageImage(
-                    document_id=document.id,
-                    page_number=page_number,
-                    image_path=storage_path,
-                    image_embedding=embedding,
-                    page_text_preview=text_preview,
-                )
-            )
 
         # 5. Bulk save
         if page_image_rows:
@@ -168,8 +184,8 @@ async def process_page_images(db: Session, document: Document) -> None:
             db.commit()
 
         logger.info(
-            "Page images: finished %s — %d/%d pages stored",
-            doc_label, len(page_image_rows), pages_to_process,
+            "Completed page image generation for document %s: %d/%d pages processed",
+            document.id, len(page_image_rows), total_pages,
         )
 
     except Exception as exc:

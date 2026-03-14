@@ -155,22 +155,54 @@ def _is_garbled(text: str, threshold: float = 0.15) -> bool:
 
 
 def _extract_pdf_ocr(path: Path) -> str:
-    """Extract text from PDF using Tesseract OCR via pdf2image."""
-    from pdf2image import convert_from_path
+    """Extract text from PDF using Tesseract OCR via pdf2image.
+
+    Processes pages one at a time to avoid loading all images into memory,
+    which can cause OOM crashes on large PDFs (e.g. 30-page IRS returns).
+    """
+    import gc
+    from pdf2image import convert_from_path, pdfinfo_from_path
     import pytesseract
 
-    logger.info(f"Running OCR extraction on {path.name}")
-    pages: list[str] = []
-    images = convert_from_path(str(path), dpi=150)
+    MAX_PAGES = 15
 
-    for i, image in enumerate(images):
-        page_text = pytesseract.image_to_string(image, config="--psm 6")
-        if page_text and page_text.strip():
-            pages.append(page_text.strip())
-        logger.debug(f"OCR page {i + 1}: {len(page_text)} chars")
+    logger.info(f"Running OCR extraction on {path.name}")
+
+    info = pdfinfo_from_path(str(path))
+    total_pages = info["Pages"]
+    pages_to_process = min(total_pages, MAX_PAGES)
+
+    if total_pages > MAX_PAGES:
+        logger.warning(
+            "OCR extraction: %s has %d pages, capping at %d",
+            path.name, total_pages, MAX_PAGES,
+        )
+
+    pages: list[str] = []
+    for page_num in range(1, pages_to_process + 1):
+        try:
+            images = convert_from_path(
+                str(path),
+                first_page=page_num,
+                last_page=page_num,
+                dpi=100,
+            )
+            image = images[0]
+
+            page_text = pytesseract.image_to_string(image, config="--psm 6")
+            if page_text and page_text.strip():
+                pages.append(page_text.strip())
+            logger.debug(f"OCR page {page_num}: {len(page_text)} chars")
+
+            image.close()
+            del image, images
+            gc.collect()
+        except Exception as e:
+            logger.error(f"OCR failed for page {page_num} of {path.name}: {e}")
+            continue
 
     full_text = "\n\n".join(pages)
-    logger.info(f"OCR complete: {len(images)} pages, {len(full_text)} chars")
+    logger.info(f"OCR complete: {pages_to_process}/{total_pages} pages, {len(full_text)} chars")
     return full_text
 
 
