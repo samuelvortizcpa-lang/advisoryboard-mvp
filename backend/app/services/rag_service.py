@@ -533,6 +533,9 @@ async def answer_question(
     _stop_bigrams = {"what is", "is the", "of the", "on the", "in the", "for the", "from the"}
     _kw_bigrams = [b for b in _kw_bigrams if b not in _stop_bigrams and len(b) > 5]
 
+    # Track which keyword phrase matched each fallback chunk (for page matching)
+    _keyword_for_chunk: dict[int, str] = {}
+
     if _kw_bigrams:
         existing_chunk_ids = {id(c) for c, _ in chunk_results}
         for bigram in _kw_bigrams[:3]:  # limit to top 3 phrases
@@ -551,6 +554,7 @@ async def answer_question(
             for kw_chunk in keyword_rows:
                 if id(kw_chunk) not in existing_chunk_ids:
                     existing_chunk_ids.add(id(kw_chunk))
+                    _keyword_for_chunk[id(kw_chunk)] = bigram
                     chunk_results.append((kw_chunk, 90.0))
                     logger.info(
                         "Keyword fallback: added chunk %d from %s (matched '%s')",
@@ -640,6 +644,24 @@ async def answer_question(
         # better to show no page number than a wrong one.
         if best_overlap >= 10:
             return best_page
+        return None
+
+    def _match_chunk_to_page_by_keyword(
+        keyword: str, doc_id: str
+    ) -> DocumentPageImage | None:
+        """
+        Match a keyword fallback chunk to the page whose page_text_preview
+        contains the keyword phrase.  When multiple pages match, prefer the
+        lowest page number (e.g. page 1 of a 1040 has the summary lines).
+        """
+        pages = page_images_by_doc.get(doc_id, [])
+        if not pages:
+            return None
+
+        kw_lower = keyword.lower()
+        for pi in pages:                       # already sorted by page_number
+            if pi.page_text_preview and kw_lower in pi.page_text_preview.lower():
+                return pi
         return None
 
     # ------------------------------------------------------------------
@@ -754,8 +776,15 @@ async def answer_question(
             if not year_in_filename and not year_in_period:
                 continue
 
-        # Match chunk to page via text overlap (same function used above)
-        page_img = _match_chunk_to_page(chunk.chunk_text, doc_id_str)
+        # Match chunk to page — try keyword-based matching first for
+        # keyword fallback chunks, then fall back to word-overlap matching.
+        page_img = None
+        matched_keyword = _keyword_for_chunk.get(id(chunk))
+        if matched_keyword:
+            page_img = _match_chunk_to_page_by_keyword(matched_keyword, doc_id_str)
+        if not page_img:
+            page_img = _match_chunk_to_page(chunk.chunk_text, doc_id_str)
+
         page_num = page_img.page_number if page_img else 0
 
         if page_img:
@@ -773,8 +802,23 @@ async def answer_question(
         if not existing or boosted_score > existing["score"]:
             deduped[key] = source_entry
 
-    # Sort by score descending, cap at 4 unique source cards
-    sources = sorted(deduped.values(), key=lambda s: s["score"], reverse=True)[:4]
+    # Sort by score descending, then prefer distinct pages within the same doc.
+    # When multiple cards point to the same document, show the top-scoring
+    # entry plus distinct pages rather than duplicating the same page.
+    all_sources = sorted(deduped.values(), key=lambda s: s["score"], reverse=True)
+    sources: list[dict] = []
+    seen_pages: dict[str, set[int]] = {}   # doc_id → set of page_numbers shown
+    for src in all_sources:
+        if len(sources) >= 4:
+            break
+        doc_id = src["document_id"]
+        page = src.get("page_number", 0)
+        doc_pages = seen_pages.setdefault(doc_id, set())
+        # Allow the first entry for any doc, then only distinct pages
+        if page in doc_pages and page != 0:
+            continue
+        doc_pages.add(page)
+        sources.append(src)
 
     return {
         "answer": answer,
