@@ -801,17 +801,21 @@ async def answer_question(
     # preferred — e.g. page 1 of 1040 has summary lines).
     scored_pages.sort(key=lambda t: (-t[0], t[1]))
 
-    # --- Build source cards from the best pages ---
+    # --- Build source cards from the best pages (max 2 total, max 2 per doc) ---
     sources: list[dict] = []
     seen_doc_pages: set[tuple[str, int]] = set()
+    doc_card_count: dict[str, int] = {}     # doc_id → cards shown
 
     for rel, page_num, doc_id_str, pi in scored_pages:
-        if len(sources) >= 4:
+        if len(sources) >= 2:
             break
+        if doc_card_count.get(doc_id_str, 0) >= 2:
+            continue
         key = (doc_id_str, page_num)
         if key in seen_doc_pages:
             continue
         seen_doc_pages.add(key)
+        doc_card_count[doc_id_str] = doc_card_count.get(doc_id_str, 0) + 1
 
         doc = doc_map[doc_id_str]
         # Use page text preview snippet as the card preview
@@ -833,7 +837,7 @@ async def answer_question(
     # --- Fallback for documents with no page images (e.g. not yet processed) ---
     if not sources:
         for doc_id_str, doc in doc_map.items():
-            if len(sources) >= 4:
+            if len(sources) >= 2:
                 break
             preview = best_chunk_preview.get(doc_id_str, "")
             sources.append({
