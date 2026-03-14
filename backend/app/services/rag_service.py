@@ -705,10 +705,14 @@ async def answer_question(
     if line_match:
         question_phrases.append(line_match.group(0).lower())
 
-    def _page_relevance_score(page_text: str, page_number: int = 1) -> int:
+    def _page_relevance_score(
+        page_text: str, page_number: int = 1
+    ) -> tuple[int, bool]:
         """
         Score a page's text preview by how many answer values and question
         phrases it contains.
+
+        Returns (total_score, has_answer_value).
 
         Scoring:
         - Each answer-value match:  10 pts
@@ -727,6 +731,8 @@ async def answer_question(
             if phrase in pt:
                 phrase_pts += 3
 
+        has_value = value_pts > 0
+
         # 2× multiplier on value points when the page also has phrase matches
         if value_pts and phrase_pts:
             value_pts *= 2
@@ -734,7 +740,7 @@ async def answer_question(
         # Small tiebreaker: prefer earlier pages (max 1 bonus point)
         page_bonus = max(0, 1 - (page_number - 1) * 0.1)
 
-        return value_pts + phrase_pts + round(page_bonus)
+        return value_pts + phrase_pts + round(page_bonus), has_value
 
     # --- Collect candidate documents (year-filtered) ---
     doc_map: dict[str, Document] = {}       # doc_id_str → Document
@@ -769,7 +775,9 @@ async def answer_question(
             best_chunk_index[doc_id_str] = chunk.chunk_index
 
     # --- Score every page of each candidate document ---
-    scored_pages: list[tuple[int, int, str, DocumentPageImage]] = []
+    # Two tiers: pages with answer values (preferred) and phrase-only pages (fallback)
+    value_pages: list[tuple[int, int, str, DocumentPageImage]] = []
+    phrase_only_pages: list[tuple[int, int, str, DocumentPageImage]] = []
     # Each tuple: (relevance_score, page_number, doc_id_str, page_image)
 
     for doc_id_str in doc_map:
@@ -777,9 +785,17 @@ async def answer_question(
         for pi in pages:
             if not pi.page_text_preview:
                 continue
-            rel = _page_relevance_score(pi.page_text_preview, pi.page_number)
+            rel, has_value = _page_relevance_score(pi.page_text_preview, pi.page_number)
             if rel > 0:
-                scored_pages.append((rel, pi.page_number, doc_id_str, pi))
+                entry = (rel, pi.page_number, doc_id_str, pi)
+                if has_value:
+                    value_pages.append(entry)
+                else:
+                    phrase_only_pages.append(entry)
+
+    # Prefer pages that contain answer values; fall back to phrase-only
+    # pages when no value-matching pages exist (e.g. non-financial questions).
+    scored_pages = value_pages if value_pages else phrase_only_pages
 
     # Sort: highest relevance first, then lowest page number (earlier pages
     # preferred — e.g. page 1 of 1040 has summary lines).
