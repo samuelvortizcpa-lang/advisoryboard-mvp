@@ -54,28 +54,9 @@ async def process_page_images(db: Session, document: Document) -> None:
         temp_path = storage_service.get_temp_local_path(document.file_path)
         logger.info("Page images: downloaded to temp file: %s", temp_path)
 
-        # 2a. Extract per-page text using pdfplumber (for chunk→page matching)
-        import pdfplumber
-
-        page_texts: dict[int, str] = {}  # 1-indexed page_number → text preview
-        try:
-            with pdfplumber.open(temp_path) as pdf:
-                for pg_idx, page in enumerate(pdf.pages):
-                    pg_num = pg_idx + 1
-                    raw = page.extract_text() or ""
-                    page_texts[pg_num] = raw[:500]
-            logger.info(
-                "Page images: extracted text previews for %d pages of %s",
-                len(page_texts), doc_label,
-            )
-        except Exception as plumber_exc:
-            logger.warning(
-                "Page images: pdfplumber text extraction failed for %s: %s",
-                doc_label, plumber_exc,
-            )
-
-        # 2b. Convert pages to PIL images
+        # 2. Convert pages to PIL images (used for both OCR and JPEG upload)
         from pdf2image import convert_from_path
+        import pytesseract
 
         pil_images = convert_from_path(
             temp_path,
@@ -83,6 +64,26 @@ async def process_page_images(db: Session, document: Document) -> None:
             fmt="jpeg",
             thread_count=2,
         )
+
+        # 2a. Extract per-page text using Tesseract OCR on the rendered images.
+        # This produces accurate text that matches what's visually on each page,
+        # unlike pdfplumber which garbles IRS form text and misassigns content.
+        page_texts: dict[int, str] = {}  # 1-indexed page_number → text preview
+        for pg_idx, pil_img in enumerate(pil_images):
+            pg_num = pg_idx + 1
+            try:
+                raw = pytesseract.image_to_string(pil_img) or ""
+                page_texts[pg_num] = raw[:500]
+            except Exception as ocr_exc:
+                logger.warning(
+                    "Page images: Tesseract OCR failed for %s page %d: %s",
+                    doc_label, pg_num, ocr_exc,
+                )
+        if page_texts:
+            logger.info(
+                "Page images: OCR text previews extracted for %d pages of %s",
+                len(page_texts), doc_label,
+            )
 
         total_pages = len(pil_images)
         pages_to_process = min(total_pages, MAX_PAGES)
