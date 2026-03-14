@@ -1,5 +1,6 @@
 [phases.setup]
-nixPkgs = ["python313", "ffmpeg", "poppler_utils", "tesseract"]
+nixPkgs = ["python313", "ffmpeg", "poppler_utils", "tesseract4"]
+aptPkgs = ["tesseract-ocr", "tesseract-ocr-eng"]
 
 [phases.install]
 cmds = ["pip install -r backend/requirements.txt"]
