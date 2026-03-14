@@ -747,6 +747,13 @@ async def answer_question(
             "chunk_index": chunk.chunk_index,
         }
 
+        # Year filtering: skip documents that don't match the requested year
+        if question_year:
+            year_in_filename = question_year in filename
+            year_in_period = doc and doc.document_period and question_year in doc.document_period
+            if not year_in_filename and not year_in_period:
+                continue
+
         # Match chunk to page via text overlap (same function used above)
         page_img = _match_chunk_to_page(chunk.chunk_text, doc_id_str)
         page_num = page_img.page_number if page_img else 0
@@ -754,6 +761,12 @@ async def answer_question(
         if page_img:
             source_entry["page_number"] = page_img.page_number
             source_entry["image_path"] = page_img.image_path
+        else:
+            # Estimate page number from chunk position when no page images exist
+            avg_chars_per_page = 3000
+            chunk_size = len(chunk.chunk_text)
+            estimated_page = (chunk.chunk_index * chunk_size) // avg_chars_per_page + 1
+            source_entry["page_number"] = estimated_page
 
         key = (doc_id_str, page_num)
         existing = deduped.get(key)
