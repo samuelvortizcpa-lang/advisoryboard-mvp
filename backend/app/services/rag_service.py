@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 EMBEDDING_MODEL = "text-embedding-3-small"   # 1 536 dims, matches schema
 CHAT_MODEL = "gpt-4o"
 TOP_K = 10          # chunks retrieved per query
+FETCH_K = 30        # over-fetch for keyword re-ranking
 EMBED_BATCH = 100  # OpenAI allows up to 2 048 inputs per call
 
 DEFAULT_SYSTEM_PROMPT = """\
@@ -355,9 +356,25 @@ async def search_chunks(
             DocumentChunk.embedding.isnot(None),
         )
         .order_by(distance_col)
-        .limit(limit)
+        .limit(FETCH_K)
         .all()
     )
+
+    # Extract keyword phrases from the query for boosting
+    import re as _re
+    query_lower = query.lower()
+    tokens = query_lower.split()
+    key_phrases: list[str] = []
+    for n in (3, 2):
+        for i in range(len(tokens) - n + 1):
+            phrase = " ".join(tokens[i:i+n])
+            if phrase not in ("of the", "on the", "is the", "what is",
+                              "what are", "in the", "for the", "from the"):
+                key_phrases.append(phrase)
+    for t in tokens:
+        if len(t) >= 4 and t not in ("what", "this", "that", "from",
+                                      "with", "your", "about", "which"):
+            key_phrases.append(t)
 
     results: list[tuple[DocumentChunk, float]] = []
     for chunk, distance in rows:
@@ -369,6 +386,20 @@ async def search_chunks(
         if doc and not doc.is_superseded:
             confidence = min(100.0, confidence + 5.0)
 
+        # Keyword boost: +3% per matching phrase found in chunk text
+        chunk_lower = (chunk.chunk_text or "").lower()
+        keyword_boost = 0.0
+        for phrase in key_phrases:
+            if phrase in chunk_lower:
+                keyword_boost += 3.0
+        confidence = min(100.0, confidence + keyword_boost)
+
+        if keyword_boost > 0:
+            logger.info(
+                "Keyword boost +%.1f%% for chunk %d (phrases matched)",
+                keyword_boost, chunk.chunk_index,
+            )
+
         results.append((chunk, round(confidence, 2)))
 
         # Defensive log: should never fire if data is consistent
@@ -379,7 +410,9 @@ async def search_chunks(
                 chunk.id, chunk.client_id, client_id,
             )
 
-    return results
+    # Re-rank by boosted confidence and return top *limit*
+    results.sort(key=lambda r: r[1], reverse=True)
+    return results[:limit]
 
 
 # ---------------------------------------------------------------------------
