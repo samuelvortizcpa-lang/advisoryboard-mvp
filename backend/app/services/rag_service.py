@@ -505,6 +505,7 @@ async def answer_question(
     client_id: UUID,
     question: str,
     user_id: str | None = None,
+    model_override: str | None = None,
 ) -> dict:
     """
     RAG Q&A: retrieve relevant chunks then synthesise an answer.
@@ -665,9 +666,14 @@ async def answer_question(
         )
 
     # Classify and route to appropriate model
-    query_type = await classify_query(
-        question, db=db, user_id=user_id, client_id=client_id
-    )
+    if model_override == "fast":
+        query_type = "factual"
+    elif model_override == "balanced":
+        query_type = "strategic"
+    else:
+        query_type = await classify_query(
+            question, db=db, user_id=user_id, client_id=client_id
+        )
     answer, model_used = await route_completion(
         query_type, system_prompt, question,
         db=db, user_id=user_id, client_id=client_id,

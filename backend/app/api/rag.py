@@ -87,6 +87,7 @@ class SearchResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
+    model_override: str | None = None  # null=auto, "fast"=GPT-4o-mini, "balanced"=Claude
 
 
 class SourceItem(BaseModel):
@@ -383,7 +384,8 @@ async def chat(
         )
 
     result = await rag_service.answer_question(
-        db, client_id=client_id, question=request.question, user_id=user.clerk_id
+        db, client_id=client_id, question=request.question,
+        user_id=user.clerk_id, model_override=request.model_override,
     )
 
     # Persist user question

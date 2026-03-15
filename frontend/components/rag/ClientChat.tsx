@@ -40,6 +40,8 @@ export default function ClientChat({ clientId, documentCount }: Props) {
   const [statusLoading, setStatusLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
+  const [modelMode, setModelMode] = useState<"auto" | "fast" | "balanced">("auto");
+
   const [exportingFormat, setExportingFormat] = useState<"txt" | "pdf" | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -139,7 +141,8 @@ export default function ClientChat({ clientId, documentCount }: Props) {
     setLoading(true);
 
     try {
-      const response = await createRagApi(getToken).chat(clientId, question);
+      const override = modelMode === "auto" ? null : modelMode;
+      const response = await createRagApi(getToken).chat(clientId, question, override);
       setMessages((prev) => [
         ...prev,
         {
@@ -329,10 +332,38 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           <div ref={bottomRef} />
         </div>
 
-        {/* ── Input ─────────────────────────────────────────────────────── */}
+        {/* ── Model selector + Input ────────────────────────────────────── */}
+        <div className="border-t border-gray-100">
+          <div className="flex items-center gap-1 px-3 pt-2">
+            <span className="mr-1 text-[10px] text-gray-400">Model:</span>
+            {([
+              { key: "auto", label: "Auto", icon: "\u2728", tip: "Auto-route based on question type" },
+              { key: "fast", label: "Quick", icon: "\u26A1", tip: "Fast lookups using GPT-4o-mini" },
+              { key: "balanced", label: "Deep", icon: "\uD83E\uDDE0", tip: "Strategic analysis using Claude" },
+            ] as const).map(({ key, label, icon, tip }) => (
+              <button
+                key={key}
+                type="button"
+                title={tip}
+                onClick={() => setModelMode(key)}
+                className={[
+                  "rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors",
+                  modelMode === key
+                    ? key === "auto"
+                      ? "bg-gray-200 text-gray-700"
+                      : key === "fast"
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-purple-100 text-purple-700"
+                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-600",
+                ].join(" ")}
+              >
+                {icon} {label}
+              </button>
+            ))}
+          </div>
         <form
           onSubmit={handleSubmit}
-          className="flex items-center gap-2 border-t border-gray-100 p-3"
+          className="flex items-center gap-2 px-3 pb-3 pt-1.5"
         >
           <input
             ref={inputRef}
@@ -352,6 +383,7 @@ export default function ClientChat({ clientId, documentCount }: Props) {
             <SendIcon />
           </button>
         </form>
+        </div>
       </div>
 
       {/* ── Clear history confirmation modal ──────────────────────────────── */}

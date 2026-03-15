@@ -283,10 +283,10 @@ export function createRagApi(getToken: GetToken) {
       );
     },
 
-    chat(clientId: string, question: string) {
+    chat(clientId: string, question: string, modelOverride?: string | null) {
       return apiFetch<ChatApiResponse>(getToken, `/clients/${clientId}/rag/chat`, {
         method: "POST",
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, model_override: modelOverride ?? null }),
       });
     },
 
