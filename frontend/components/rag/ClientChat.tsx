@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { RagSource, RagStatus, createRagApi } from "@/lib/api";
+import MarkdownContent from "./MarkdownContent";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -568,15 +569,19 @@ function MessageBubble({
 
         <div
           className={[
-            "rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
+            "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
             isUser
-              ? "rounded-br-sm bg-blue-600 text-white"
+              ? "rounded-br-sm bg-blue-600 text-white whitespace-pre-wrap"
               : message.error
-              ? "rounded-bl-sm border border-red-200 bg-red-50 text-red-700"
+              ? "rounded-bl-sm border border-red-200 bg-red-50 text-red-700 whitespace-pre-wrap"
               : "rounded-bl-sm bg-gray-100 text-gray-800",
           ].join(" ")}
         >
-          {message.content}
+          {isUser || message.error ? (
+            message.content
+          ) : (
+            <MarkdownContent content={message.content} />
+          )}
         </div>
 
         {/* Source cards */}
