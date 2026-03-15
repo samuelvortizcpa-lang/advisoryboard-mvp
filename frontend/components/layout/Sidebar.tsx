@@ -43,7 +43,7 @@ export default function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-20 flex w-[200px] flex-col bg-white border-r border-gray-200">
       {/* ── Logo ─────────────────────────────────────────────────────────── */}
       <div className="flex h-[56px] shrink-0 items-center border-b border-gray-100 px-4">
-        <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
+        <Link href="/dashboard/clients" className="flex min-w-0 items-center gap-2">
           <LogoIcon />
           <span className="truncate text-sm font-semibold text-gray-900">
             AdvisoryBoard

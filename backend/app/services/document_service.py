@@ -109,6 +109,21 @@ async def save_document(
     # --- ownership check ---
     _verify_client_ownership(db, client_id, owner_id)
 
+    # --- duplicate check ---
+    existing = (
+        db.query(Document)
+        .filter(
+            Document.client_id == client_id,
+            Document.filename == original_name,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A document named '{original_name}' already exists for this client.",
+        )
+
     # --- upload to Supabase Storage ---
     file_id = str(uuid.uuid4())
     content_type = file.content_type or "application/octet-stream"
