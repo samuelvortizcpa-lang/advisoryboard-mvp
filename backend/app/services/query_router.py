@@ -7,12 +7,13 @@ then routes to the appropriate model:
   - strategic → Claude Sonnet 4.6 (deep analysis & reasoning)
 
 Falls back to GPT-4o-mini if ANTHROPIC_API_KEY is not configured.
+Enforces subscription quota for strategic queries.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from anthropic import AsyncAnthropic
@@ -105,14 +106,47 @@ async def route_completion(
     user_id: Optional[str] = None,
     client_id: Optional[UUID] = None,
     client_type: Optional[str] = None,
-) -> tuple[str, str]:
+) -> dict[str, Any]:
     """
     Route to the appropriate model based on query_type.
 
-    Returns (answer_text, model_used).
+    Returns dict with: answer, model_used, quota_remaining, quota_warning.
     """
     global _anthropic_warned
     settings = get_settings()
+
+    quota_remaining: int | None = None
+    quota_warning: str | None = None
+
+    # Check quota for strategic queries
+    if query_type == "strategic" and db and user_id:
+        try:
+            from app.services.subscription_service import check_quota, increment_usage
+
+            quota = check_quota(db, user_id)
+            quota_remaining = quota["remaining"]
+
+            if not quota["allowed"]:
+                # Quota exceeded or tier doesn't allow strategic — fall back
+                logger.info(
+                    "Strategic query downgraded to factual for user %s (tier=%s, used=%d/%d)",
+                    user_id, quota["tier"], quota["used"], quota["limit"],
+                )
+                if quota["limit"] == 0:
+                    quota_warning = (
+                        "Your plan does not include strategic analysis. "
+                        "Upgrade to Professional for deep analysis with Claude."
+                    )
+                else:
+                    quota_warning = (
+                        "Strategic query limit reached for this month. "
+                        "Responses are using the standard model."
+                    )
+                quota_remaining = 0
+                # Fall through to GPT-4o-mini path below
+                query_type = "factual"
+        except Exception:
+            logger.error("Quota check failed — allowing query", exc_info=True)
 
     if query_type == "strategic" and settings.anthropic_api_key:
         # Build enhanced strategic prompt with domain-specific guidance
@@ -147,7 +181,28 @@ async def route_completion(
                 except Exception:
                     logger.error("Failed to log Claude token usage", exc_info=True)
 
-            return answer, "claude-sonnet-4.6"
+            # Increment usage and compute warning
+            if db and user_id:
+                try:
+                    from app.services.subscription_service import increment_usage, check_quota
+                    increment_usage(db, user_id, "strategic")
+                    updated_quota = check_quota(db, user_id)
+                    quota_remaining = updated_quota["remaining"]
+                    if quota_remaining is not None and quota_remaining < 10:
+                        quota_warning = (
+                            f"You have {quota_remaining} strategic "
+                            f"quer{'y' if quota_remaining == 1 else 'ies'} "
+                            f"remaining this month."
+                        )
+                except Exception:
+                    logger.error("Failed to increment usage", exc_info=True)
+
+            return {
+                "answer": answer,
+                "model_used": "claude-sonnet-4.6",
+                "quota_remaining": quota_remaining,
+                "quota_warning": quota_warning,
+            }
         except Exception:
             logger.exception("Claude call failed — falling back to GPT-4o-mini")
             # Fall through to GPT-4o-mini below
@@ -190,4 +245,9 @@ async def route_completion(
         except Exception:
             logger.error("Failed to log GPT token usage", exc_info=True)
 
-    return answer, "gpt-4o-mini"
+    return {
+        "answer": answer,
+        "model_used": "gpt-4o-mini",
+        "quota_remaining": quota_remaining,
+        "quota_warning": quota_warning,
+    }

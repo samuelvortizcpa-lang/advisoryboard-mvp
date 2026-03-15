@@ -680,11 +680,15 @@ async def answer_question(
         if db_client and db_client.client_type
         else None
     )
-    answer, model_used = await route_completion(
+    route_result = await route_completion(
         query_type, system_prompt, question,
         db=db, user_id=user_id, client_id=client_id,
         client_type=_client_type_name,
     )
+    answer = route_result["answer"]
+    model_used = route_result["model_used"]
+    quota_remaining = route_result.get("quota_remaining")
+    quota_warning = route_result.get("quota_warning")
 
     # ------------------------------------------------------------------
     # Build deduplicated source list — answer-aware page matching
@@ -874,4 +878,6 @@ async def answer_question(
         "sources": sources,
         "model_used": model_used,
         "query_type": query_type,
+        "quota_remaining": quota_remaining,
+        "quota_warning": quota_warning,
     }

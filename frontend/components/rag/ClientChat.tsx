@@ -16,6 +16,7 @@ interface Message {
   confidence_score?: number;
   model_used?: string;
   query_type?: string;
+  quota_warning?: string | null;
   error?: boolean;
 }
 
@@ -153,6 +154,7 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           confidence_score: response.confidence_score,
           model_used: response.model_used,
           query_type: response.query_type,
+          quota_warning: response.quota_warning,
         },
       ]);
     } catch (err) {
@@ -626,6 +628,17 @@ function MessageBubble({
                 onImageClick={onImageClick}
               />
             ))}
+          </div>
+        )}
+
+        {/* Quota warning */}
+        {!isUser && message.quota_warning && (
+          <div className={`w-full rounded-lg px-3 py-1.5 text-xs ${
+            message.quota_warning.includes("limit reached") || message.quota_warning.includes("does not include")
+              ? "border border-red-200 bg-red-50 text-red-600"
+              : "border border-amber-200 bg-amber-50 text-amber-700"
+          }`}>
+            {message.quota_warning}
           </div>
         )}
       </div>

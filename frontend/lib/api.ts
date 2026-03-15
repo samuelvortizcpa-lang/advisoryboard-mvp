@@ -234,6 +234,17 @@ export interface ChatApiResponse {
   sources: RagSource[];
   model_used: string;
   query_type: string;
+  quota_remaining: number | null;
+  quota_warning: string | null;
+}
+
+export interface SubscriptionInfo {
+  tier: string;
+  strategic_queries_limit: number;
+  strategic_queries_used: number;
+  strategic_queries_remaining: number;
+  billing_period_start: string | null;
+  billing_period_end: string | null;
 }
 
 export interface ProcessResponse {
@@ -376,6 +387,10 @@ export function createUsageApi(getToken: GetToken) {
   return {
     summary(days = 30) {
       return apiFetch<UsageSummary>(getToken, `/usage/summary?days=${days}`);
+    },
+
+    subscription() {
+      return apiFetch<SubscriptionInfo>(getToken, `/usage/subscription`);
     },
   };
 }

@@ -17,6 +17,7 @@ from app.models.sync_log import SyncLog
 from app.models.client_brief import ClientBrief
 from app.models.dismissed_alert import DismissedAlert
 from app.models.token_usage import TokenUsage
+from app.models.user_subscription import UserSubscription
 
 __all__ = [
     "User",
@@ -37,4 +38,5 @@ __all__ = [
     "ClientBrief",
     "DismissedAlert",
     "TokenUsage",
+    "UserSubscription",
 ]

@@ -110,6 +110,8 @@ class ChatResponse(BaseModel):
     sources: List[SourceItem]
     model_used: str = "gpt-4o-mini"
     query_type: str = "factual"
+    quota_remaining: int | None = None
+    quota_warning: str | None = None
 
 
 class CompareRequest(BaseModel):
@@ -455,6 +457,8 @@ async def chat(
         sources=[SourceItem(**s) for s in response_sources],
         model_used=result.get("model_used", "gpt-4o-mini"),
         query_type=result.get("query_type", "factual"),
+        quota_remaining=result.get("quota_remaining"),
+        quota_warning=result.get("quota_warning"),
     )
 
 
