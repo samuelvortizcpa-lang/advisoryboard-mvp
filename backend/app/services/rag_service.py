@@ -23,6 +23,7 @@ answer_question(db, client_id, question)
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -183,8 +184,10 @@ async def process_document(db: Session, document: Document) -> None:
         # 1. Extract text — download from Supabase Storage to a temp file
         temp_path = None
         try:
-            temp_path = storage_service.get_temp_local_path(document.file_path)
-            text = extract_text(temp_path, document.file_type)
+            temp_path = await asyncio.to_thread(
+                storage_service.get_temp_local_path, document.file_path
+            )
+            text = await asyncio.to_thread(extract_text, temp_path, document.file_type)
         except UnsupportedFileType as exc:
             raise ValueError(str(exc)) from exc
         except ExtractionError as exc:

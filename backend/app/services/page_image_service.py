@@ -9,6 +9,7 @@ prevent the main text-based RAG pipeline from completing.
 
 from __future__ import annotations
 
+import asyncio
 import gc
 import io
 import logging
@@ -26,6 +27,50 @@ logger = logging.getLogger(__name__)
 MAX_PAGES = 200       # Safety cap for truly enormous PDFs
 JPEG_QUALITY = 85     # JPEG compression quality
 DPI = 100             # Render resolution (balances quality vs memory usage)
+
+
+def _process_single_page(temp_path: str, page_num: int, doc_label: str) -> tuple[bytes, str | None]:
+    """
+    Synchronous CPU-heavy work for a single page: render + OCR + JPEG encode.
+
+    Returns (jpeg_bytes, text_preview).  Runs in a thread pool so the async
+    event loop stays free to serve HTTP requests.
+    """
+    from pdf2image import convert_from_path
+    import pytesseract
+
+    images = convert_from_path(
+        temp_path,
+        first_page=page_num,
+        last_page=page_num,
+        dpi=DPI,
+        fmt="jpeg",
+        thread_count=2,
+    )
+    image = images[0]
+
+    # OCR this page for text preview
+    text_preview = None
+    try:
+        raw = pytesseract.image_to_string(image) or ""
+        text_preview = raw[:500] if raw.strip() else None
+    except Exception as ocr_exc:
+        logger.warning(
+            "Page images: Tesseract OCR failed for %s page %d: %s",
+            doc_label, page_num, ocr_exc,
+        )
+
+    # Convert PIL image to JPEG bytes
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=JPEG_QUALITY)
+    jpeg_bytes = buf.getvalue()
+
+    # Explicitly free memory
+    image.close()
+    del image, images
+    gc.collect()
+
+    return jpeg_bytes, text_preview
 
 
 async def process_page_images(db: Session, document: Document) -> None:
@@ -59,8 +104,7 @@ async def process_page_images(db: Session, document: Document) -> None:
         logger.info("Page images: downloaded to temp file: %s", temp_path)
 
         # 2. Get total page count without loading images into memory
-        from pdf2image import convert_from_path, pdfinfo_from_path
-        import pytesseract
+        from pdf2image import pdfinfo_from_path
 
         info = pdfinfo_from_path(temp_path)
         total_pages = info["Pages"]
@@ -81,6 +125,8 @@ async def process_page_images(db: Session, document: Document) -> None:
         db.flush()
 
         # 4. Process each page ONE AT A TIME to avoid OOM
+        #    CPU-heavy work (pdf2image + Tesseract) runs in a thread pool
+        #    so the async event loop stays free to serve HTTP requests.
         page_image_rows: list[DocumentPageImage] = []
 
         for page_num in range(1, pages_to_process + 1):
@@ -90,34 +136,12 @@ async def process_page_images(db: Session, document: Document) -> None:
                     page_num, pages_to_process, document.id,
                 )
 
-                # Convert ONE page at a time
-                images = convert_from_path(
-                    temp_path,
-                    first_page=page_num,
-                    last_page=page_num,
-                    dpi=DPI,
-                    fmt="jpeg",
-                    thread_count=2,
+                # Run CPU-heavy render + OCR in thread pool
+                jpeg_bytes, text_preview = await asyncio.to_thread(
+                    _process_single_page, temp_path, page_num, doc_label
                 )
-                image = images[0]
 
-                # OCR this page for text preview
-                text_preview = None
-                try:
-                    raw = pytesseract.image_to_string(image) or ""
-                    text_preview = raw[:500] if raw.strip() else None
-                except Exception as ocr_exc:
-                    logger.warning(
-                        "Page images: Tesseract OCR failed for %s page %d: %s",
-                        doc_label, page_num, ocr_exc,
-                    )
-
-                # Convert PIL image to JPEG bytes
-                buf = io.BytesIO()
-                image.save(buf, format="JPEG", quality=JPEG_QUALITY)
-                jpeg_bytes = buf.getvalue()
-
-                # Upload to Supabase Storage
+                # Upload to Supabase Storage (I/O, not CPU — fine in event loop)
                 storage_path = f"page_images/{document.id}/page_{page_num}.jpg"
                 try:
                     storage_service.upload_file_to_path(
@@ -132,14 +156,7 @@ async def process_page_images(db: Session, document: Document) -> None:
                         "Page images: upload failed for %s page %d: %s",
                         doc_label, page_num, upload_exc,
                     )
-                    # Free memory before continuing
-                    image.close()
-                    del image, images
-                    gc.collect()
                     continue
-
-                # Gemini embedding disabled — see TODO at top of function
-                embedding = None
 
                 if text_preview:
                     logger.info(
@@ -152,15 +169,10 @@ async def process_page_images(db: Session, document: Document) -> None:
                         document_id=document.id,
                         page_number=page_num,
                         image_path=storage_path,
-                        image_embedding=embedding,
+                        image_embedding=None,
                         page_text_preview=text_preview,
                     )
                 )
-
-                # Explicitly free memory after each page
-                image.close()
-                del image, images
-                gc.collect()
 
             except Exception as e:
                 logger.error(
