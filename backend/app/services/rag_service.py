@@ -674,9 +674,16 @@ async def answer_question(
         query_type = await classify_query(
             question, db=db, user_id=user_id, client_id=client_id
         )
+    # Resolve client type name for domain-specific prompts
+    _client_type_name = (
+        db_client.client_type.name
+        if db_client and db_client.client_type
+        else None
+    )
     answer, model_used = await route_completion(
         query_type, system_prompt, question,
         db=db, user_id=user_id, client_id=client_id,
+        client_type=_client_type_name,
     )
 
     # ------------------------------------------------------------------

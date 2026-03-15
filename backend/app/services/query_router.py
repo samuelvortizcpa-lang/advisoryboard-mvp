@@ -20,6 +20,7 @@ from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.services.prompt_templates import build_strategic_prompt
 from app.services.token_tracking_service import log_token_usage
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ async def route_completion(
     db: Optional[Session] = None,
     user_id: Optional[str] = None,
     client_id: Optional[UUID] = None,
+    client_type: Optional[str] = None,
 ) -> tuple[str, str]:
     """
     Route to the appropriate model based on query_type.
@@ -113,13 +115,15 @@ async def route_completion(
     settings = get_settings()
 
     if query_type == "strategic" and settings.anthropic_api_key:
+        # Build enhanced strategic prompt with domain-specific guidance
+        strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
         # Route to Claude Sonnet 4.6
         try:
             client = AsyncAnthropic(api_key=settings.anthropic_api_key)
             response = await client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=2000,
-                system=system_prompt,
+                system=strategic_system,
                 messages=[{"role": "user", "content": question}],
                 temperature=0.2,
             )
