@@ -716,31 +716,31 @@ async def answer_question(
 
         Scoring:
         - Each answer-value match:  10 pts
-        - Each question-phrase match: 3 pts
-        - If a page has BOTH value + phrase hits: 2× multiplier on value pts
+        - Each question-phrase match: 5 pts
+        - If a page has BOTH value + phrase hits: 3× multiplier on value pts
           (the page where the line item lives, not just a cross-reference)
-        - Small tiebreaker bonus for lower page numbers (1040 summary is p1-2)
+        - Early-page bonus: pages 1-3 get +20 pts, pages 4-5 get +10 pts
+          (tax return summary data is always on early pages)
         """
         pt = page_text.lower()
-        value_pts = 0
-        for val in answer_values:
-            if val in pt:
-                value_pts += 10
-        phrase_pts = 0
-        for phrase in question_phrases:
-            if phrase in pt:
-                phrase_pts += 3
+        value_pts = sum(10 for val in answer_values if val in pt)
+        phrase_pts = sum(5 for phrase in question_phrases if phrase in pt)
 
         has_value = value_pts > 0
 
-        # 2× multiplier on value points when the page also has phrase matches
+        # 3× multiplier on value points when the page also has phrase matches
         if value_pts and phrase_pts:
-            value_pts *= 2
+            value_pts *= 3
 
-        # Small tiebreaker: prefer earlier pages (max 1 bonus point)
-        page_bonus = max(0, 1 - (page_number - 1) * 0.1)
+        # Early-page bonus: summary pages (1040 page 1-2) get strong preference
+        if page_number <= 3:
+            page_bonus = 20
+        elif page_number <= 5:
+            page_bonus = 10
+        else:
+            page_bonus = 0
 
-        return value_pts + phrase_pts + round(page_bonus), has_value
+        return value_pts + phrase_pts + page_bonus, has_value
 
     # --- Collect candidate documents (year-filtered) ---
     doc_map: dict[str, Document] = {}       # doc_id_str → Document
@@ -792,6 +792,12 @@ async def answer_question(
                     value_pages.append(entry)
                 else:
                     phrase_only_pages.append(entry)
+
+    # Log top 3 scored pages for debugging source card selection
+    all_scored = value_pages + phrase_only_pages
+    all_scored.sort(key=lambda t: (-t[0], t[1]))
+    for rel, pg, did, _ in all_scored[:3]:
+        logger.info("Page scoring: doc=%s page=%d score=%d", did, pg, rel)
 
     # Prefer pages that contain answer values; fall back to phrase-only
     # pages when no value-matching pages exist (e.g. non-financial questions).
