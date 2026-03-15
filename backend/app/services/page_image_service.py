@@ -23,7 +23,7 @@ from app.services import gemini_embeddings, storage_service
 
 logger = logging.getLogger(__name__)
 
-MAX_PAGES = 15        # Cap to prevent runaway processing on large PDFs
+MAX_PAGES = 200       # Safety cap for truly enormous PDFs
 JPEG_QUALITY = 85     # JPEG compression quality
 DPI = 100             # Render resolution (balances quality vs memory usage)
 
@@ -40,7 +40,10 @@ async def process_page_images(db: Session, document: Document) -> None:
     if document.file_type != "pdf":
         return
 
-    gemini_available = gemini_embeddings.is_available()
+    # TODO: Re-enable when Gemini embedding model is updated.
+    # gemini-embedding-exp-03-07 returns 404 on every call, wasting time
+    # and cluttering logs with failed API calls per page.
+    gemini_available = False
 
     doc_label = f"{document.id} ({document.filename!r})"
     logger.info(
@@ -135,20 +138,8 @@ async def process_page_images(db: Session, document: Document) -> None:
                     gc.collect()
                     continue
 
-                # Generate Gemini embedding (optional — images are stored regardless)
+                # Gemini embedding disabled — see TODO at top of function
                 embedding = None
-                if gemini_available:
-                    try:
-                        embedding = gemini_embeddings.embed_image(jpeg_bytes)
-                        logger.info(
-                            "Page images: embedded page %d for %s (768-dim vector)",
-                            page_num, doc_label,
-                        )
-                    except Exception as embed_exc:
-                        logger.warning(
-                            "Page images: embedding failed for %s page %d: %s",
-                            doc_label, page_num, embed_exc,
-                        )
 
                 if text_preview:
                     logger.info(

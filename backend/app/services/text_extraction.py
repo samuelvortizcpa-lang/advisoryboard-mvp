@@ -164,35 +164,27 @@ def _extract_pdf_ocr(path: Path) -> str:
     from pdf2image import convert_from_path, pdfinfo_from_path
     import pytesseract
 
-    MAX_PAGES = 15
-
     logger.info(f"Running OCR extraction on {path.name}")
 
     info = pdfinfo_from_path(str(path))
     total_pages = info["Pages"]
-    pages_to_process = min(total_pages, MAX_PAGES)
-
-    if total_pages > MAX_PAGES:
-        logger.warning(
-            "OCR extraction: %s has %d pages, capping at %d",
-            path.name, total_pages, MAX_PAGES,
-        )
+    logger.info(f"OCR extraction: {path.name} has {total_pages} pages")
 
     pages: list[str] = []
-    for page_num in range(1, pages_to_process + 1):
+    for page_num in range(1, total_pages + 1):
         try:
             images = convert_from_path(
                 str(path),
                 first_page=page_num,
                 last_page=page_num,
-                dpi=100,
+                dpi=150,  # Higher DPI for accurate financial text extraction
             )
             image = images[0]
 
             page_text = pytesseract.image_to_string(image, config="--psm 6")
             if page_text and page_text.strip():
                 pages.append(page_text.strip())
-            logger.debug(f"OCR page {page_num}: {len(page_text)} chars")
+            logger.debug(f"OCR page {page_num}/{total_pages}: {len(page_text)} chars")
 
             image.close()
             del image, images
@@ -202,7 +194,7 @@ def _extract_pdf_ocr(path: Path) -> str:
             continue
 
     full_text = "\n\n".join(pages)
-    logger.info(f"OCR complete: {pages_to_process}/{total_pages} pages, {len(full_text)} chars")
+    logger.info(f"OCR complete: {total_pages} pages, {len(full_text)} chars")
     return full_text
 
 
