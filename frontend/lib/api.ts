@@ -345,6 +345,41 @@ export interface BackfillResponse {
   message: string;
 }
 
+// ─── Usage types ───────────────────────────────────────────────────────────────
+
+export interface UsageModelBreakdown {
+  model: string;
+  queries: number;
+  tokens: number;
+  cost: number;
+}
+
+export interface UsageTypeBreakdown {
+  query_type: string;
+  queries: number;
+  tokens: number;
+  cost: number;
+}
+
+export interface UsageSummary {
+  days: number;
+  total_queries: number;
+  total_tokens: number;
+  total_cost: number;
+  breakdown_by_model: UsageModelBreakdown[];
+  breakdown_by_query_type: UsageTypeBreakdown[];
+}
+
+// ─── Usage API factory ─────────────────────────────────────────────────────────
+
+export function createUsageApi(getToken: GetToken) {
+  return {
+    summary(days = 30) {
+      return apiFetch<UsageSummary>(getToken, `/usage/summary?days=${days}`);
+    },
+  };
+}
+
 // ─── Brief types ───────────────────────────────────────────────────────────────
 
 export interface ClientBrief {

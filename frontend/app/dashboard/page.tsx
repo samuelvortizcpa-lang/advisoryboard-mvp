@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import AlertsList from "@/components/alerts/AlertsList";
+import UsageStats from "@/components/dashboard/UsageStats";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -107,6 +108,11 @@ export default async function DashboardPage() {
       {/* Smart Alerts */}
       <div className="mt-6">
         <AlertsList />
+      </div>
+
+      {/* AI Usage */}
+      <div className="mt-6">
+        <UsageStats />
       </div>
 
       {/* Quick actions */}
