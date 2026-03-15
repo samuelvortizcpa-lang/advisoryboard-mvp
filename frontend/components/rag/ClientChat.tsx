@@ -13,6 +13,8 @@ interface Message {
   sources?: RagSource[];
   confidence_tier?: "high" | "medium" | "low";
   confidence_score?: number;
+  model_used?: string;
+  query_type?: string;
   error?: boolean;
 }
 
@@ -145,6 +147,8 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           sources: response.sources,
           confidence_tier: response.confidence_tier,
           confidence_score: response.confidence_score,
+          model_used: response.model_used,
+          query_type: response.query_type,
         },
       ]);
     } catch (err) {
@@ -549,9 +553,17 @@ function MessageBubble({
       {isUser ? <UserAvatar /> : <BotAvatar />}
 
       <div className={`max-w-[85%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1.5`}>
-        {/* Confidence badge for assistant messages */}
+        {/* Confidence badge + model indicator for assistant messages */}
         {!isUser && message.confidence_tier && (
           <ConfidenceBadge tier={message.confidence_tier} score={message.confidence_score ?? 0} />
+        )}
+        {!isUser && message.model_used && (
+          <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
+            <span className={`h-1.5 w-1.5 rounded-full ${
+              message.query_type === "strategic" ? "bg-purple-400" : "bg-gray-300"
+            }`} />
+            {message.model_used === "gpt-4o-mini" ? "Quick Lookup" : "Deep Analysis"}
+          </span>
         )}
 
         <div

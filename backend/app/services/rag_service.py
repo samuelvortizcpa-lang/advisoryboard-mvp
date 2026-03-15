@@ -39,6 +39,7 @@ from app.models.document_chunk import DocumentChunk
 from app.models.document_page_image import DocumentPageImage
 from app.services import gemini_embeddings, storage_service
 from app.services.chunking import chunk_text, get_chunk_params
+from app.services.query_router import classify_query, route_completion
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
 
 logger = logging.getLogger(__name__)
@@ -662,21 +663,9 @@ async def answer_question(
             "to the question."
         )
 
-    # Chat completion — TEXT ONLY (no vision images sent to GPT-4o).
-    # Page images caused GPT-4o to ignore text context and say "not provided".
-    # Images are kept for UI display only (source card thumbnails + lightbox).
-    openai_client = _openai()
-    response = await openai_client.chat.completions.create(
-        model=CHAT_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question},
-        ],
-        temperature=0.1,
-        max_tokens=1_500,
-    )
-
-    answer = response.choices[0].message.content or "No answer generated."
+    # Classify and route to appropriate model
+    query_type = await classify_query(question)
+    answer, model_used = await route_completion(query_type, system_prompt, question)
 
     # ------------------------------------------------------------------
     # Build deduplicated source list — answer-aware page matching
@@ -864,4 +853,6 @@ async def answer_question(
         "confidence_tier": confidence_tier,
         "confidence_score": round(best_score, 2),
         "sources": sources,
+        "model_used": model_used,
+        "query_type": query_type,
     }

@@ -105,6 +105,8 @@ class ChatResponse(BaseModel):
     confidence_tier: str = "low"
     confidence_score: float = 0.0
     sources: List[SourceItem]
+    model_used: str = "gpt-4o-mini"
+    query_type: str = "factual"
 
 
 class CompareRequest(BaseModel):
@@ -447,6 +449,8 @@ async def chat(
         confidence_tier=result["confidence_tier"],
         confidence_score=result["confidence_score"],
         sources=[SourceItem(**s) for s in response_sources],
+        model_used=result.get("model_used", "gpt-4o-mini"),
+        query_type=result.get("query_type", "factual"),
     )
 
 

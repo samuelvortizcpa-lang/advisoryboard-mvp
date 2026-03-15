@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     # ── OpenAI ────────────────────────────────────────────────────────────────
     openai_api_key: str = ""
+    anthropic_api_key: str = ""
 
     # ── Clerk ─────────────────────────────────────────────────────────────────
     clerk_frontend_api_url: str = ""   # e.g. https://your-app.clerk.accounts.dev

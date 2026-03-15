@@ -232,6 +232,8 @@ export interface ChatApiResponse {
   confidence_tier: "high" | "medium" | "low";
   confidence_score: number;
   sources: RagSource[];
+  model_used: string;
+  query_type: string;
 }
 
 export interface ProcessResponse {
