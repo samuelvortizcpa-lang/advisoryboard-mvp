@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from openai import AsyncOpenAI
 
@@ -70,6 +71,10 @@ async def classify_document(text: str) -> dict:
     )
 
     raw = response.choices[0].message.content or "{}"
+
+    # Strip markdown code fences that GPT sometimes wraps around JSON
+    raw = re.sub(r"^```(?:json)?\s*\n?", "", raw.strip())
+    raw = re.sub(r"\n?\s*```$", "", raw.strip())
 
     try:
         result = json.loads(raw)

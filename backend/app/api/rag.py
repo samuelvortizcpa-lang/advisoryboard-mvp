@@ -285,15 +285,17 @@ async def backfill_page_images(
     total_pages = 0
 
     for doc in pdf_docs:
-        # Check if page images already exist
+        # Delete existing page images so we always regenerate fresh
         existing = (
             db.query(DocumentPageImage)
             .filter(DocumentPageImage.document_id == doc.id)
             .count()
         )
         if existing > 0:
-            skipped += 1
-            continue
+            db.query(DocumentPageImage).filter(
+                DocumentPageImage.document_id == doc.id
+            ).delete()
+            db.commit()
 
         try:
             await process_page_images(db, doc)
@@ -311,7 +313,7 @@ async def backfill_page_images(
         processed=processed,
         skipped=skipped,
         total_pages=total_pages,
-        message=f"Processed {processed} PDF(s), generated {total_pages} page images. Skipped {skipped} already done.",
+        message=f"Reprocessed {processed} PDF(s), generated {total_pages} page images.",
     )
 
 
