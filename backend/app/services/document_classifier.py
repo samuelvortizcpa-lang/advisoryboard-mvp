@@ -9,10 +9,15 @@ from __future__ import annotations
 import json
 import logging
 import re
+from typing import TYPE_CHECKING
 
 from openai import AsyncOpenAI
 
 from app.core.config import get_settings
+
+if TYPE_CHECKING:
+    from uuid import UUID
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +49,13 @@ def _openai() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=get_settings().openai_api_key)
 
 
-async def classify_document(text: str) -> dict:
+async def classify_document(
+    text: str,
+    *,
+    db: "Session | None" = None,
+    user_id: str | None = None,
+    client_id: "UUID | None" = None,
+) -> dict:
     """
     Classify a document based on its extracted text.
 
@@ -69,6 +80,24 @@ async def classify_document(text: str) -> dict:
         temperature=0.0,
         max_tokens=200,
     )
+
+    # Log token usage for cost tracking
+    if db and user_id:
+        try:
+            from app.services.token_tracking_service import log_token_usage
+            usage = response.usage
+            log_token_usage(
+                db,
+                user_id=user_id,
+                client_id=client_id,
+                query_type="classification",
+                model=CLASSIFICATION_MODEL,
+                prompt_tokens=usage.prompt_tokens if usage else 0,
+                completion_tokens=usage.completion_tokens if usage else 0,
+                endpoint="document_classify",
+            )
+        except Exception:
+            logger.error("Failed to log document classify token usage", exc_info=True)
 
     raw = response.choices[0].message.content or "{}"
 

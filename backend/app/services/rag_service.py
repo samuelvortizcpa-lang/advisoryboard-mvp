@@ -504,6 +504,7 @@ async def answer_question(
     db: Session,
     client_id: UUID,
     question: str,
+    user_id: str | None = None,
 ) -> dict:
     """
     RAG Q&A: retrieve relevant chunks then synthesise an answer.
@@ -664,8 +665,13 @@ async def answer_question(
         )
 
     # Classify and route to appropriate model
-    query_type = await classify_query(question)
-    answer, model_used = await route_completion(query_type, system_prompt, question)
+    query_type = await classify_query(
+        question, db=db, user_id=user_id, client_id=client_id
+    )
+    answer, model_used = await route_completion(
+        query_type, system_prompt, question,
+        db=db, user_id=user_id, client_id=client_id,
+    )
 
     # ------------------------------------------------------------------
     # Build deduplicated source list — answer-aware page matching

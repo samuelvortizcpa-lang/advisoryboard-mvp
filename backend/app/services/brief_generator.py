@@ -224,6 +224,22 @@ async def generate_brief(
         "total_tokens": usage.total_tokens if usage else 0,
     }
 
+    # Log token usage for cost tracking
+    try:
+        from app.services.token_tracking_service import log_token_usage
+        log_token_usage(
+            db,
+            user_id=user_id,
+            client_id=client_id,
+            query_type="brief",
+            model=BRIEF_MODEL,
+            prompt_tokens=usage.prompt_tokens if usage else 0,
+            completion_tokens=usage.completion_tokens if usage else 0,
+            endpoint="brief",
+        )
+    except Exception:
+        logger.error("Failed to log brief token usage", exc_info=True)
+
     logger.info(
         "Brief generated for client %s: %d docs, %d actions, %.1fs",
         client_id, len(documents), len(action_items), elapsed,

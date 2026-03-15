@@ -46,6 +46,7 @@ async def extract_action_items(
     document_text: str,
     document_id: UUID,
     client_id: UUID,
+    user_id: str | None = None,
 ) -> list:
     """
     Extract action items from *document_text* and persist them.
@@ -90,6 +91,24 @@ async def extract_action_items(
             exc,
         )
         return []
+
+    # Log token usage for cost tracking
+    if user_id:
+        try:
+            from app.services.token_tracking_service import log_token_usage
+            usage = response.usage
+            log_token_usage(
+                db,
+                user_id=user_id,
+                client_id=client_id,
+                query_type="extraction",
+                model="gpt-4o-mini",
+                prompt_tokens=usage.prompt_tokens if usage else 0,
+                completion_tokens=usage.completion_tokens if usage else 0,
+                endpoint="action_items",
+            )
+        except Exception:
+            logger.error("Failed to log action_items token usage", exc_info=True)
 
     # ── Parse response ────────────────────────────────────────────────────
     raw = response.choices[0].message.content or "{}"

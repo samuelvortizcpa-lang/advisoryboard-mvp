@@ -383,7 +383,7 @@ async def chat(
         )
 
     result = await rag_service.answer_question(
-        db, client_id=client_id, question=request.question
+        db, client_id=client_id, question=request.question, user_id=user.clerk_id
     )
 
     # Persist user question
