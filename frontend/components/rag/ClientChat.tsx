@@ -486,7 +486,7 @@ function SourceCard({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={source.image_url}
-            alt={`Page ${source.page_number}`}
+            alt={`PDF Page ${source.page_number}`}
             className="h-full w-full object-cover object-top"
           />
         </div>
@@ -495,7 +495,7 @@ function SourceCard({
             {source.filename}
           </span>
           <span className="text-[10px] text-gray-400">
-            Page {source.page_number} — click to view
+            PDF Page {source.page_number} — click to view
           </span>
         </div>
         <span className={`flex-shrink-0 text-xs font-medium ${scoreColor}`}>
@@ -524,7 +524,7 @@ function SourceCard({
           </span>
           <span className="text-[10px] text-gray-400">
             {source.page_number != null
-              ? `Page ${source.page_number}`
+              ? `PDF Page ${source.page_number}`
               : "Re-process to enable preview"}
           </span>
         </div>
@@ -680,7 +680,7 @@ function PageImageModal({
         {/* Header */}
         <div className="mb-2 flex w-full items-center justify-between">
           <span className="text-sm font-medium text-white">
-            {filename} — Page {pageNumber}
+            {filename} — PDF Page {pageNumber}
           </span>
           <button
             onClick={onClose}
@@ -697,7 +697,7 @@ function PageImageModal({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
-          alt={`Page ${pageNumber} of ${filename}`}
+          alt={`PDF Page ${pageNumber} of ${filename}`}
           className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
         />
       </div>
