@@ -1,6 +1,6 @@
 """Add user_subscriptions table for tier and quota tracking.
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: g6h7i8j9k0l1
 Revises: f5a6b7c8d9e2
 Create Date: 2026-03-15 21:00:00.000000
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
-revision = "a1b2c3d4e5f6"
+revision = "g6h7i8j9k0l1"
 down_revision = "f5a6b7c8d9e2"
 branch_labels = None
 depends_on = None
