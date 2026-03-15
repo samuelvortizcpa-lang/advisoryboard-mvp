@@ -102,6 +102,8 @@ class SourceItem(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     answer: str
     confidence_tier: str = "low"
     confidence_score: float = 0.0
