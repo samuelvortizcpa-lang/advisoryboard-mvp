@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.user_subscription import UserSubscription
@@ -105,10 +106,17 @@ def increment_usage(db: Session, user_id: str, query_type: str) -> None:
         return
 
     try:
-        sub = get_or_create_subscription(db, user_id)
-        sub.strategic_queries_used += 1
-        sub.updated_at = datetime.now(timezone.utc)
+        get_or_create_subscription(db, user_id)
+        db.execute(
+            update(UserSubscription)
+            .where(UserSubscription.user_id == user_id)
+            .values(
+                strategic_queries_used=UserSubscription.strategic_queries_used + 1,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
         db.commit()
+        db.expire_all()
     except Exception:
         logger.error("Failed to increment usage for user %s", user_id, exc_info=True)
         try:
