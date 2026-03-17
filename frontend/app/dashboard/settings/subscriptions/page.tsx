@@ -1,12 +1,15 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 
 import {
   createAdminApi,
+  createStripeApi,
   AdminSubscription,
   AdminSubscriptionSummary,
+  StripeStatus,
 } from "@/lib/api";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -35,21 +38,66 @@ function progressColor(pct: number) {
   return "bg-green-500";
 }
 
+const PRICING = [
+  {
+    tier: "starter",
+    price: "$99",
+    features: [
+      "GPT-4o-mini only",
+      "25 clients",
+      "500MB storage",
+    ],
+  },
+  {
+    tier: "professional",
+    price: "$149",
+    features: [
+      "100 strategic queries/mo",
+      "10 Opus queries/mo",
+      "100 clients",
+      "5GB storage",
+    ],
+  },
+  {
+    tier: "firm",
+    price: "$249",
+    features: [
+      "500 strategic queries/mo",
+      "50 Opus queries/mo",
+      "Unlimited clients",
+      "25GB storage",
+    ],
+  },
+] as const;
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function SubscriptionManagementPage() {
   const { getToken } = useAuth();
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subs, setSubs] = useState<AdminSubscription[]>([]);
   const [summary, setSummary] = useState<AdminSubscriptionSummary | null>(null);
+  const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
 
   // Inline interaction state
-  const [tierDropdown, setTierDropdown] = useState<string | null>(null); // user_id or null
-  const [resetConfirm, setResetConfirm] = useState<string | null>(null); // user_id or null
-  const [actionLoading, setActionLoading] = useState<string | null>(null); // user_id or null
+  const [tierDropdown, setTierDropdown] = useState<string | null>(null);
+  const [resetConfirm, setResetConfirm] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ userId: string; message: string; type: "success" | "error" } | null>(null);
+
+  // Stripe checkout state
+  const [checkoutTier, setCheckoutTier] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  // Banners from URL params
+  const showSuccess = searchParams.get("success") === "true";
+  const showCanceled = searchParams.get("canceled") === "true";
+  const [bannerVisible, setBannerVisible] = useState(true);
+
+  const stripeConfigured = Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
   const showFeedback = (userId: string, message: string, type: "success" | "error") => {
     setFeedback({ userId, message, type });
@@ -60,13 +108,16 @@ export default function SubscriptionManagementPage() {
     setLoading(true);
     setError(null);
     try {
-      const api = createAdminApi(getToken);
-      const [s, sum] = await Promise.all([
-        api.listSubscriptions(),
-        api.subscriptionSummary(),
+      const adminApi = createAdminApi(getToken);
+      const stripeApi = createStripeApi(getToken);
+      const [s, sum, ss] = await Promise.all([
+        adminApi.listSubscriptions(),
+        adminApi.subscriptionSummary(),
+        stripeApi.status().catch(() => null),
       ]);
       setSubs(s);
       setSummary(sum);
+      setStripeStatus(ss);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load subscriptions");
     } finally {
@@ -104,6 +155,28 @@ export default function SubscriptionManagementPage() {
     }
   }
 
+  async function handleCheckout(tier: string) {
+    setCheckoutTier(tier);
+    try {
+      const { url } = await createStripeApi(getToken).createCheckout(tier);
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create checkout");
+      setCheckoutTier(null);
+    }
+  }
+
+  async function handleManageBilling() {
+    setPortalLoading(true);
+    try {
+      const { url } = await createStripeApi(getToken).createPortal();
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No Stripe subscription found. Subscribe to a plan first.");
+      setPortalLoading(false);
+    }
+  }
+
   // ── Loading ─────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -138,15 +211,107 @@ export default function SubscriptionManagementPage() {
     );
   }
 
+  const currentTier = stripeStatus?.tier ?? subs[0]?.tier ?? "starter";
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-5xl space-y-6">
 
+        {/* ── Success/Cancel Banners ────────────────────────────────────── */}
+        {bannerVisible && showSuccess && (
+          <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-5 py-3">
+            <p className="text-sm font-medium text-green-700">Subscription updated successfully!</p>
+            <button onClick={() => setBannerVisible(false)} className="text-green-500 hover:text-green-700">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+        {bannerVisible && showCanceled && (
+          <div className="flex items-center justify-between rounded-xl border border-yellow-200 bg-yellow-50 px-5 py-3">
+            <p className="text-sm font-medium text-yellow-700">Checkout canceled. No changes were made.</p>
+            <button onClick={() => setBannerVisible(false)} className="text-yellow-500 hover:text-yellow-700">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* ── Header ────────────────────────────────────────────────────── */}
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Subscription Management</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage user tiers and quota usage</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Subscription Management</h1>
+            <p className="mt-1 text-sm text-gray-500">Manage user tiers and quota usage</p>
+          </div>
+          {stripeConfigured && stripeStatus?.stripe_customer_id && (
+            <button
+              onClick={handleManageBilling}
+              disabled={portalLoading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+            >
+              {portalLoading ? "Loading\u2026" : "Manage Billing"}
+            </button>
+          )}
         </div>
+
+        {/* ── Pricing Cards ─────────────────────────────────────────────── */}
+        {stripeConfigured ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {PRICING.map((plan) => {
+              const isCurrent = currentTier === plan.tier;
+              const isUpgrade = TIERS.indexOf(plan.tier as typeof TIERS[number]) > TIERS.indexOf(currentTier as typeof TIERS[number]);
+              return (
+                <div
+                  key={plan.tier}
+                  className={`relative rounded-xl border p-5 shadow-sm ${
+                    isCurrent
+                      ? "border-blue-300 bg-blue-50/50 ring-1 ring-blue-200"
+                      : "border-gray-200 bg-white"
+                  }`}
+                >
+                  {isCurrent && (
+                    <span className="absolute -top-2.5 left-4 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-semibold text-white">
+                      Current Plan
+                    </span>
+                  )}
+                  <h3 className="text-sm font-semibold capitalize text-gray-900">{plan.tier}</h3>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">
+                    {plan.price}<span className="text-sm font-normal text-gray-500">/mo</span>
+                  </p>
+                  <ul className="mt-3 space-y-1.5">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-center gap-2 text-xs text-gray-600">
+                        <svg className="h-3.5 w-3.5 flex-shrink-0 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  {!isCurrent && (
+                    <button
+                      onClick={() => handleCheckout(plan.tier)}
+                      disabled={checkoutTier !== null}
+                      className={`mt-4 w-full rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 ${
+                        isUpgrade
+                          ? "bg-blue-600 text-white hover:bg-blue-700"
+                          : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      {checkoutTier === plan.tier ? "Redirecting\u2026" : isUpgrade ? "Upgrade" : "Downgrade"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+            <p className="text-sm text-gray-500">Payment processing coming soon</p>
+          </div>
+        )}
 
         {/* ── Summary Cards ─────────────────────────────────────────────── */}
         {summary && (

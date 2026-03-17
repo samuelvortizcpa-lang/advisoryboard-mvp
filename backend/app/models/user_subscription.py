@@ -57,6 +57,17 @@ class UserSubscription(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    # Stripe integration
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    stripe_status: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, default="none"
+    )
+
     def __repr__(self) -> str:
         return (
             f"<UserSubscription user_id={self.user_id!r} tier={self.tier!r} "

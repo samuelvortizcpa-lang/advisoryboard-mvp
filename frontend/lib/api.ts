@@ -541,6 +541,37 @@ export function createAdminApi(getToken: GetToken) {
   };
 }
 
+// ─── Stripe types ────────────────────────────────────────────────────────────
+
+export interface StripeStatus {
+  stripe_status: string;
+  stripe_customer_id: string | null;
+  tier: string;
+}
+
+// ─── Stripe API factory ─────────────────────────────────────────────────────
+
+export function createStripeApi(getToken: GetToken) {
+  return {
+    createCheckout(tier: string) {
+      return apiFetch<{ url: string }>(getToken, "/stripe/create-checkout", {
+        method: "POST",
+        body: JSON.stringify({ tier }),
+      });
+    },
+
+    createPortal() {
+      return apiFetch<{ url: string }>(getToken, "/stripe/create-portal", {
+        method: "POST",
+      });
+    },
+
+    status() {
+      return apiFetch<StripeStatus>(getToken, "/stripe/status");
+    },
+  };
+}
+
 // ─── Brief types ───────────────────────────────────────────────────────────────
 
 export interface ClientBrief {

@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     # ── Google AI (Gemini embeddings for multimodal RAG) ─────────────────────
     google_ai_api_key: str = ""
 
+    # ── Stripe ──────────────────────────────────────────────────────────────
+    stripe_secret_key: str = ""
+    stripe_publishable_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_starter: str = ""
+    stripe_price_professional: str = ""
+    stripe_price_firm: str = ""
+
     # ── Encryption ───────────────────────────────────────────────────────────
     encryption_key: str = ""
 
