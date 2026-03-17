@@ -2,7 +2,8 @@
 Subscription tier management and strategic query quota enforcement.
 
 Tiers:
-  - starter:      factual only, no Claude access
+  - free:          50 queries/month, 3 clients, 10 documents, no Opus
+  - starter:       factual only, no Claude access
   - professional:  100 strategic queries/month, 10 opus queries/month
   - firm:          500 strategic queries/month, 50 opus queries/month
 """
@@ -15,31 +16,46 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
+from app.models.client import Client
+from app.models.document import Document
 from app.models.token_usage import TokenUsage
 from app.models.user_subscription import UserSubscription
 
 logger = logging.getLogger(__name__)
 
 TIER_DEFAULTS: dict[str, dict] = {
+    "free": {
+        "strategic_queries_limit": 50,
+        "opus_queries_limit": 0,
+        "models_allowed": ["gpt-4o-mini"],
+        "max_clients": 3,
+        "max_documents": 10,
+    },
     "starter": {
         "strategic_queries_limit": 0,
         "opus_queries_limit": 0,
         "models_allowed": ["gpt-4o-mini"],
+        "max_clients": 25,
+        "max_documents": 500,
     },
     "professional": {
         "strategic_queries_limit": 100,
         "opus_queries_limit": 10,
         "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
+        "max_clients": 100,
+        "max_documents": 5000,
     },
     "firm": {
         "strategic_queries_limit": 500,
         "opus_queries_limit": 50,
         "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
+        "max_clients": None,
+        "max_documents": None,
     },
 }
 
-# Default tier for new users (professional during testing, switch to starter at launch)
-_DEFAULT_TIER = "professional"
+# Default tier for new users
+_DEFAULT_TIER = "free"
 
 
 def get_or_create_subscription(db: Session, user_id: str) -> UserSubscription:
@@ -143,6 +159,60 @@ def check_opus_quota(db: Session, user_id: str) -> dict:
         "limit": opus_limit,
         "remaining": remaining,
     }
+
+
+def check_client_limit(db: Session, user_id: str, owner_id) -> dict:
+    """
+    Check whether the user can add another client.
+
+    Args:
+        user_id: Clerk ID (for subscription lookup)
+        owner_id: User UUID (for client ownership count)
+
+    Returns {allowed, current, limit}.
+    """
+    sub = get_or_create_subscription(db, user_id)
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+    limit = tier_config["max_clients"]
+
+    if limit is None:
+        return {"allowed": True, "current": 0, "limit": None}
+
+    current = (
+        db.query(func.count(Client.id))
+        .filter(Client.owner_id == owner_id)
+        .scalar()
+    ) or 0
+
+    return {"allowed": current < limit, "current": current, "limit": limit}
+
+
+def check_document_limit(db: Session, user_id: str, owner_id) -> dict:
+    """
+    Check whether the user can upload another document.
+
+    Args:
+        user_id: Clerk ID (for subscription lookup)
+        owner_id: User UUID (for document ownership count via clients)
+
+    Returns {allowed, current, limit}.
+    """
+    sub = get_or_create_subscription(db, user_id)
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+    limit = tier_config["max_documents"]
+
+    if limit is None:
+        return {"allowed": True, "current": 0, "limit": None}
+
+    # Count documents across all of the user's clients
+    current = (
+        db.query(func.count(Document.id))
+        .join(Client, Document.client_id == Client.id)
+        .filter(Client.owner_id == owner_id)
+        .scalar()
+    ) or 0
+
+    return {"allowed": current < limit, "current": current, "limit": limit}
 
 
 def increment_usage(db: Session, user_id: str, query_type: str) -> None:

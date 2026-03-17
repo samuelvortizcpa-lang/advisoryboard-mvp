@@ -9,6 +9,7 @@ from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services import document_service, rag_service, storage_service, user_service
+from app.services.subscription_service import check_document_limit
 
 router = APIRouter()
 
@@ -27,6 +28,12 @@ async def upload_document(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> DocumentResponse:
     user = user_service.get_or_create_user(db, current_user)
+    limit_check = check_document_limit(db, user.clerk_id, user.id)
+    if not limit_check["allowed"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Document limit reached. Upgrade your plan to upload more documents.",
+        )
     document = await document_service.save_document(
         db=db,
         file=file,

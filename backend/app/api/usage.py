@@ -37,7 +37,12 @@ from app.schemas.usage import (
     UsageRecordResponse,
 )
 from app.services import user_service
-from app.services.subscription_service import get_or_create_subscription
+from app.services.subscription_service import (
+    TIER_DEFAULTS,
+    check_client_limit,
+    check_document_limit,
+    get_or_create_subscription,
+)
 from app.services.token_tracking_service import get_usage_by_client, get_usage_summary
 
 router = APIRouter()
@@ -96,6 +101,11 @@ async def subscription_info(
     user = user_service.get_or_create_user(db, current_user)
     sub = get_or_create_subscription(db, user.clerk_id)
     remaining = max(0, sub.strategic_queries_limit - sub.strategic_queries_used)
+
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+    client_info = check_client_limit(db, user.clerk_id, user.id)
+    doc_info = check_document_limit(db, user.clerk_id, user.id)
+
     return {
         "tier": sub.tier,
         "strategic_queries_limit": sub.strategic_queries_limit,
@@ -103,6 +113,10 @@ async def subscription_info(
         "strategic_queries_remaining": remaining,
         "billing_period_start": sub.billing_period_start.isoformat() if sub.billing_period_start else None,
         "billing_period_end": sub.billing_period_end.isoformat() if sub.billing_period_end else None,
+        "max_clients": tier_config["max_clients"],
+        "current_clients": client_info["current"],
+        "max_documents": tier_config["max_documents"],
+        "current_documents": doc_info["current"],
     }
 
 

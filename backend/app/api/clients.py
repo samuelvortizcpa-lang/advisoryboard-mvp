@@ -13,6 +13,7 @@ from app.schemas.client import (
     ClientUpdate,
 )
 from app.services import client_service, user_service
+from app.services.subscription_service import check_client_limit
 
 router = APIRouter()
 
@@ -49,6 +50,12 @@ async def create_client(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> ClientResponse:
     user = user_service.get_or_create_user(db, current_user)
+    limit_check = check_client_limit(db, user.clerk_id, user.id)
+    if not limit_check["allowed"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client limit reached. Upgrade your plan to add more clients.",
+        )
     return client_service.create_client(db, data=data, owner_id=user.id)
 
 
