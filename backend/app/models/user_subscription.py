@@ -67,6 +67,9 @@ class UserSubscription(Base):
     stripe_status: Mapped[Optional[str]] = mapped_column(
         String(50), nullable=True, default="none"
     )
+    payment_status: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True
+    )
 
     def __repr__(self) -> str:
         return (

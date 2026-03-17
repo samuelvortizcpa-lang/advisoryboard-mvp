@@ -68,12 +68,14 @@ def create_checkout_session(
     """Create a Stripe Checkout session and return the URL."""
     stripe = _stripe()
     price_id = _price_for_tier(tier)
+    settings = get_settings()
+    base_url = settings.frontend_url.rstrip("/")
 
     params: dict = {
         "mode": "subscription",
         "line_items": [{"price": price_id, "quantity": 1}],
-        "success_url": "https://myadvisoryboard.space/dashboard/settings/subscriptions?success=true",
-        "cancel_url": "https://myadvisoryboard.space/dashboard/settings/subscriptions?canceled=true",
+        "success_url": f"{base_url}/dashboard/settings/subscriptions?success=true",
+        "cancel_url": f"{base_url}/dashboard/settings/subscriptions?canceled=true",
         "metadata": {"user_id": user_id, "tier": tier},
     }
     if user_email:
@@ -86,11 +88,71 @@ def create_checkout_session(
 def create_customer_portal_session(stripe_customer_id: str) -> str:
     """Create a Stripe Billing Portal session and return the URL."""
     stripe = _stripe()
+    settings = get_settings()
+    base_url = settings.frontend_url.rstrip("/")
     session = stripe.billing_portal.Session.create(
         customer=stripe_customer_id,
-        return_url="https://myadvisoryboard.space/dashboard/settings/subscriptions",
+        return_url=f"{base_url}/dashboard/settings/subscriptions",
     )
     return session.url
+
+
+# ---------------------------------------------------------------------------
+# Sync / Reconciliation
+# ---------------------------------------------------------------------------
+
+
+def sync_subscription_from_stripe(db: Session, stripe_subscription_id: str) -> UserSubscription | None:
+    """
+    Fetch a subscription from the Stripe API and reconcile the local record.
+
+    Returns the updated UserSubscription or None if not found locally.
+    """
+    sub = (
+        db.query(UserSubscription)
+        .filter(UserSubscription.stripe_subscription_id == stripe_subscription_id)
+        .first()
+    )
+    if not sub:
+        logger.warning("sync_subscription_from_stripe: no local record for %s", stripe_subscription_id)
+        return None
+
+    try:
+        stripe = _stripe()
+        stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
+    except Exception:
+        logger.error("Failed to fetch Stripe subscription %s", stripe_subscription_id, exc_info=True)
+        return sub
+
+    # Map price to tier
+    items = stripe_sub.get("items", {}).get("data", [])
+    if items:
+        price_id = items[0].get("price", {}).get("id", "")
+        new_tier = _tier_for_price(price_id)
+        tier_config = TIER_DEFAULTS.get(new_tier, TIER_DEFAULTS["free"])
+        sub.tier = new_tier
+        sub.strategic_queries_limit = tier_config["strategic_queries_limit"]
+
+    sub.stripe_status = stripe_sub.get("status", sub.stripe_status)
+
+    # Sync billing period
+    period_start = stripe_sub.get("current_period_start")
+    period_end = stripe_sub.get("current_period_end")
+    if period_start:
+        sub.billing_period_start = datetime.fromtimestamp(period_start, tz=timezone.utc)
+    if period_end:
+        sub.billing_period_end = datetime.fromtimestamp(period_end, tz=timezone.utc)
+
+    sub.payment_status = "active" if stripe_sub.get("status") == "active" else stripe_sub.get("status")
+    sub.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(sub)
+
+    logger.info(
+        "Synced subscription from Stripe: user=%s tier=%s status=%s",
+        sub.user_id, sub.tier, sub.stripe_status,
+    )
+    return sub
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +194,7 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
     sub.stripe_customer_id = session.get("customer")
     sub.stripe_subscription_id = session.get("subscription")
     sub.stripe_status = "active"
+    sub.payment_status = "active"
     sub.updated_at = now
 
     # Use Stripe's billing period if available via the subscription object
@@ -165,7 +228,7 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
 
 
 def handle_subscription_updated(db: Session, subscription: dict) -> None:
-    """Sync tier when subscription changes in Stripe."""
+    """Sync tier and billing period when subscription changes in Stripe."""
     stripe_sub_id = subscription.get("id")
     sub = (
         db.query(UserSubscription)
@@ -186,6 +249,16 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
         sub.strategic_queries_limit = tier_config["strategic_queries_limit"]
 
     sub.stripe_status = subscription.get("status", "active")
+
+    # Sync billing period from Stripe
+    period_start = subscription.get("current_period_start")
+    period_end = subscription.get("current_period_end")
+    if period_start:
+        sub.billing_period_start = datetime.fromtimestamp(period_start, tz=timezone.utc)
+    if period_end:
+        sub.billing_period_end = datetime.fromtimestamp(period_end, tz=timezone.utc)
+
+    sub.payment_status = "active" if subscription.get("status") == "active" else subscription.get("status")
     sub.updated_at = datetime.now(timezone.utc)
     db.commit()
 
@@ -213,6 +286,7 @@ def handle_subscription_deleted(db: Session, subscription: dict) -> None:
     sub.strategic_queries_limit = free_config["strategic_queries_limit"]
     sub.strategic_queries_used = 0
     sub.stripe_status = "canceled"
+    sub.payment_status = None
     sub.billing_period_start = now
     sub.billing_period_end = now + timedelta(days=30)
     sub.updated_at = now
@@ -236,6 +310,7 @@ def handle_payment_failed(db: Session, invoice: dict) -> None:
         return
 
     sub.stripe_status = "past_due"
+    sub.payment_status = "failed"
     sub.updated_at = datetime.now(timezone.utc)
     db.commit()
 

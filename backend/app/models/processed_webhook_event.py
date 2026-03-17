@@ -1,0 +1,17 @@
+from datetime import datetime
+
+from sqlalchemy import DateTime, String, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.database import Base
+
+
+class ProcessedWebhookEvent(Base):
+    """Tracks processed Stripe webhook event IDs for idempotency."""
+
+    __tablename__ = "processed_webhook_events"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
