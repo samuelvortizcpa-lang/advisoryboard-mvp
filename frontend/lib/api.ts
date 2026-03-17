@@ -490,6 +490,57 @@ export function createUsageApi(getToken: GetToken) {
   };
 }
 
+// ─── Admin subscription types ────────────────────────────────────────────────
+
+export interface AdminSubscription {
+  id: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  tier: string;
+  strategic_queries_limit: number;
+  strategic_queries_used: number;
+  billing_period_start: string;
+  billing_period_end: string | null;
+  created_at: string;
+  updated_at: string;
+  usage_percentage: number;
+}
+
+export interface AdminSubscriptionSummary {
+  total_users: number;
+  by_tier: Record<string, number>;
+  users_near_limit: number;
+  users_over_limit: number;
+}
+
+// ─── Admin API factory ──────────────────────────────────────────────────────
+
+export function createAdminApi(getToken: GetToken) {
+  return {
+    listSubscriptions() {
+      return apiFetch<AdminSubscription[]>(getToken, "/admin/subscriptions");
+    },
+
+    subscriptionSummary() {
+      return apiFetch<AdminSubscriptionSummary>(getToken, "/admin/subscriptions/summary");
+    },
+
+    updateTier(userId: string, tier: string) {
+      return apiFetch<AdminSubscription>(getToken, `/admin/subscriptions/${userId}`, {
+        method: "PUT",
+        body: JSON.stringify({ tier }),
+      });
+    },
+
+    resetUsage(userId: string) {
+      return apiFetch<AdminSubscription>(getToken, `/admin/subscriptions/${userId}/reset-usage`, {
+        method: "POST",
+      });
+    },
+  };
+}
+
 // ─── Brief types ───────────────────────────────────────────────────────────────
 
 export interface ClientBrief {
