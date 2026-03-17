@@ -54,7 +54,7 @@ def _tier_for_price(price_id: str) -> str:
         settings.stripe_price_professional: "professional",
         settings.stripe_price_firm: "firm",
     }
-    return mapping.get(price_id, "starter")
+    return mapping.get(price_id, "free")
 
 
 # ---------------------------------------------------------------------------
@@ -129,12 +129,33 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
 
     sub.tier = tier
     sub.strategic_queries_limit = tier_config["strategic_queries_limit"]
-    sub.billing_period_start = now
-    sub.billing_period_end = now + timedelta(days=30)
     sub.stripe_customer_id = session.get("customer")
     sub.stripe_subscription_id = session.get("subscription")
     sub.stripe_status = "active"
     sub.updated_at = now
+
+    # Use Stripe's billing period if available via the subscription object
+    stripe_sub_id = session.get("subscription")
+    if stripe_sub_id:
+        try:
+            stripe = _stripe()
+            stripe_sub = stripe.Subscription.retrieve(stripe_sub_id)
+            sub.billing_period_start = datetime.fromtimestamp(
+                stripe_sub.current_period_start, tz=timezone.utc
+            )
+            sub.billing_period_end = datetime.fromtimestamp(
+                stripe_sub.current_period_end, tz=timezone.utc
+            )
+        except Exception:
+            logger.warning("Could not fetch Stripe subscription periods, using 30-day default")
+            sub.billing_period_start = now
+            sub.billing_period_end = now + timedelta(days=30)
+    else:
+        sub.billing_period_start = now
+        sub.billing_period_end = now + timedelta(days=30)
+
+    # Reset usage counter on upgrade
+    sub.strategic_queries_used = 0
 
     db.commit()
     logger.info(
@@ -160,7 +181,7 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
     if items:
         price_id = items[0].get("price", {}).get("id", "")
         new_tier = _tier_for_price(price_id)
-        tier_config = TIER_DEFAULTS.get(new_tier, TIER_DEFAULTS["starter"])
+        tier_config = TIER_DEFAULTS.get(new_tier, TIER_DEFAULTS["free"])
         sub.tier = new_tier
         sub.strategic_queries_limit = tier_config["strategic_queries_limit"]
 
@@ -175,7 +196,7 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
 
 
 def handle_subscription_deleted(db: Session, subscription: dict) -> None:
-    """Downgrade to starter when subscription is canceled."""
+    """Downgrade to free when subscription is canceled."""
     stripe_sub_id = subscription.get("id")
     sub = (
         db.query(UserSubscription)
@@ -186,14 +207,18 @@ def handle_subscription_deleted(db: Session, subscription: dict) -> None:
         logger.warning("Subscription deleted for unknown stripe_subscription_id: %s", stripe_sub_id)
         return
 
-    starter_config = TIER_DEFAULTS["starter"]
-    sub.tier = "starter"
-    sub.strategic_queries_limit = starter_config["strategic_queries_limit"]
+    free_config = TIER_DEFAULTS["free"]
+    now = datetime.now(timezone.utc)
+    sub.tier = "free"
+    sub.strategic_queries_limit = free_config["strategic_queries_limit"]
+    sub.strategic_queries_used = 0
     sub.stripe_status = "canceled"
-    sub.updated_at = datetime.now(timezone.utc)
+    sub.billing_period_start = now
+    sub.billing_period_end = now + timedelta(days=30)
+    sub.updated_at = now
     db.commit()
 
-    logger.info("Subscription canceled — downgraded to starter: user=%s", sub.user_id)
+    logger.info("Subscription canceled — downgraded to free: user=%s", sub.user_id)
 
 
 def handle_payment_failed(db: Session, invoice: dict) -> None:

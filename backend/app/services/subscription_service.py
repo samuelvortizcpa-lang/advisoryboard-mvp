@@ -128,7 +128,7 @@ def check_opus_quota(db: Session, user_id: str) -> dict:
     Returns {allowed, tier, used, limit, remaining}.
     """
     sub = get_or_create_subscription(db, user_id)
-    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["starter"])
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
     opus_limit = tier_config["opus_queries_limit"]
 
     if opus_limit == 0:
