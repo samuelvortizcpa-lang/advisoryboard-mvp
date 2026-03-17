@@ -521,8 +521,11 @@ async def answer_question(
         }
     """
     # Text chunk search is the PRIMARY retrieval method.
-    # Page images are looked up after to supplement matching chunks.
+    # Gemini visual search supplements with page image matches.
     chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
+
+    # Run Gemini page image search in parallel (graceful — empty if unavailable)
+    gemini_page_results = await search_page_images(db, client_id, question)
 
     # ---- Keyword fallback: direct text search for specific phrases ----
     # Vector search alone struggles with structured forms (tax returns) where
@@ -788,6 +791,23 @@ async def answer_question(
                 preview += "…"
             best_chunk_preview[doc_id_str] = preview
             best_chunk_index[doc_id_str] = chunk.chunk_index
+
+    # --- Inject Gemini visual search results into page_images_by_doc ---
+    # These are pages that matched the query via embedding similarity even if
+    # they weren't in the text-chunk result set.
+    for pi, vis_score in gemini_page_results:
+        did = str(pi.document_id)
+        if did not in doc_map:
+            doc = db.query(Document).filter(Document.id == pi.document_id).first()
+            if doc and doc.client_id == client_id:
+                doc_map[did] = doc
+                best_chunk_score.setdefault(did, vis_score)
+                best_chunk_preview.setdefault(did, pi.page_text_preview or "")
+                best_chunk_index.setdefault(did, 0)
+        if did not in page_images_by_doc:
+            page_images_by_doc[did] = []
+        if not any(p.id == pi.id for p in page_images_by_doc[did]):
+            page_images_by_doc[did].append(pi)
 
     # --- Score every page of each candidate document ---
     # Two tiers: pages with answer values (preferred) and phrase-only pages (fallback)

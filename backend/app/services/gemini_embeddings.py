@@ -17,7 +17,7 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-GEMINI_EMBED_MODEL = "gemini-embedding-exp-03-07"
+GEMINI_EMBED_MODEL = "gemini-embedding-2-preview"
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +61,7 @@ def embed_image(image_bytes: bytes) -> list[float]:
     result = client.models.embed_content(
         model=GEMINI_EMBED_MODEL,
         contents=types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+        config={"output_dimensionality": 768},
     )
 
     return list(result.embeddings[0].values)
@@ -80,6 +81,7 @@ def embed_text(text: str) -> list[float]:
     result = client.models.embed_content(
         model=GEMINI_EMBED_MODEL,
         contents=text,
+        config={"output_dimensionality": 768},
     )
 
     return list(result.embeddings[0].values)

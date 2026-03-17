@@ -85,10 +85,7 @@ async def process_page_images(db: Session, document: Document) -> None:
     if document.file_type != "pdf":
         return
 
-    # TODO: Re-enable when Gemini embedding model is updated.
-    # gemini-embedding-exp-03-07 returns 404 on every call, wasting time
-    # and cluttering logs with failed API calls per page.
-    gemini_available = False
+    gemini_available = gemini_embeddings.is_available()
 
     doc_label = f"{document.id} ({document.filename!r})"
     logger.info(
@@ -164,12 +161,23 @@ async def process_page_images(db: Session, document: Document) -> None:
                         page_num, len(text_preview),
                     )
 
+                # Generate Gemini embedding (best-effort)
+                embedding = None
+                if gemini_available:
+                    try:
+                        embedding = gemini_embeddings.embed_image(jpeg_bytes)
+                    except Exception as emb_exc:
+                        logger.warning(
+                            "Page images: Gemini embedding failed for %s page %d: %s",
+                            doc_label, page_num, emb_exc,
+                        )
+
                 page_image_rows.append(
                     DocumentPageImage(
                         document_id=document.id,
                         page_number=page_num,
                         image_path=storage_path,
-                        image_embedding=None,
+                        image_embedding=embedding,
                         page_text_preview=text_preview,
                     )
                 )
