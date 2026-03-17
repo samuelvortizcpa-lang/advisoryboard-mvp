@@ -17,6 +17,7 @@ from app.api.rag import router as rag_router
 from app.api.briefs import router as briefs_router
 from app.api.timeline import router as timeline_router
 from app.api.usage import router as usage_router
+from app.api.admin import router as admin_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -100,3 +101,4 @@ app.include_router(alerts_router,       prefix="/api", tags=["alerts"])
 app.include_router(briefs_router,       prefix="/api", tags=["briefs"])
 app.include_router(timeline_router,     prefix="/api", tags=["timeline"])
 app.include_router(usage_router,       prefix="/api", tags=["usage"])
+app.include_router(admin_router,       prefix="/api/admin", tags=["admin"])
