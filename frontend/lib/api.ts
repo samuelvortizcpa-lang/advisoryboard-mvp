@@ -381,6 +381,52 @@ export interface UsageSummary {
   breakdown_by_query_type: UsageTypeBreakdown[];
 }
 
+// ─── Usage analytics types ──────────────────────────────────────────────────────
+
+export interface UsageHistoryItem {
+  id: string;
+  created_at: string;
+  endpoint: string | null;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost: number;
+  client_id: string | null;
+  client_name: string | null;
+}
+
+export interface UsageHistoryResponse {
+  items: UsageHistoryItem[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface DailyModelStats {
+  queries: number;
+  tokens: number;
+  cost: number;
+}
+
+export interface DailyUsageItem {
+  date: string;
+  total_queries: number;
+  total_tokens: number;
+  total_cost: number;
+  by_model: Record<string, DailyModelStats>;
+}
+
+export interface ClientUsageItem {
+  client_id: string;
+  client_name: string;
+  total_queries: number;
+  total_tokens: number;
+  total_cost: number;
+  last_query_at: string;
+}
+
 // ─── Usage API factory ─────────────────────────────────────────────────────────
 
 export function createUsageApi(getToken: GetToken) {
@@ -391,6 +437,55 @@ export function createUsageApi(getToken: GetToken) {
 
     subscription() {
       return apiFetch<SubscriptionInfo>(getToken, `/usage/subscription`);
+    },
+
+    history(params: {
+      page?: number;
+      per_page?: number;
+      start_date?: string;
+      end_date?: string;
+      model?: string;
+      endpoint?: string;
+      client_id?: string;
+    } = {}) {
+      const q = new URLSearchParams();
+      if (params.page) q.set("page", String(params.page));
+      if (params.per_page) q.set("per_page", String(params.per_page));
+      if (params.start_date) q.set("start_date", params.start_date);
+      if (params.end_date) q.set("end_date", params.end_date);
+      if (params.model) q.set("model", params.model);
+      if (params.endpoint) q.set("endpoint", params.endpoint);
+      if (params.client_id) q.set("client_id", params.client_id);
+      const qs = q.toString();
+      return apiFetch<UsageHistoryResponse>(getToken, `/usage/history${qs ? `?${qs}` : ""}`);
+    },
+
+    daily(days = 30) {
+      return apiFetch<DailyUsageItem[]>(getToken, `/usage/daily?days=${days}`);
+    },
+
+    byClient(days = 30) {
+      return apiFetch<ClientUsageItem[]>(getToken, `/usage/by-client?days=${days}`);
+    },
+
+    async exportCsv(startDate?: string, endDate?: string): Promise<void> {
+      const token = await getToken();
+      const q = new URLSearchParams();
+      if (startDate) q.set("start_date", startDate);
+      if (endDate) q.set("end_date", endDate);
+      const qs = q.toString();
+      const res = await fetch(
+        `${API_BASE}/usage/export${qs ? `?${qs}` : ""}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "usage_export.csv";
+      a.click();
+      URL.revokeObjectURL(url);
     },
   };
 }
