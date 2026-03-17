@@ -7,9 +7,11 @@ import { useEffect, useState, useCallback } from "react";
 import {
   createAdminApi,
   createStripeApi,
+  createUsageApi,
   AdminSubscription,
   AdminSubscriptionSummary,
   StripeStatus,
+  SubscriptionInfo,
 } from "@/lib/api";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -24,27 +26,45 @@ function fmtDate(iso: string | null) {
 }
 
 const TIER_BADGE: Record<string, string> = {
+  free: "bg-emerald-100 text-emerald-700",
   starter: "bg-gray-100 text-gray-700",
   professional: "bg-blue-100 text-blue-700",
   firm: "bg-purple-100 text-purple-700",
 };
 
-const TIERS = ["starter", "professional", "firm"] as const;
+const TIERS = ["free", "starter", "professional", "firm"] as const;
+const PAID_TIERS = ["starter", "professional", "firm"] as const;
 
 function progressColor(pct: number) {
-  if (pct > 95) return "bg-red-500";
-  if (pct > 80) return "bg-orange-400";
-  if (pct > 60) return "bg-yellow-400";
+  if (pct > 90) return "bg-red-500";
+  if (pct > 70) return "bg-yellow-400";
   return "bg-green-500";
+}
+
+function barPct(current: number, limit: number | null) {
+  if (limit === null || limit === 0) return 0;
+  return Math.min(100, (current / limit) * 100);
 }
 
 const PRICING = [
   {
+    tier: "free",
+    price: "$0",
+    features: [
+      "3 clients",
+      "10 documents",
+      "50 AI queries/month",
+      "All document types",
+      "RAG Q&A",
+    ],
+  },
+  {
     tier: "starter",
     price: "$99",
     features: [
-      "GPT-4o-mini only",
       "25 clients",
+      "500 documents",
+      "GPT-4o-mini only",
       "500MB storage",
     ],
   },
@@ -52,9 +72,10 @@ const PRICING = [
     tier: "professional",
     price: "$149",
     features: [
+      "100 clients",
+      "5,000 documents",
       "100 strategic queries/mo",
       "10 Opus queries/mo",
-      "100 clients",
       "5GB storage",
     ],
   },
@@ -62,9 +83,10 @@ const PRICING = [
     tier: "firm",
     price: "$249",
     features: [
+      "Unlimited clients",
+      "Unlimited documents",
       "500 strategic queries/mo",
       "50 Opus queries/mo",
-      "Unlimited clients",
       "25GB storage",
     ],
   },
@@ -81,6 +103,7 @@ export default function SubscriptionManagementPage() {
   const [subs, setSubs] = useState<AdminSubscription[]>([]);
   const [summary, setSummary] = useState<AdminSubscriptionSummary | null>(null);
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
+  const [subInfo, setSubInfo] = useState<SubscriptionInfo | null>(null);
 
   // Inline interaction state
   const [tierDropdown, setTierDropdown] = useState<string | null>(null);
@@ -110,14 +133,17 @@ export default function SubscriptionManagementPage() {
     try {
       const adminApi = createAdminApi(getToken);
       const stripeApi = createStripeApi(getToken);
-      const [s, sum, ss] = await Promise.all([
+      const usageApi = createUsageApi(getToken);
+      const [s, sum, ss, si] = await Promise.all([
         adminApi.listSubscriptions(),
         adminApi.subscriptionSummary(),
         stripeApi.status().catch(() => null),
+        usageApi.subscription().catch(() => null),
       ]);
       setSubs(s);
       setSummary(sum);
       setStripeStatus(ss);
+      setSubInfo(si);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load subscriptions");
     } finally {
@@ -182,7 +208,7 @@ export default function SubscriptionManagementPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 animate-pulse">
-        <div className="mx-auto max-w-5xl space-y-6">
+        <div className="mx-auto max-w-6xl space-y-6">
           <div className="h-8 w-56 rounded bg-gray-200" />
           <div className="h-4 w-72 rounded bg-gray-200" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -199,7 +225,7 @@ export default function SubscriptionManagementPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-6xl">
           <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
             <p className="text-sm text-red-600">{error}</p>
             <button onClick={loadData} className="mt-3 text-sm font-medium text-red-700 hover:underline">
@@ -211,20 +237,26 @@ export default function SubscriptionManagementPage() {
     );
   }
 
-  const currentTier = stripeStatus?.tier ?? subs[0]?.tier ?? "starter";
+  const currentTier = stripeStatus?.tier ?? subInfo?.tier ?? subs[0]?.tier ?? "free";
+  const isFreeTier = currentTier === "free";
+
+  // Determine if any limit is > 80% for upgrade prompt
+  const showUpgradePrompt = isFreeTier && subInfo && (
+    (subInfo.max_clients !== null && subInfo.current_clients / subInfo.max_clients > 0.8) ||
+    (subInfo.max_documents !== null && subInfo.current_documents / subInfo.max_documents > 0.8) ||
+    (subInfo.strategic_queries_limit > 0 && subInfo.strategic_queries_used / subInfo.strategic_queries_limit > 0.8)
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
 
         {/* ── Success/Cancel Banners ────────────────────────────────────── */}
         {bannerVisible && showSuccess && (
           <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-5 py-3">
             <p className="text-sm font-medium text-green-700">Subscription updated successfully!</p>
             <button onClick={() => setBannerVisible(false)} className="text-green-500 hover:text-green-700">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <XIcon />
             </button>
           </div>
         )}
@@ -232,9 +264,7 @@ export default function SubscriptionManagementPage() {
           <div className="flex items-center justify-between rounded-xl border border-yellow-200 bg-yellow-50 px-5 py-3">
             <p className="text-sm font-medium text-yellow-700">Checkout canceled. No changes were made.</p>
             <button onClick={() => setBannerVisible(false)} className="text-yellow-500 hover:text-yellow-700">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <XIcon />
             </button>
           </div>
         )}
@@ -243,7 +273,7 @@ export default function SubscriptionManagementPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Subscription Management</h1>
-            <p className="mt-1 text-sm text-gray-500">Manage user tiers and quota usage</p>
+            <p className="mt-1 text-sm text-gray-500">Manage your plan and monitor usage limits</p>
           </div>
           {stripeConfigured && stripeStatus?.stripe_customer_id && (
             <button
@@ -256,67 +286,123 @@ export default function SubscriptionManagementPage() {
           )}
         </div>
 
-        {/* ── Pricing Cards ─────────────────────────────────────────────── */}
-        {stripeConfigured ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {PRICING.map((plan) => {
-              const isCurrent = currentTier === plan.tier;
-              const isUpgrade = TIERS.indexOf(plan.tier as typeof TIERS[number]) > TIERS.indexOf(currentTier as typeof TIERS[number]);
-              return (
-                <div
-                  key={plan.tier}
-                  className={`relative rounded-xl border p-5 shadow-sm ${
-                    isCurrent
-                      ? "border-blue-300 bg-blue-50/50 ring-1 ring-blue-200"
-                      : "border-gray-200 bg-white"
-                  }`}
-                >
-                  {isCurrent && (
-                    <span className="absolute -top-2.5 left-4 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-semibold text-white">
-                      Current Plan
-                    </span>
-                  )}
-                  <h3 className="text-sm font-semibold capitalize text-gray-900">{plan.tier}</h3>
-                  <p className="mt-1 text-2xl font-bold text-gray-900">
-                    {plan.price}<span className="text-sm font-normal text-gray-500">/mo</span>
-                  </p>
-                  <ul className="mt-3 space-y-1.5">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-center gap-2 text-xs text-gray-600">
-                        <svg className="h-3.5 w-3.5 flex-shrink-0 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  {!isCurrent && (
-                    <button
-                      onClick={() => handleCheckout(plan.tier)}
-                      disabled={checkoutTier !== null}
-                      className={`mt-4 w-full rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 ${
-                        isUpgrade
-                          ? "bg-blue-600 text-white hover:bg-blue-700"
-                          : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      {checkoutTier === plan.tier ? "Redirecting\u2026" : isUpgrade ? "Upgrade" : "Downgrade"}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
-            <p className="text-sm text-gray-500">Payment processing coming soon</p>
+        {/* ── Usage Limits ───────────────────────────────────────────────── */}
+        {subInfo && (
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-gray-900 mb-4">Usage Limits</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <UsageBar
+                label="Clients"
+                current={subInfo.current_clients}
+                limit={subInfo.max_clients}
+              />
+              <UsageBar
+                label="Documents"
+                current={subInfo.current_documents}
+                limit={subInfo.max_documents}
+              />
+              <UsageBar
+                label="AI Queries"
+                current={subInfo.strategic_queries_used}
+                limit={subInfo.strategic_queries_limit > 0 ? subInfo.strategic_queries_limit : null}
+                suffix="this billing period"
+              />
+              {(currentTier === "professional" || currentTier === "firm") && (
+                <UsageBar
+                  label="Opus Queries"
+                  current={0}
+                  limit={currentTier === "professional" ? 10 : 50}
+                  suffix="this billing period"
+                />
+              )}
+            </div>
+            {showUpgradePrompt && (
+              <p className="mt-4 text-xs text-amber-600 font-medium">
+                Running low on capacity?{" "}
+                <span className="underline cursor-pointer" onClick={() => document.getElementById("pricing-section")?.scrollIntoView({ behavior: "smooth" })}>
+                  Upgrade for more
+                </span>
+              </p>
+            )}
           </div>
         )}
 
+        {/* ── Pricing Cards ─────────────────────────────────────────────── */}
+        <div id="pricing-section">
+          {stripeConfigured ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {PRICING.map((plan) => {
+                const isCurrent = currentTier === plan.tier;
+                const isFreeCard = plan.tier === "free";
+                const tierIndex = TIERS.indexOf(plan.tier as typeof TIERS[number]);
+                const currentIndex = TIERS.indexOf(currentTier as typeof TIERS[number]);
+                const isUpgrade = tierIndex > currentIndex;
+                return (
+                  <div
+                    key={plan.tier}
+                    className={`relative rounded-xl border p-5 shadow-sm ${
+                      isCurrent
+                        ? "border-blue-300 bg-blue-50/50 ring-1 ring-blue-200"
+                        : "border-gray-200 bg-white"
+                    }`}
+                  >
+                    {isCurrent && (
+                      <span className="absolute -top-2.5 left-4 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-semibold text-white">
+                        Current Plan
+                      </span>
+                    )}
+                    <h3 className="text-sm font-semibold capitalize text-gray-900">{plan.tier}</h3>
+                    <p className="mt-1 text-2xl font-bold text-gray-900">
+                      {plan.price}<span className="text-sm font-normal text-gray-500">/mo</span>
+                    </p>
+                    <ul className="mt-3 space-y-1.5">
+                      {plan.features.map((f) => (
+                        <li key={f} className="flex items-center gap-2 text-xs text-gray-600">
+                          <CheckIcon />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                    {/* Show Upgrade button only on paid cards when user is on a lower tier */}
+                    {!isCurrent && !isFreeCard && isUpgrade && (
+                      <button
+                        onClick={() => handleCheckout(plan.tier)}
+                        disabled={checkoutTier !== null}
+                        className="mt-4 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {checkoutTier === plan.tier ? "Redirecting\u2026" : "Upgrade"}
+                      </button>
+                    )}
+                    {/* For paid users on a higher tier viewing a lower paid card — manage via portal */}
+                    {!isCurrent && !isFreeCard && !isUpgrade && stripeStatus?.stripe_customer_id && (
+                      <button
+                        onClick={handleManageBilling}
+                        disabled={portalLoading}
+                        className="mt-4 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Manage Plan
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+              <p className="text-sm text-gray-500">Payment processing coming soon</p>
+            </div>
+          )}
+        </div>
+
         {/* ── Summary Cards ─────────────────────────────────────────────── */}
         {summary && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <SummaryCard label="Total Users" value={summary.total_users} />
+            <SummaryCard
+              label="Free"
+              value={summary.by_tier.free ?? 0}
+              badgeClass="bg-emerald-100 text-emerald-700"
+            />
             <SummaryCard
               label="Starter"
               value={summary.by_tier.starter ?? 0}
@@ -438,7 +524,7 @@ export default function SubscriptionManagementPage() {
                                         onClick={() => handleTierChange(sub.user_id, t)}
                                         className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 ${sub.tier === t ? "font-semibold text-blue-600" : "text-gray-700"}`}
                                       >
-                                        <span className={`h-2 w-2 rounded-full ${t === "starter" ? "bg-gray-400" : t === "professional" ? "bg-blue-400" : "bg-purple-400"}`} />
+                                        <span className={`h-2 w-2 rounded-full ${t === "free" ? "bg-emerald-400" : t === "starter" ? "bg-gray-400" : t === "professional" ? "bg-blue-400" : "bg-purple-400"}`} />
                                         <span className="capitalize">{t}</span>
                                         {sub.tier === t && <span className="ml-auto text-blue-600">&#10003;</span>}
                                       </button>
@@ -511,6 +597,45 @@ export default function SubscriptionManagementPage() {
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
+function UsageBar({
+  label,
+  current,
+  limit,
+  suffix,
+}: {
+  label: string;
+  current: number;
+  limit: number | null;
+  suffix?: string;
+}) {
+  const pct = barPct(current, limit);
+  const isUnlimited = limit === null;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1">
+        <p className="text-xs font-medium text-gray-700">{label}</p>
+        <p className="text-xs text-gray-500">
+          {isUnlimited ? (
+            <>{current} &mdash; Unlimited</>
+          ) : (
+            <>
+              {current} of {limit}
+              {suffix && <span className="text-gray-400 ml-1">{suffix}</span>}
+            </>
+          )}
+        </p>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+        <div
+          className={`h-full rounded-full transition-all ${isUnlimited ? "bg-green-500" : progressColor(pct)}`}
+          style={{ width: isUnlimited ? "5%" : `${Math.max(2, pct)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function SummaryCard({
   label,
   value,
@@ -530,5 +655,21 @@ function SummaryCard({
       </div>
       <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
     </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg className="h-3.5 w-3.5 flex-shrink-0 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
   );
 }

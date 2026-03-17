@@ -110,6 +110,14 @@ export default function NewClientPage() {
         {error && (
           <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
+            {error.toLowerCase().includes("client limit") && (
+              <Link
+                href="/dashboard/settings/subscriptions"
+                className="ml-2 font-medium text-blue-600 underline hover:text-blue-700"
+              >
+                Upgrade your plan
+              </Link>
+            )}
           </div>
         )}
 

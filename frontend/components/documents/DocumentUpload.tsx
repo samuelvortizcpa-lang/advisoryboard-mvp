@@ -85,7 +85,17 @@ export default function DocumentUpload({ clientId, onUploaded }: Props) {
       </div>
 
       {error && (
-        <p className="mt-2 text-sm text-red-600">{error}</p>
+        <div className="mt-2 text-sm text-red-600">
+          {error}
+          {error.toLowerCase().includes("document limit") && (
+            <a
+              href="/dashboard/settings/subscriptions"
+              className="ml-2 font-medium text-blue-600 underline hover:text-blue-700"
+            >
+              Upgrade your plan
+            </a>
+          )}
+        </div>
       )}
     </div>
   );

@@ -245,6 +245,10 @@ export interface SubscriptionInfo {
   strategic_queries_remaining: number;
   billing_period_start: string | null;
   billing_period_end: string | null;
+  max_clients: number | null;
+  current_clients: number;
+  max_documents: number | null;
+  current_documents: number;
 }
 
 export interface ProcessResponse {
