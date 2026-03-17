@@ -12,6 +12,16 @@ const settingsCards = [
     description: "Connect email accounts and configure routing rules",
     href: "/dashboard/settings/integrations",
   },
+  {
+    title: "Usage Analytics",
+    description: "View AI query history, costs, and usage trends across all clients.",
+    href: "/dashboard/settings/usage",
+  },
+  {
+    title: "Subscription Management",
+    description: "Manage user tiers, strategic query quotas, and billing periods.",
+    href: "/dashboard/settings/subscriptions",
+  },
 ];
 
 export default function SettingsPage() {
