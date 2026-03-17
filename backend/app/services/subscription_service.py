@@ -3,8 +3,8 @@ Subscription tier management and strategic query quota enforcement.
 
 Tiers:
   - starter:      factual only, no Claude access
-  - professional:  100 strategic queries/month
-  - firm:          500 strategic queries/month
+  - professional:  100 strategic queries/month, 10 opus queries/month
+  - firm:          500 strategic queries/month, 50 opus queries/month
 """
 
 from __future__ import annotations
@@ -12,9 +12,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
+from app.models.token_usage import TokenUsage
 from app.models.user_subscription import UserSubscription
 
 logger = logging.getLogger(__name__)
@@ -22,14 +23,17 @@ logger = logging.getLogger(__name__)
 TIER_DEFAULTS: dict[str, dict] = {
     "starter": {
         "strategic_queries_limit": 0,
+        "opus_queries_limit": 0,
         "models_allowed": ["gpt-4o-mini"],
     },
     "professional": {
         "strategic_queries_limit": 100,
-        "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514"],
+        "opus_queries_limit": 10,
+        "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
     },
     "firm": {
         "strategic_queries_limit": 500,
+        "opus_queries_limit": 50,
         "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
     },
 }
@@ -96,6 +100,47 @@ def check_quota(db: Session, user_id: str) -> dict:
         "tier": sub.tier,
         "used": sub.strategic_queries_used,
         "limit": sub.strategic_queries_limit,
+        "remaining": remaining,
+    }
+
+
+def check_opus_quota(db: Session, user_id: str) -> dict:
+    """
+    Check whether the user can make an Opus query.
+
+    Counts Opus usage from the token_usage table (no new DB columns needed).
+    Returns {allowed, tier, used, limit, remaining}.
+    """
+    sub = get_or_create_subscription(db, user_id)
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["starter"])
+    opus_limit = tier_config["opus_queries_limit"]
+
+    if opus_limit == 0:
+        return {
+            "allowed": False,
+            "tier": sub.tier,
+            "used": 0,
+            "limit": 0,
+            "remaining": 0,
+        }
+
+    # Count Opus queries in the current billing period from token_usage
+    opus_used = (
+        db.query(func.count(TokenUsage.id))
+        .filter(
+            TokenUsage.user_id == user_id,
+            TokenUsage.model == "claude-opus-4-20250514",
+            TokenUsage.created_at >= sub.billing_period_start,
+        )
+        .scalar()
+    ) or 0
+
+    remaining = max(0, opus_limit - opus_used)
+    return {
+        "allowed": opus_used < opus_limit,
+        "tier": sub.tier,
+        "used": opus_used,
+        "limit": opus_limit,
         "remaining": remaining,
     }
 

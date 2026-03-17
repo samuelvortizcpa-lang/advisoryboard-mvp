@@ -3,11 +3,12 @@ Query classifier and model router for the Advisory Intelligence Layer.
 
 Classifies user questions as "factual" or "strategic" using GPT-4o-mini,
 then routes to the appropriate model:
-  - factual  → GPT-4o-mini  (fast, cheap lookups)
-  - strategic → Claude Sonnet 4.6 (deep analysis & reasoning)
+  - factual   → GPT-4o-mini  (fast, cheap lookups)
+  - strategic  → Claude Sonnet 4.6 (deep analysis & reasoning)
+  - opus       → Claude Opus 4.6 (complex multi-document analysis)
 
 Falls back to GPT-4o-mini if ANTHROPIC_API_KEY is not configured.
-Enforces subscription quota for strategic queries.
+Enforces subscription quota for strategic and opus queries.
 """
 
 from __future__ import annotations
@@ -117,6 +118,66 @@ async def route_completion(
 
     quota_remaining: int | None = None
     quota_warning: str | None = None
+
+    # ── Opus path: explicit model_override="opus" ─────────────────────────
+    if query_type == "opus" and db and user_id and settings.anthropic_api_key:
+        try:
+            from app.services.subscription_service import check_opus_quota
+            opus_quota = check_opus_quota(db, user_id)
+            if not opus_quota["allowed"]:
+                # Exceed Opus quota → fall back to Sonnet (not GPT-4o-mini)
+                logger.info(
+                    "Opus query downgraded to strategic for user %s (opus used=%d/%d)",
+                    user_id, opus_quota["used"], opus_quota["limit"],
+                )
+                quota_warning = (
+                    f"Opus query limit reached ({opus_quota['used']}/{opus_quota['limit']}). "
+                    "Using Claude Sonnet instead."
+                )
+                query_type = "strategic"
+            # If allowed, fall through to the opus completion block below
+        except Exception:
+            logger.error("Opus quota check failed — allowing query", exc_info=True)
+
+    if query_type == "opus" and settings.anthropic_api_key:
+        strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
+        try:
+            client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+            response = await client.messages.create(
+                model="claude-opus-4-20250514",
+                max_tokens=4000,
+                system=strategic_system,
+                messages=[{"role": "user", "content": question}],
+                temperature=0.2,
+            )
+            answer = response.content[0].text
+            logger.info("Opus query answered by Claude Opus 4.6")
+
+            if db and user_id:
+                try:
+                    usage = response.usage
+                    log_token_usage(
+                        db,
+                        user_id=user_id,
+                        client_id=client_id,
+                        query_type="opus",
+                        model="claude-opus-4-20250514",
+                        prompt_tokens=usage.input_tokens if usage else 0,
+                        completion_tokens=usage.output_tokens if usage else 0,
+                        endpoint="chat",
+                    )
+                except Exception:
+                    logger.error("Failed to log Opus token usage", exc_info=True)
+
+            return {
+                "answer": answer,
+                "model_used": "claude-opus-4.6",
+                "quota_remaining": quota_remaining,
+                "quota_warning": quota_warning,
+            }
+        except Exception:
+            logger.exception("Claude Opus call failed — falling back to Sonnet")
+            query_type = "strategic"
 
     # Check quota for strategic queries
     if query_type == "strategic" and db and user_id:

@@ -70,6 +70,7 @@ const ENDPOINT_COLORS: Record<string, string> = {
 const MODEL_LABELS: Record<string, string> = {
   "gpt-4o-mini": "GPT-4o Mini",
   "claude-sonnet-4-20250514": "Claude Sonnet",
+  "claude-opus-4-20250514": "Claude Opus",
 };
 
 function modelLabel(m: string) {
@@ -204,6 +205,7 @@ export default function UsageAnalyticsPage() {
   const modelColors: Record<string, string> = {
     "gpt-4o-mini": "bg-blue-400",
     "claude-sonnet-4-20250514": "bg-purple-400",
+    "claude-opus-4-20250514": "bg-amber-400",
   };
 
   // Model breakdown from summary
@@ -348,6 +350,9 @@ export default function UsageAnalyticsPage() {
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-purple-400" /> Claude Sonnet
             </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-amber-400" /> Claude Opus
+            </span>
           </div>
         </div>
 
@@ -449,6 +454,7 @@ export default function UsageAnalyticsPage() {
                 <option value="">All Models</option>
                 <option value="gpt-4o-mini">GPT-4o Mini</option>
                 <option value="claude-sonnet-4-20250514">Claude Sonnet</option>
+                <option value="claude-opus-4-20250514">Claude Opus</option>
               </select>
               <select
                 value={historyEndpoint}

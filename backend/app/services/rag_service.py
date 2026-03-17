@@ -673,6 +673,8 @@ async def answer_question(
         query_type = "factual"
     elif model_override == "balanced":
         query_type = "strategic"
+    elif model_override == "opus":
+        query_type = "opus"
     else:
         query_type = await classify_query(
             question, db=db, user_id=user_id, client_id=client_id

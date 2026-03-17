@@ -87,7 +87,7 @@ class SearchResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
-    model_override: str | None = None  # null=auto, "fast"=GPT-4o-mini, "balanced"=Claude
+    model_override: str | None = None  # null=auto, "fast"=GPT-4o-mini, "balanced"=Claude Sonnet, "opus"=Claude Opus
 
 
 class SourceItem(BaseModel):

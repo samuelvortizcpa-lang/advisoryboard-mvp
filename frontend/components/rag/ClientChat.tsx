@@ -41,7 +41,7 @@ export default function ClientChat({ clientId, documentCount }: Props) {
   const [statusLoading, setStatusLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
-  const [modelMode, setModelMode] = useState<"auto" | "fast" | "balanced">("auto");
+  const [modelMode, setModelMode] = useState<"auto" | "fast" | "balanced" | "opus">("auto");
 
   const [exportingFormat, setExportingFormat] = useState<"txt" | "pdf" | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -339,10 +339,11 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           <div className="flex items-center gap-1 px-3 pt-2">
             <span className="mr-1 text-[10px] text-gray-400">Model:</span>
             {([
-              { key: "auto", label: "Auto", icon: "\u2728", tip: "Auto-route based on question type" },
-              { key: "fast", label: "Quick", icon: "\u26A1", tip: "Fast lookups using GPT-4o-mini" },
-              { key: "balanced", label: "Deep", icon: "\uD83E\uDDE0", tip: "Strategic analysis using Claude" },
-            ] as const).map(({ key, label, icon, tip }) => (
+              { key: "auto" as const, label: "Auto", icon: "\u2728", tip: "Auto-route based on question type" },
+              { key: "fast" as const, label: "Quick", icon: "\u26A1", tip: "Fast lookups using GPT-4o-mini" },
+              { key: "balanced" as const, label: "Deep", icon: "\uD83E\uDDE0", tip: "Strategic analysis using Claude Sonnet" },
+              { key: "opus" as const, label: "Opus", icon: "\uD83D\uDC8E", tip: "Complex multi-doc analysis using Claude Opus" },
+            ]).map(({ key, label, icon, tip }) => (
               <button
                 key={key}
                 type="button"
@@ -355,6 +356,8 @@ export default function ClientChat({ clientId, documentCount }: Props) {
                       ? "bg-gray-200 text-gray-700"
                       : key === "fast"
                       ? "bg-blue-100 text-blue-700"
+                      : key === "opus"
+                      ? "bg-amber-100 text-amber-700"
                       : "bg-purple-100 text-purple-700"
                     : "text-gray-400 hover:bg-gray-100 hover:text-gray-600",
                 ].join(" ")}
@@ -595,9 +598,17 @@ function MessageBubble({
         {!isUser && message.model_used && (
           <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
             <span className={`h-1.5 w-1.5 rounded-full ${
-              message.query_type === "strategic" ? "bg-purple-400" : "bg-gray-300"
+              message.model_used === "claude-opus-4.6"
+                ? "bg-amber-400"
+                : message.query_type === "strategic"
+                ? "bg-purple-400"
+                : "bg-gray-300"
             }`} />
-            {message.model_used === "gpt-4o-mini" ? "Quick Lookup" : "Deep Analysis"}
+            {message.model_used === "claude-opus-4.6"
+              ? "Opus Analysis"
+              : message.model_used === "gpt-4o-mini"
+              ? "Quick Lookup"
+              : "Deep Analysis"}
           </span>
         )}
 
