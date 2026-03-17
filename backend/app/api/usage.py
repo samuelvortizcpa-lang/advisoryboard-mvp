@@ -5,23 +5,57 @@ Routes (all require Clerk JWT auth):
   GET  /api/usage/summary?days=30
   GET  /api/usage/clients/{client_id}?days=30
   GET  /api/usage/subscription
+  GET  /api/usage/history          — paginated usage records
+  GET  /api/usage/daily            — daily aggregated stats
+  GET  /api/usage/by-client        — cost breakdown by client
+  GET  /api/usage/export           — CSV download
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict
+import csv
+import io
+import math
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
+from sqlalchemy import cast, Date, func
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.models.client import Client
+from app.models.token_usage import TokenUsage
+from app.schemas.usage import (
+    ClientUsageResponse,
+    DailyUsageResponse,
+    ModelStats,
+    UsageHistoryResponse,
+    UsageRecordResponse,
+)
 from app.services import user_service
 from app.services.subscription_service import get_or_create_subscription
 from app.services.token_tracking_service import get_usage_by_client, get_usage_summary
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_clerk_id(db: Session, current_user: Dict[str, Any]) -> str:
+    """Resolve Clerk user ID from the JWT-authenticated user."""
+    user = user_service.get_or_create_user(db, current_user)
+    return user.clerk_id
+
+
+# ---------------------------------------------------------------------------
+# Existing endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.get(
@@ -41,7 +75,7 @@ async def usage_summary(
     "/usage/clients/{client_id}",
     summary="Get AI token usage for a specific client",
 )
-async def usage_by_client(
+async def usage_by_client_endpoint(
     client_id: UUID,
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
@@ -70,3 +104,270 @@ async def subscription_info(
         "billing_period_start": sub.billing_period_start.isoformat() if sub.billing_period_start else None,
         "billing_period_end": sub.billing_period_end.isoformat() if sub.billing_period_end else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# New analytics endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/usage/history",
+    response_model=UsageHistoryResponse,
+    summary="Paginated list of individual usage records",
+)
+async def usage_history(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    start_date: Optional[str] = Query(None, description="ISO date string (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="ISO date string (YYYY-MM-DD)"),
+    model: Optional[str] = Query(None),
+    endpoint: Optional[str] = Query(None),
+    client_id: Optional[UUID] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> UsageHistoryResponse:
+    clerk_id = _get_clerk_id(db, current_user)
+
+    query = (
+        db.query(
+            TokenUsage.id,
+            TokenUsage.created_at,
+            TokenUsage.endpoint,
+            TokenUsage.model,
+            TokenUsage.prompt_tokens,
+            TokenUsage.completion_tokens,
+            TokenUsage.total_tokens,
+            TokenUsage.estimated_cost_usd,
+            TokenUsage.client_id,
+            Client.name.label("client_name"),
+        )
+        .outerjoin(Client, TokenUsage.client_id == Client.id)
+        .filter(TokenUsage.user_id == clerk_id)
+    )
+
+    if start_date:
+        query = query.filter(TokenUsage.created_at >= datetime.fromisoformat(start_date))
+    if end_date:
+        end_dt = datetime.fromisoformat(end_date) + timedelta(days=1)
+        query = query.filter(TokenUsage.created_at < end_dt)
+    if model:
+        query = query.filter(TokenUsage.model == model)
+    if endpoint:
+        query = query.filter(TokenUsage.endpoint == endpoint)
+    if client_id:
+        query = query.filter(TokenUsage.client_id == client_id)
+
+    total = query.count()
+    total_pages = max(1, math.ceil(total / per_page))
+
+    rows = (
+        query
+        .order_by(TokenUsage.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    items = [
+        UsageRecordResponse(
+            id=r.id,
+            created_at=r.created_at,
+            endpoint=r.endpoint,
+            model=r.model,
+            prompt_tokens=r.prompt_tokens,
+            completion_tokens=r.completion_tokens,
+            total_tokens=r.total_tokens,
+            estimated_cost=float(r.estimated_cost_usd),
+            client_id=r.client_id,
+            client_name=r.client_name,
+        )
+        for r in rows
+    ]
+
+    return UsageHistoryResponse(
+        items=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+    )
+
+
+@router.get(
+    "/usage/daily",
+    response_model=list[DailyUsageResponse],
+    summary="Daily aggregated usage for charting",
+)
+async def usage_daily(
+    days: int = Query(30, ge=1, le=90),
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> list[DailyUsageResponse]:
+    clerk_id = _get_clerk_id(db, current_user)
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    day_col = cast(TokenUsage.created_at, Date).label("day")
+
+    rows = (
+        db.query(
+            day_col,
+            TokenUsage.model,
+            func.count().label("queries"),
+            func.coalesce(func.sum(TokenUsage.total_tokens), 0).label("tokens"),
+            func.coalesce(func.sum(TokenUsage.estimated_cost_usd), 0).label("cost"),
+        )
+        .filter(TokenUsage.user_id == clerk_id, TokenUsage.created_at >= since)
+        .group_by(day_col, TokenUsage.model)
+        .all()
+    )
+
+    # Build lookup: date_str -> model -> stats
+    daily: dict[str, dict[str, dict]] = {}
+    for r in rows:
+        d = r.day.isoformat() if isinstance(r.day, date) else str(r.day)
+        daily.setdefault(d, {})
+        daily[d][r.model] = {
+            "queries": r.queries,
+            "tokens": int(r.tokens),
+            "cost": float(r.cost),
+        }
+
+    # Collect all models seen
+    all_models = set()
+    for models in daily.values():
+        all_models.update(models.keys())
+
+    # Generate continuous date range with zero-fills
+    today = date.today()
+    result: list[DailyUsageResponse] = []
+    for i in range(days):
+        d = (today - timedelta(days=days - 1 - i)).isoformat()
+        model_data = daily.get(d, {})
+        by_model = {
+            m: ModelStats(
+                queries=model_data.get(m, {}).get("queries", 0),
+                tokens=model_data.get(m, {}).get("tokens", 0),
+                cost=model_data.get(m, {}).get("cost", 0.0),
+            )
+            for m in all_models
+        }
+        result.append(
+            DailyUsageResponse(
+                date=d,
+                total_queries=sum(s.queries for s in by_model.values()),
+                total_tokens=sum(s.tokens for s in by_model.values()),
+                total_cost=sum(s.cost for s in by_model.values()),
+                by_model=by_model,
+            )
+        )
+
+    return result
+
+
+@router.get(
+    "/usage/by-client",
+    response_model=list[ClientUsageResponse],
+    summary="Cost breakdown grouped by client",
+)
+async def usage_by_client_breakdown(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> list[ClientUsageResponse]:
+    clerk_id = _get_clerk_id(db, current_user)
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = (
+        db.query(
+            TokenUsage.client_id,
+            Client.name.label("client_name"),
+            func.count().label("total_queries"),
+            func.coalesce(func.sum(TokenUsage.total_tokens), 0).label("total_tokens"),
+            func.coalesce(func.sum(TokenUsage.estimated_cost_usd), 0).label("total_cost"),
+            func.max(TokenUsage.created_at).label("last_query_at"),
+        )
+        .join(Client, TokenUsage.client_id == Client.id)
+        .filter(
+            TokenUsage.user_id == clerk_id,
+            TokenUsage.created_at >= since,
+            TokenUsage.client_id.isnot(None),
+        )
+        .group_by(TokenUsage.client_id, Client.name)
+        .order_by(func.sum(TokenUsage.estimated_cost_usd).desc())
+        .all()
+    )
+
+    return [
+        ClientUsageResponse(
+            client_id=r.client_id,
+            client_name=r.client_name,
+            total_queries=r.total_queries,
+            total_tokens=int(r.total_tokens),
+            total_cost=float(r.total_cost),
+            last_query_at=r.last_query_at,
+        )
+        for r in rows
+    ]
+
+
+@router.get(
+    "/usage/export",
+    summary="CSV export of usage history",
+)
+async def usage_export(
+    start_date: Optional[str] = Query(None, description="ISO date string (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="ISO date string (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> StreamingResponse:
+    clerk_id = _get_clerk_id(db, current_user)
+
+    query = (
+        db.query(
+            TokenUsage.created_at,
+            TokenUsage.endpoint,
+            TokenUsage.model,
+            TokenUsage.prompt_tokens,
+            TokenUsage.completion_tokens,
+            TokenUsage.total_tokens,
+            TokenUsage.estimated_cost_usd,
+            Client.name.label("client_name"),
+        )
+        .outerjoin(Client, TokenUsage.client_id == Client.id)
+        .filter(TokenUsage.user_id == clerk_id)
+    )
+
+    if start_date:
+        query = query.filter(TokenUsage.created_at >= datetime.fromisoformat(start_date))
+    if end_date:
+        end_dt = datetime.fromisoformat(end_date) + timedelta(days=1)
+        query = query.filter(TokenUsage.created_at < end_dt)
+
+    rows = query.order_by(TokenUsage.created_at.desc()).all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Date", "Endpoint", "Model", "Prompt Tokens",
+        "Completion Tokens", "Total Tokens", "Cost", "Client Name",
+    ])
+    for r in rows:
+        writer.writerow([
+            r.created_at.isoformat(),
+            r.endpoint or "",
+            r.model,
+            r.prompt_tokens,
+            r.completion_tokens,
+            r.total_tokens,
+            f"{float(r.estimated_cost_usd):.6f}",
+            r.client_name or "",
+        ])
+
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=usage_export.csv"},
+    )
