@@ -557,10 +557,10 @@ export interface StripeStatus {
 
 export function createStripeApi(getToken: GetToken) {
   return {
-    createCheckout(tier: string) {
+    createCheckout(tier: string, billingInterval: "monthly" | "annual" = "monthly") {
       return apiFetch<{ url: string }>(getToken, "/stripe/create-checkout", {
         method: "POST",
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ tier, billing_interval: billingInterval }),
       });
     },
 

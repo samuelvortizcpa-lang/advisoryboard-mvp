@@ -41,6 +41,7 @@ def _require_stripe():
 
 class CheckoutRequest(BaseModel):
     tier: str
+    billing_interval: str = "monthly"
 
 
 class CheckoutResponse(BaseModel):
@@ -75,6 +76,8 @@ async def create_checkout(
 
     if body.tier not in ("starter", "professional", "firm"):
         raise HTTPException(status_code=400, detail="Invalid tier")
+    if body.billing_interval not in ("monthly", "annual"):
+        raise HTTPException(status_code=400, detail="Invalid billing interval")
 
     user = user_service.get_or_create_user(db, current_user)
     try:
@@ -82,6 +85,7 @@ async def create_checkout(
             user_id=user.clerk_id,
             user_email=user.email,
             tier=body.tier,
+            billing_interval=body.billing_interval,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

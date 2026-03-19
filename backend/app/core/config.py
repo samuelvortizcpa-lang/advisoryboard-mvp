@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     stripe_price_starter: str = ""
     stripe_price_professional: str = ""
     stripe_price_firm: str = ""
+    stripe_price_starter_annual: str = ""
+    stripe_price_professional_annual: str = ""
+    stripe_price_firm_annual: str = ""
 
     # ── Encryption ───────────────────────────────────────────────────────────
     encryption_key: str = ""

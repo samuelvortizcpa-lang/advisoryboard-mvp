@@ -32,27 +32,37 @@ def _stripe():
     return stripe
 
 
-def _price_for_tier(tier: str) -> str:
-    """Map tier name to Stripe price ID."""
+def _price_for_tier(tier: str, billing_interval: str = "monthly") -> str:
+    """Map tier name + billing interval to Stripe price ID."""
     settings = get_settings()
-    mapping = {
-        "starter": settings.stripe_price_starter,
-        "professional": settings.stripe_price_professional,
-        "firm": settings.stripe_price_firm,
-    }
+    if billing_interval == "annual":
+        mapping = {
+            "starter": settings.stripe_price_starter_annual,
+            "professional": settings.stripe_price_professional_annual,
+            "firm": settings.stripe_price_firm_annual,
+        }
+    else:
+        mapping = {
+            "starter": settings.stripe_price_starter,
+            "professional": settings.stripe_price_professional,
+            "firm": settings.stripe_price_firm,
+        }
     price_id = mapping.get(tier)
     if not price_id:
-        raise ValueError(f"No Stripe price configured for tier: {tier}")
+        raise ValueError(f"No Stripe price configured for tier: {tier} ({billing_interval})")
     return price_id
 
 
 def _tier_for_price(price_id: str) -> str:
-    """Map Stripe price ID back to tier name."""
+    """Map Stripe price ID back to tier name (monthly or annual)."""
     settings = get_settings()
     mapping = {
         settings.stripe_price_starter: "starter",
         settings.stripe_price_professional: "professional",
         settings.stripe_price_firm: "firm",
+        settings.stripe_price_starter_annual: "starter",
+        settings.stripe_price_professional_annual: "professional",
+        settings.stripe_price_firm_annual: "firm",
     }
     return mapping.get(price_id, "free")
 
@@ -63,11 +73,14 @@ def _tier_for_price(price_id: str) -> str:
 
 
 def create_checkout_session(
-    user_id: str, user_email: str | None, tier: str
+    user_id: str,
+    user_email: str | None,
+    tier: str,
+    billing_interval: str = "monthly",
 ) -> str:
     """Create a Stripe Checkout session and return the URL."""
     stripe = _stripe()
-    price_id = _price_for_tier(tier)
+    price_id = _price_for_tier(tier, billing_interval)
     settings = get_settings()
     base_url = settings.frontend_url.rstrip("/")
 
@@ -76,7 +89,11 @@ def create_checkout_session(
         "line_items": [{"price": price_id, "quantity": 1}],
         "success_url": f"{base_url}/dashboard/settings/subscriptions?success=true",
         "cancel_url": f"{base_url}/dashboard/settings/subscriptions?canceled=true",
-        "metadata": {"user_id": user_id, "tier": tier},
+        "metadata": {
+            "user_id": user_id,
+            "tier": tier,
+            "billing_interval": billing_interval,
+        },
     }
     if user_email:
         params["customer_email"] = user_email

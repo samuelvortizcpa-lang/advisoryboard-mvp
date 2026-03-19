@@ -45,10 +45,18 @@ function barPct(current: number, limit: number | null) {
   return Math.min(100, (current / limit) * 100);
 }
 
-const PRICING = [
+const PRICING: {
+  tier: string;
+  monthlyPrice: string;
+  annualMonthlyPrice: string;
+  annualTotal: string;
+  features: string[];
+}[] = [
   {
     tier: "free",
-    price: "$0",
+    monthlyPrice: "$0",
+    annualMonthlyPrice: "$0",
+    annualTotal: "$0",
     features: [
       "3 clients",
       "10 documents",
@@ -59,7 +67,9 @@ const PRICING = [
   },
   {
     tier: "starter",
-    price: "$99",
+    monthlyPrice: "$99",
+    annualMonthlyPrice: "$79",
+    annualTotal: "$948",
     features: [
       "25 clients",
       "500 documents",
@@ -69,7 +79,9 @@ const PRICING = [
   },
   {
     tier: "professional",
-    price: "$149",
+    monthlyPrice: "$149",
+    annualMonthlyPrice: "$119",
+    annualTotal: "$1,428",
     features: [
       "100 clients",
       "5,000 documents",
@@ -80,7 +92,9 @@ const PRICING = [
   },
   {
     tier: "firm",
-    price: "$249",
+    monthlyPrice: "$249",
+    annualMonthlyPrice: "$199",
+    annualTotal: "$2,388",
     features: [
       "Unlimited clients",
       "Unlimited documents",
@@ -89,7 +103,7 @@ const PRICING = [
       "25GB storage",
     ],
   },
-] as const;
+];
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
@@ -113,6 +127,7 @@ export default function SubscriptionManagementPage() {
   // Stripe checkout state
   const [checkoutTier, setCheckoutTier] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<"monthly" | "annual">("monthly");
 
   // Banners from URL params
   const showSuccess = searchParams.get("success") === "true";
@@ -183,7 +198,7 @@ export default function SubscriptionManagementPage() {
   async function handleCheckout(tier: string) {
     setCheckoutTier(tier);
     try {
-      const { url } = await createStripeApi(getToken).createCheckout(tier);
+      const { url } = await createStripeApi(getToken).createCheckout(tier, billingInterval);
       window.location.href = url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create checkout");
@@ -329,63 +344,110 @@ export default function SubscriptionManagementPage() {
         {/* ── Pricing Cards ─────────────────────────────────────────────── */}
         <div id="pricing-section">
           {stripeConfigured ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {PRICING.map((plan) => {
-                const isCurrent = currentTier === plan.tier;
-                const isFreeCard = plan.tier === "free";
-                const tierIndex = TIERS.indexOf(plan.tier as typeof TIERS[number]);
-                const currentIndex = TIERS.indexOf(currentTier as typeof TIERS[number]);
-                const isUpgrade = tierIndex > currentIndex;
-                return (
-                  <div
-                    key={plan.tier}
-                    className={`relative rounded-xl border p-5 shadow-sm ${
-                      isCurrent
-                        ? "border-blue-300 bg-blue-50/50 ring-1 ring-blue-200"
-                        : "border-gray-200 bg-white"
+            <>
+              {/* Billing toggle */}
+              <div className="flex items-center justify-center mb-5">
+                <div className="inline-flex items-center rounded-full border border-gray-200 bg-white p-0.5 shadow-sm">
+                  <button
+                    onClick={() => setBillingInterval("monthly")}
+                    className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
+                      billingInterval === "monthly"
+                        ? "bg-gray-900 text-white"
+                        : "text-gray-600 hover:text-gray-900"
                     }`}
                   >
-                    {isCurrent && (
-                      <span className="absolute -top-2.5 left-4 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-semibold text-white">
-                        Current Plan
-                      </span>
-                    )}
-                    <h3 className="text-sm font-semibold capitalize text-gray-900">{plan.tier}</h3>
-                    <p className="mt-1 text-2xl font-bold text-gray-900">
-                      {plan.price}<span className="text-sm font-normal text-gray-500">/mo</span>
-                    </p>
-                    <ul className="mt-3 space-y-1.5">
-                      {plan.features.map((f) => (
-                        <li key={f} className="flex items-center gap-2 text-xs text-gray-600">
-                          <CheckIcon />
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                    {/* Show Upgrade button only on paid cards when user is on a lower tier */}
-                    {!isCurrent && !isFreeCard && isUpgrade && (
-                      <button
-                        onClick={() => handleCheckout(plan.tier)}
-                        disabled={checkoutTier !== null}
-                        className="mt-4 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {checkoutTier === plan.tier ? "Redirecting\u2026" : "Upgrade"}
-                      </button>
-                    )}
-                    {/* For paid users on a higher tier viewing a lower paid card — manage via portal */}
-                    {!isCurrent && !isFreeCard && !isUpgrade && stripeStatus?.stripe_customer_id && (
-                      <button
-                        onClick={handleManageBilling}
-                        disabled={portalLoading}
-                        className="mt-4 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Manage Plan
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    Monthly
+                  </button>
+                  <button
+                    onClick={() => setBillingInterval("annual")}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
+                      billingInterval === "annual"
+                        ? "bg-gray-900 text-white"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    Annual
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                      billingInterval === "annual"
+                        ? "bg-green-400 text-green-950"
+                        : "bg-green-100 text-green-700"
+                    }`}>
+                      Save 20%
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {PRICING.map((plan) => {
+                  const isCurrent = currentTier === plan.tier;
+                  const isFreeCard = plan.tier === "free";
+                  const tierIndex = TIERS.indexOf(plan.tier as typeof TIERS[number]);
+                  const currentIndex = TIERS.indexOf(currentTier as typeof TIERS[number]);
+                  const isUpgrade = tierIndex > currentIndex;
+                  const isAnnual = billingInterval === "annual";
+                  const displayPrice = isFreeCard ? "$0" : isAnnual ? plan.annualMonthlyPrice : plan.monthlyPrice;
+                  return (
+                    <div
+                      key={plan.tier}
+                      className={`relative rounded-xl border p-5 shadow-sm ${
+                        isCurrent
+                          ? "border-blue-300 bg-blue-50/50 ring-1 ring-blue-200"
+                          : "border-gray-200 bg-white"
+                      }`}
+                    >
+                      {isCurrent && (
+                        <span className="absolute -top-2.5 left-4 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-semibold text-white">
+                          Current Plan
+                        </span>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold capitalize text-gray-900">{plan.tier}</h3>
+                        {!isFreeCard && isAnnual && (
+                          <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                            Save 20%
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-2xl font-bold text-gray-900">
+                        {displayPrice}<span className="text-sm font-normal text-gray-500">/mo</span>
+                      </p>
+                      {!isFreeCard && isAnnual && (
+                        <p className="text-[11px] text-gray-400">Billed annually at {plan.annualTotal}</p>
+                      )}
+                      <ul className="mt-3 space-y-1.5">
+                        {plan.features.map((f) => (
+                          <li key={f} className="flex items-center gap-2 text-xs text-gray-600">
+                            <CheckIcon />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                      {/* Show Upgrade button only on paid cards when user is on a lower tier */}
+                      {!isCurrent && !isFreeCard && isUpgrade && (
+                        <button
+                          onClick={() => handleCheckout(plan.tier)}
+                          disabled={checkoutTier !== null}
+                          className="mt-4 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {checkoutTier === plan.tier ? "Redirecting\u2026" : "Upgrade"}
+                        </button>
+                      )}
+                      {/* For paid users on a higher tier viewing a lower paid card — manage via portal */}
+                      {!isCurrent && !isFreeCard && !isUpgrade && stripeStatus?.stripe_customer_id && (
+                        <button
+                          onClick={handleManageBilling}
+                          disabled={portalLoading}
+                          className="mt-4 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          Manage Plan
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : (
             <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
               <p className="text-sm text-gray-500">Payment processing coming soon</p>
