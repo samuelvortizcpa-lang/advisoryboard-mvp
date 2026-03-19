@@ -33,7 +33,6 @@ const TIER_BADGE: Record<string, string> = {
 };
 
 const TIERS = ["free", "starter", "professional", "firm"] as const;
-const PAID_TIERS = ["starter", "professional", "firm"] as const;
 
 function progressColor(pct: number) {
   if (pct > 90) return "bg-red-500";
