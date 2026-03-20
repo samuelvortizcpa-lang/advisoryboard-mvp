@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     clerk_frontend_api_url: str = ""   # e.g. https://your-app.clerk.accounts.dev
     clerk_secret_key: str = ""         # sk_test_... (for server-side Clerk API calls)
 
+    # ── Admin ──────────────────────────────────────────────────────────────────
+    admin_user_id: str | None = None   # Clerk user ID for admin access (ADMIN_USER_ID)
+
     # ── Testing ───────────────────────────────────────────────────────────────
     # When True, accept clerk_secret_key as a bearer token (dev only).
     # Automatically forced to False when ENVIRONMENT=production.
@@ -84,7 +87,7 @@ class Settings(BaseSettings):
         Combined CORS origin list: always includes localhost dev origins plus
         any extra origins from the ALLOWED_ORIGINS env var.
         """
-        dev = ["http://localhost:3000", "http://127.0.0.1:3000"]
+        dev = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"]
         extra = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
         seen: set[str] = set()
         result: list[str] = []

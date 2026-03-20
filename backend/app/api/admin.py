@@ -22,6 +22,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.client import Client
 from app.models.document import Document
@@ -31,6 +32,16 @@ from app.models.user_subscription import UserSubscription
 from app.services.subscription_service import TIER_DEFAULTS
 
 router = APIRouter()
+
+
+# ─── Admin auth guard ────────────────────────────────────────────────────────
+
+
+def _require_admin(current_user: Dict[str, Any]) -> None:
+    """Raise 403 if the authenticated user is not the configured admin."""
+    settings = get_settings()
+    if not settings.admin_user_id or current_user.get("user_id") != settings.admin_user_id:
+        raise HTTPException(status_code=403, detail="Admin access required")
 
 
 # ─── Admin user / overview schemas ───────────────────────────────────────────
@@ -80,6 +91,7 @@ async def list_admin_users(
     db: Session = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> List[AdminUserResponse]:
+    _require_admin(current_user)
     now = datetime.now(timezone.utc)
     seven_days_ago = now - timedelta(days=7)
 
@@ -191,6 +203,7 @@ async def admin_overview(
     db: Session = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> AdminOverviewResponse:
+    _require_admin(current_user)
     now = datetime.now(timezone.utc)
     seven_days_ago = now - timedelta(days=7)
     thirty_days_ago = now - timedelta(days=30)
@@ -340,6 +353,7 @@ async def list_subscriptions(
     db: Session = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> List[SubscriptionResponse]:
+    _require_admin(current_user)
     rows = (
         db.query(UserSubscription, User)
         .outerjoin(User, UserSubscription.user_id == User.clerk_id)
@@ -358,6 +372,7 @@ async def subscriptions_summary(
     db: Session = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> SubscriptionsSummary:
+    _require_admin(current_user)
     subs = db.query(UserSubscription).all()
 
     by_tier: dict[str, int] = {t: 0 for t in TIER_DEFAULTS}
@@ -392,6 +407,7 @@ async def update_subscription(
     db: Session = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> SubscriptionResponse:
+    _require_admin(current_user)
     sub = (
         db.query(UserSubscription)
         .filter(UserSubscription.user_id == user_id)
@@ -421,6 +437,7 @@ async def reset_usage(
     db: Session = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> SubscriptionResponse:
+    _require_admin(current_user)
     sub = (
         db.query(UserSubscription)
         .filter(UserSubscription.user_id == user_id)

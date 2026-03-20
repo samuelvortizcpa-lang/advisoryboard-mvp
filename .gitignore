@@ -250,3 +250,6 @@ run_tests.sh
 
 # ─── Uploads directory (local dev file storage) ───────────
 backend/uploads/
+
+# ─── Local-only admin dashboard ──────────────
+admin-dashboard/
