@@ -292,13 +292,16 @@ async def backfill_page_images(
     total_pages = 0
 
     for doc in pdf_docs:
-        # Delete existing page images so we always regenerate fresh
-        existing = (
+        # Delete existing page images from Supabase Storage and DB
+        existing_pages = (
             db.query(DocumentPageImage)
             .filter(DocumentPageImage.document_id == doc.id)
-            .count()
+            .all()
         )
-        if existing > 0:
+        if existing_pages:
+            for page_img in existing_pages:
+                if page_img.image_path:
+                    storage_service.delete_file(page_img.image_path)
             db.query(DocumentPageImage).filter(
                 DocumentPageImage.document_id == doc.id
             ).delete()
