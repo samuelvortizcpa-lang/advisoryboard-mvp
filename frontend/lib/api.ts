@@ -518,10 +518,49 @@ export interface AdminSubscriptionSummary {
   users_over_limit: number;
 }
 
+// ─── Admin dashboard types ──────────────────────────────────────────────────
+
+export interface AdminUser {
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  tier: string;
+  stripe_status: string | null;
+  payment_status: string | null;
+  created_at: string;
+  client_count: number;
+  document_count: number;
+  total_queries: number;
+  total_cost: number;
+  last_active_at: string | null;
+  days_since_active: number | null;
+  queries_last_7_days: number;
+  storage_used_mb: number;
+}
+
+export interface AdminOverview {
+  total_users: number;
+  total_users_by_tier: Record<string, number>;
+  active_last_7_days: number;
+  active_last_30_days: number;
+  total_revenue_mtd: number;
+  total_documents: number;
+  total_queries_today: number;
+  mrr: number;
+}
+
 // ─── Admin API factory ──────────────────────────────────────────────────────
 
 export function createAdminApi(getToken: GetToken) {
   return {
+    users() {
+      return apiFetch<AdminUser[]>(getToken, "/admin/users");
+    },
+
+    overview() {
+      return apiFetch<AdminOverview>(getToken, "/admin/overview");
+    },
+
     listSubscriptions() {
       return apiFetch<AdminSubscription[]>(getToken, "/admin/subscriptions");
     },

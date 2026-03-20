@@ -1,7 +1,9 @@
 """
-Admin endpoints for subscription management.
+Admin endpoints for subscription management and platform overview.
 
 Routes (all require Clerk JWT auth):
+  GET   /api/admin/users
+  GET   /api/admin/overview
   GET   /api/admin/subscriptions
   GET   /api/admin/subscriptions/summary
   PUT   /api/admin/subscriptions/{user_id}
@@ -10,22 +12,250 @@ Routes (all require Clerk JWT auth):
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.models.client import Client
+from app.models.document import Document
+from app.models.token_usage import TokenUsage
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
 from app.services.subscription_service import TIER_DEFAULTS
 
 router = APIRouter()
+
+
+# ─── Admin user / overview schemas ───────────────────────────────────────────
+
+
+class AdminUserResponse(BaseModel):
+    user_id: str
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    tier: str
+    stripe_status: Optional[str] = None
+    payment_status: Optional[str] = None
+    created_at: datetime
+    client_count: int = 0
+    document_count: int = 0
+    total_queries: int = 0
+    total_cost: float = 0.0
+    last_active_at: Optional[datetime] = None
+    days_since_active: Optional[int] = None
+    queries_last_7_days: int = 0
+    storage_used_mb: float = 0.0
+
+    class Config:
+        from_attributes = True
+
+
+class AdminOverviewResponse(BaseModel):
+    total_users: int
+    total_users_by_tier: dict[str, int]
+    active_last_7_days: int
+    active_last_30_days: int
+    total_revenue_mtd: float
+    total_documents: int
+    total_queries_today: int
+    mrr: float
+
+
+# ─── Admin user / overview endpoints ─────────────────────────────────────────
+
+
+@router.get(
+    "/users",
+    response_model=List[AdminUserResponse],
+    summary="List all users with comprehensive activity metrics",
+)
+async def list_admin_users(
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> List[AdminUserResponse]:
+    now = datetime.now(timezone.utc)
+    seven_days_ago = now - timedelta(days=7)
+
+    # Base: all subscriptions with user info
+    subs = (
+        db.query(UserSubscription, User)
+        .outerjoin(User, UserSubscription.user_id == User.clerk_id)
+        .order_by(UserSubscription.created_at.desc())
+        .all()
+    )
+
+    results: list[AdminUserResponse] = []
+    for sub, user in subs:
+        clerk_id = sub.user_id
+
+        # User name / email
+        user_name = None
+        user_email = None
+        if user:
+            parts = [user.first_name, user.last_name]
+            user_name = " ".join(p for p in parts if p) or None
+            user_email = user.email
+
+        # Client count (clients.owner_id is UUID FK to users.id)
+        client_count = 0
+        if user:
+            client_count = (
+                db.query(func.count(Client.id))
+                .filter(Client.owner_id == user.id)
+                .scalar()
+            ) or 0
+
+        # Document count + storage (documents.uploaded_by is UUID FK to users.id)
+        doc_count = 0
+        storage_bytes = 0
+        if user:
+            doc_agg = (
+                db.query(
+                    func.count(Document.id),
+                    func.coalesce(func.sum(Document.file_size), 0),
+                )
+                .filter(Document.uploaded_by == user.id)
+                .first()
+            )
+            if doc_agg:
+                doc_count = doc_agg[0] or 0
+                storage_bytes = doc_agg[1] or 0
+
+        # Token usage aggregates (token_usage.user_id is clerk_id string)
+        usage_agg = (
+            db.query(
+                func.count(TokenUsage.id),
+                func.coalesce(func.sum(TokenUsage.estimated_cost_usd), 0),
+                func.max(TokenUsage.created_at),
+            )
+            .filter(TokenUsage.user_id == clerk_id)
+            .first()
+        )
+        total_queries = (usage_agg[0] or 0) if usage_agg else 0
+        total_cost = float(usage_agg[1] or 0) if usage_agg else 0.0
+        last_active_at = usage_agg[2] if usage_agg else None
+
+        # Queries last 7 days
+        q7 = (
+            db.query(func.count(TokenUsage.id))
+            .filter(
+                TokenUsage.user_id == clerk_id,
+                TokenUsage.created_at >= seven_days_ago,
+            )
+            .scalar()
+        ) or 0
+
+        # Days since active
+        days_since = None
+        if last_active_at:
+            if last_active_at.tzinfo is None:
+                last_active_at = last_active_at.replace(tzinfo=timezone.utc)
+            days_since = (now - last_active_at).days
+
+        results.append(
+            AdminUserResponse(
+                user_id=clerk_id,
+                user_email=user_email,
+                user_name=user_name,
+                tier=sub.tier,
+                stripe_status=sub.stripe_status,
+                payment_status=sub.payment_status,
+                created_at=sub.created_at,
+                client_count=client_count,
+                document_count=doc_count,
+                total_queries=total_queries,
+                total_cost=round(total_cost, 4),
+                last_active_at=last_active_at,
+                days_since_active=days_since,
+                queries_last_7_days=q7,
+                storage_used_mb=round(storage_bytes / 1048576, 2),
+            )
+        )
+
+    return results
+
+
+@router.get(
+    "/overview",
+    response_model=AdminOverviewResponse,
+    summary="Platform-wide overview metrics",
+)
+async def admin_overview(
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> AdminOverviewResponse:
+    now = datetime.now(timezone.utc)
+    seven_days_ago = now - timedelta(days=7)
+    thirty_days_ago = now - timedelta(days=30)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Total users by tier
+    tier_rows = (
+        db.query(UserSubscription.tier, func.count(UserSubscription.id))
+        .group_by(UserSubscription.tier)
+        .all()
+    )
+    by_tier: dict[str, int] = {}
+    total_users = 0
+    for tier, cnt in tier_rows:
+        by_tier[tier] = cnt
+        total_users += cnt
+
+    # Active users (distinct user_ids with queries in time windows)
+    active_7 = (
+        db.query(func.count(func.distinct(TokenUsage.user_id)))
+        .filter(TokenUsage.created_at >= seven_days_ago)
+        .scalar()
+    ) or 0
+
+    active_30 = (
+        db.query(func.count(func.distinct(TokenUsage.user_id)))
+        .filter(TokenUsage.created_at >= thirty_days_ago)
+        .scalar()
+    ) or 0
+
+    # Revenue MTD (AI cost, not subscription revenue)
+    revenue_mtd = (
+        db.query(func.coalesce(func.sum(TokenUsage.estimated_cost_usd), 0))
+        .filter(TokenUsage.created_at >= month_start)
+        .scalar()
+    ) or 0
+
+    # Total documents
+    total_docs = db.query(func.count(Document.id)).scalar() or 0
+
+    # Queries today
+    queries_today = (
+        db.query(func.count(TokenUsage.id))
+        .filter(TokenUsage.created_at >= today_start)
+        .scalar()
+    ) or 0
+
+    # MRR: simple calculation
+    mrr = (
+        by_tier.get("starter", 0) * 99
+        + by_tier.get("professional", 0) * 149
+        + by_tier.get("firm", 0) * 249
+    )
+
+    return AdminOverviewResponse(
+        total_users=total_users,
+        total_users_by_tier=by_tier,
+        active_last_7_days=active_7,
+        active_last_30_days=active_30,
+        total_revenue_mtd=round(float(revenue_mtd), 4),
+        total_documents=total_docs,
+        total_queries_today=queries_today,
+        mrr=float(mrr),
+    )
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
