@@ -2,6 +2,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import logging
+import os
+
+import sentry_sdk
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +25,18 @@ from app.api.stripe_routes import router as stripe_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# ── Sentry error monitoring ──────────────────────────────────────────────────
+_sentry_dsn = os.getenv("SENTRY_DSN")
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        traces_sample_rate=0.1,
+        profiles_sample_rate=0.1,
+        environment=os.getenv("ENVIRONMENT", "production"),
+        release=os.getenv("RAILWAY_GIT_COMMIT_SHA", "unknown"),
+    )
+    logger.info("Sentry initialized (environment=%s)", os.getenv("ENVIRONMENT", "production"))
 
 # ── Settings (read once at module load so CORS is configured synchronously) ────
 _settings = get_settings()

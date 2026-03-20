@@ -44,3 +44,6 @@ pytesseract
 
 # Stripe payments
 stripe>=8.0.0
+
+# Error monitoring
+sentry-sdk[fastapi]>=2.0.0

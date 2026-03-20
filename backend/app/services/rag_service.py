@@ -29,6 +29,7 @@ import os
 import re
 from uuid import UUID
 
+import sentry_sdk
 from openai import AsyncOpenAI
 from sqlalchemy.orm import Session, joinedload
 
@@ -316,6 +317,7 @@ async def process_document(db: Session, document: Document) -> None:
 
     except Exception as exc:
         logger.error("RAG: failed to process %s: %s", doc_label, exc)
+        sentry_sdk.capture_exception(exc)
         db.rollback()
 
         # Persist the error message (fresh fetch after rollback)

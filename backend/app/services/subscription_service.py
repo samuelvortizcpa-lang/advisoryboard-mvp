@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+import sentry_sdk
+
 from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
@@ -238,8 +240,9 @@ def increment_usage(db: Session, user_id: str, query_type: str) -> None:
         )
         db.commit()
         db.expire_all()
-    except Exception:
+    except Exception as exc:
         logger.error("Failed to increment usage for user %s", user_id, exc_info=True)
+        sentry_sdk.capture_exception(exc)
         try:
             db.rollback()
         except Exception:

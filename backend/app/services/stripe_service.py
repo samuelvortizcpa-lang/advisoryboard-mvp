@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+import sentry_sdk
+
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -139,8 +141,9 @@ def sync_subscription_from_stripe(db: Session, stripe_subscription_id: str) -> U
     try:
         stripe = _stripe()
         stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
-    except Exception:
+    except Exception as exc:
         logger.error("Failed to fetch Stripe subscription %s", stripe_subscription_id, exc_info=True)
+        sentry_sdk.capture_exception(exc)
         return sub
 
     # Map price to tier

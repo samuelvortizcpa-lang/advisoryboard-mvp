@@ -14,6 +14,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
+import sentry_sdk
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -139,6 +141,7 @@ async def stripe_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
     except Exception as e:
         logger.error("Stripe webhook error: %s", e)
+        sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=400, detail="Invalid payload")
 
     # Process event with a fresh DB session
@@ -173,8 +176,9 @@ async def stripe_webhook(request: Request):
         # Record event as processed
         db.add(ProcessedWebhookEvent(id=event_id))
         db.commit()
-    except Exception:
+    except Exception as exc:
         logger.error("Error processing Stripe webhook", exc_info=True)
+        sentry_sdk.capture_exception(exc)
         try:
             db.rollback()
         except Exception:
