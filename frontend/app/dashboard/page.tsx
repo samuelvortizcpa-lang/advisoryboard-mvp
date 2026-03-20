@@ -1,6 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import AlertsList from "@/components/alerts/AlertsList";
 import UsageStats from "@/components/dashboard/UsageStats";
@@ -33,7 +32,10 @@ export default async function DashboardPage() {
   const { userId, getToken } = await auth();
 
   if (!userId) {
-    redirect("/sign-in");
+    // AuthGuard in the layout handles the client-side redirect.
+    // Return empty here to avoid a server-side redirect race during
+    // Clerk auth hydration (cookie not yet propagated after sign-in).
+    return null;
   }
 
   const [user, token] = await Promise.all([currentUser(), getToken()]);
