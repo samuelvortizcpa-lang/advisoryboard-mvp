@@ -13,7 +13,9 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.models.user import User
 from app.models.user_subscription import UserSubscription
+from app.services.notification_service import notify
 from app.services.subscription_service import TIER_DEFAULTS
 
 logger = logging.getLogger(__name__)
@@ -238,6 +240,10 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
     sub.strategic_queries_used = 0
 
     db.commit()
+
+    user_email = session.get("customer_email") or session.get("customer_details", {}).get("email") or user_id
+    notify("upgrade", "User upgraded subscription", {"email": user_email, "tier": tier, "mrr_impact": "+$99"})
+
     logger.info(
         "Checkout completed: user=%s tier=%s stripe_sub=%s",
         user_id, tier, session.get("subscription"),
@@ -297,6 +303,7 @@ def handle_subscription_deleted(db: Session, subscription: dict) -> None:
         logger.warning("Subscription deleted for unknown stripe_subscription_id: %s", stripe_sub_id)
         return
 
+    old_tier = sub.tier
     free_config = TIER_DEFAULTS["free"]
     now = datetime.now(timezone.utc)
     sub.tier = "free"
@@ -308,6 +315,10 @@ def handle_subscription_deleted(db: Session, subscription: dict) -> None:
     sub.billing_period_end = now + timedelta(days=30)
     sub.updated_at = now
     db.commit()
+
+    user_obj = db.query(User).filter(User.clerk_id == sub.user_id).first()
+    user_email = user_obj.email if user_obj else sub.user_id
+    notify("churn", "User canceled subscription", {"email": user_email, "previous_tier": old_tier})
 
     logger.info("Subscription canceled — downgraded to free: user=%s", sub.user_id)
 
@@ -330,5 +341,9 @@ def handle_payment_failed(db: Session, invoice: dict) -> None:
     sub.payment_status = "failed"
     sub.updated_at = datetime.now(timezone.utc)
     db.commit()
+
+    user_obj = db.query(User).filter(User.clerk_id == sub.user_id).first()
+    user_email = user_obj.email if user_obj else sub.user_id
+    notify("payment_failed", "Payment failed", {"email": user_email, "tier": sub.tier})
 
     logger.warning("Payment failed for user=%s subscription=%s", sub.user_id, stripe_sub_id)

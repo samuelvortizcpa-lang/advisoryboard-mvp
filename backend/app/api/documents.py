@@ -9,9 +9,11 @@ from sqlalchemy import func as sa_func
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.models.client import Client
 from app.models.document import Document
 from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services import document_service, rag_service, storage_service, user_service
+from app.services.notification_service import send_notification
 from app.services.subscription_service import check_document_limit
 
 router = APIRouter()
@@ -60,6 +62,16 @@ async def upload_document(
     )
     # Auto-process: kick off RAG embedding in the background right after upload
     background_tasks.add_task(rag_service.process_document_task, document.id)
+
+    # Slack notification (fire-and-forget)
+    import asyncio
+    client_obj = db.query(Client).filter(Client.id == client_id).first()
+    asyncio.create_task(send_notification(
+        "document_upload",
+        "New document uploaded",
+        {"email": user.email or user.clerk_id, "filename": document.filename, "client": client_obj.name if client_obj else str(client_id)},
+    ))
+
     return document
 
 

@@ -21,6 +21,8 @@ from app.models.document import Document
 from app.models.token_usage import TokenUsage
 from app.models.user_subscription import UserSubscription
 
+from app.services.notification_service import notify
+
 logger = logging.getLogger(__name__)
 
 TIER_DEFAULTS: dict[str, dict] = {
@@ -86,6 +88,7 @@ def get_or_create_subscription(db: Session, user_id: str) -> UserSubscription:
         db.commit()
         db.refresh(sub)
         logger.info("Created %s subscription for user %s", _DEFAULT_TIER, user_id)
+        notify("new_signup", "New user signed up", {"email": user_id, "tier": "free"})
         return sub
 
     # Reset billing period if expired
@@ -184,7 +187,10 @@ def check_client_limit(db: Session, user_id: str, owner_id) -> dict:
         .scalar()
     ) or 0
 
-    return {"allowed": current < limit, "current": current, "limit": limit}
+    result = {"allowed": current < limit, "current": current, "limit": limit}
+    if not result["allowed"]:
+        notify("limit_hit", "User hit client limit", {"email": user_id, "current": current, "limit": limit})
+    return result
 
 
 def check_document_limit(db: Session, user_id: str, owner_id) -> dict:

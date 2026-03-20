@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     stripe_price_professional_annual: str = ""
     stripe_price_firm_annual: str = ""
 
+    # ── Slack ──────────────────────────────────────────────────────────────
+    slack_webhook_url: str | None = None
+
     # ── Encryption ───────────────────────────────────────────────────────────
     encryption_key: str = ""
 
