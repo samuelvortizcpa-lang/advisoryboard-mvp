@@ -1,7 +1,9 @@
 """
 Admin endpoints for subscription management and platform overview.
 
-Routes (all require Clerk JWT auth):
+Auth: Clerk JWT (production) OR X-Admin-Key header (local admin dashboard).
+
+Routes:
   GET   /api/admin/users
   GET   /api/admin/overview
   GET   /api/admin/subscriptions
@@ -12,18 +14,20 @@ Routes (all require Clerk JWT auth):
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
-from sqlalchemy import case, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.database import get_db
+
+logger = logging.getLogger(__name__)
 from app.models.client import Client
 from app.models.document import Document
 from app.models.token_usage import TokenUsage
@@ -37,11 +41,35 @@ router = APIRouter()
 # ─── Admin auth guard ────────────────────────────────────────────────────────
 
 
-def _require_admin(current_user: Dict[str, Any]) -> None:
-    """Raise 403 if the authenticated user is not the configured admin."""
+async def verify_admin_access(request: Request) -> None:
+    """
+    Allow access if EITHER:
+      a) X-Admin-Key header matches ADMIN_API_KEY, OR
+      b) Standard Clerk JWT belongs to ADMIN_USER_ID.
+    Raises 403 if neither method passes.
+    """
     settings = get_settings()
-    if not settings.admin_user_id or current_user.get("user_id") != settings.admin_user_id:
-        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Method 1: static API key via X-Admin-Key header
+    api_key = request.headers.get("X-Admin-Key")
+    if api_key and settings.admin_api_key and api_key == settings.admin_api_key:
+        return
+
+    # Method 2: Clerk JWT (existing flow)
+    from fastapi.security import HTTPBearer
+    bearer = HTTPBearer(auto_error=False)
+    credentials = await bearer(request)
+    if credentials:
+        try:
+            from app.core.auth import verify_clerk_token
+            payload = await verify_clerk_token(credentials.credentials)
+            user_id = payload.get("sub")
+            if settings.admin_user_id and user_id == settings.admin_user_id:
+                return
+        except HTTPException:
+            pass  # JWT invalid/expired — fall through to 403
+
+    raise HTTPException(status_code=403, detail="Admin access required")
 
 
 # ─── Admin user / overview schemas ───────────────────────────────────────────
@@ -88,10 +116,9 @@ class AdminOverviewResponse(BaseModel):
     summary="List all users with comprehensive activity metrics",
 )
 async def list_admin_users(
+    _admin: None = Depends(verify_admin_access),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> List[AdminUserResponse]:
-    _require_admin(current_user)
     now = datetime.now(timezone.utc)
     seven_days_ago = now - timedelta(days=7)
 
@@ -200,10 +227,9 @@ async def list_admin_users(
     summary="Platform-wide overview metrics",
 )
 async def admin_overview(
+    _admin: None = Depends(verify_admin_access),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> AdminOverviewResponse:
-    _require_admin(current_user)
     now = datetime.now(timezone.utc)
     seven_days_ago = now - timedelta(days=7)
     thirty_days_ago = now - timedelta(days=30)
@@ -350,10 +376,9 @@ def _build_response(sub: UserSubscription, user: Optional[User] = None) -> Subsc
     summary="List all user subscriptions",
 )
 async def list_subscriptions(
+    _admin: None = Depends(verify_admin_access),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> List[SubscriptionResponse]:
-    _require_admin(current_user)
     rows = (
         db.query(UserSubscription, User)
         .outerjoin(User, UserSubscription.user_id == User.clerk_id)
@@ -369,10 +394,9 @@ async def list_subscriptions(
     summary="Subscription overview stats",
 )
 async def subscriptions_summary(
+    _admin: None = Depends(verify_admin_access),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> SubscriptionsSummary:
-    _require_admin(current_user)
     subs = db.query(UserSubscription).all()
 
     by_tier: dict[str, int] = {t: 0 for t in TIER_DEFAULTS}
@@ -404,10 +428,9 @@ async def subscriptions_summary(
 async def update_subscription(
     user_id: str,
     body: TierUpdateRequest,
+    _admin: None = Depends(verify_admin_access),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> SubscriptionResponse:
-    _require_admin(current_user)
     sub = (
         db.query(UserSubscription)
         .filter(UserSubscription.user_id == user_id)
@@ -434,10 +457,9 @@ async def update_subscription(
 )
 async def reset_usage(
     user_id: str,
+    _admin: None = Depends(verify_admin_access),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> SubscriptionResponse:
-    _require_admin(current_user)
     sub = (
         db.query(UserSubscription)
         .filter(UserSubscription.user_id == user_id)

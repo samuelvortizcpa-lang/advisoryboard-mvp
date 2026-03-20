@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # ── Admin ──────────────────────────────────────────────────────────────────
     admin_user_id: str | None = None   # Clerk user ID for admin access (ADMIN_USER_ID)
+    admin_api_key: str | None = None   # Long-lived API key for local admin dashboard
 
     # ── Testing ───────────────────────────────────────────────────────────────
     # When True, accept clerk_secret_key as a bearer token (dev only).
