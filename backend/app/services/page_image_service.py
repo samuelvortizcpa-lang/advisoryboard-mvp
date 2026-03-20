@@ -13,6 +13,7 @@ import gc
 import io
 import logging
 import os
+import time
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -133,21 +134,30 @@ async def process_page_images(db: Session, document: Document) -> None:
                     _process_single_page, temp_path, page_num, doc_label
                 )
 
-                # Upload to Supabase Storage (I/O, not CPU — fine in event loop)
+                # Upload to Supabase Storage with one retry on failure
                 storage_path = f"page_images/{document.id}/page_{page_num}.jpg"
-                try:
-                    storage_service.upload_file_to_path(
-                        storage_path, jpeg_bytes, "image/jpeg"
-                    )
-                    logger.info(
-                        "Page images: uploaded page %d/%d for %s (%d bytes)",
-                        page_num, pages_to_process, doc_label, len(jpeg_bytes),
-                    )
-                except Exception as upload_exc:
-                    logger.warning(
-                        "Page images: upload failed for %s page %d: %s",
-                        doc_label, page_num, upload_exc,
-                    )
+                uploaded = False
+                for attempt in (1, 2):
+                    try:
+                        storage_service.upload_file_to_path(
+                            storage_path, jpeg_bytes, "image/jpeg"
+                        )
+                        logger.info(
+                            "Page images: uploaded %s (%d bytes, attempt %d)",
+                            storage_path, len(jpeg_bytes), attempt,
+                        )
+                        uploaded = True
+                        break
+                    except Exception as upload_exc:
+                        logger.error(
+                            "Page images: upload failed for %s page %d "
+                            "(attempt %d): %s: %s",
+                            doc_label, page_num, attempt,
+                            type(upload_exc).__name__, upload_exc,
+                        )
+                        if attempt == 1:
+                            time.sleep(2)
+                if not uploaded:
                     continue
 
                 if text_preview:

@@ -14,6 +14,7 @@ Routes (all require Clerk JWT auth):
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 from uuid import UUID
 
@@ -31,6 +32,8 @@ from app.models.document_chunk import DocumentChunk
 from app.models.document_page_image import DocumentPageImage
 from app.schemas.chat_message import ChatHistoryResponse, ChatMessageResponse
 from app.services import rag_service, storage_service, user_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -439,8 +442,10 @@ async def chat(
                 response_source["image_url"] = storage_service.get_signed_url(
                     s["image_path"], expires_in=3600
                 )
-            except Exception:
-                pass  # non-fatal: image URL generation failure
+            except Exception as url_exc:
+                logger.warning(
+                    "Signed URL failed for %s: %s", s["image_path"], url_exc,
+                )
         response_sources.append(response_source)
 
     db.add(ChatMessage(
@@ -557,8 +562,10 @@ async def get_chat_history(
                         src.image_url = storage_service.get_signed_url(
                             src.image_path, expires_in=3600
                         )
-                    except Exception:
-                        pass  # non-fatal
+                    except Exception as url_exc:
+                        logger.warning(
+                            "Signed URL failed for %s: %s", src.image_path, url_exc,
+                        )
         validated_messages.append(msg)
 
     return ChatHistoryResponse(
