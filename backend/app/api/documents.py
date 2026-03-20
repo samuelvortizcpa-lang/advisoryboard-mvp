@@ -5,8 +5,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from sqlalchemy import func as sa_func
+
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.models.document import Document
 from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services import document_service, rag_service, storage_service, user_service
 from app.services.subscription_service import check_document_limit
@@ -33,6 +36,20 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Document limit reached. Upgrade your plan to upload more documents.",
+        )
+    # Duplicate check: same filename (case-insensitive) + same client
+    existing = (
+        db.query(Document.id)
+        .filter(
+            Document.client_id == client_id,
+            sa_func.lower(Document.filename) == (file.filename or "").lower(),
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A document with this name already exists for this client. Please rename the file or delete the existing document first.",
         )
     document = await document_service.save_document(
         db=db,

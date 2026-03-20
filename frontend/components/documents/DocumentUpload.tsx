@@ -95,6 +95,11 @@ export default function DocumentUpload({ clientId, onUploaded }: Props) {
               Upgrade your plan
             </a>
           )}
+          {error.toLowerCase().includes("already exists") && (
+            <p className="mt-1 text-xs text-gray-500">
+              Delete the existing version first if you want to re-upload.
+            </p>
+          )}
         </div>
       )}
     </div>
