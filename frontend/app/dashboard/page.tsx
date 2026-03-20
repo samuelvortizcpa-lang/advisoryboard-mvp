@@ -1,5 +1,8 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+"use client";
+
 import Link from "next/link";
+import { useAuth, useUser } from "@clerk/nextjs";
+import { useEffect, useState } from "react";
 
 import AlertsList from "@/components/alerts/AlertsList";
 import UsageStats from "@/components/dashboard/UsageStats";
@@ -12,38 +15,56 @@ interface DashboardStats {
   interactions: number;
 }
 
-async function fetchDashboardStats(
-  token: string | null
-): Promise<DashboardStats> {
-  if (!token) return { clients: 0, documents: 0, interactions: 0 };
-  try {
-    const res = await fetch(`${API_BASE}/api/dashboard/stats`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return { clients: 0, documents: 0, interactions: 0 };
-    return await res.json();
-  } catch {
-    return { clients: 0, documents: 0, interactions: 0 };
-  }
-}
+export default function DashboardPage() {
+  const { getToken, userId } = useAuth();
+  const { user } = useUser();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
 
-export default async function DashboardPage() {
-  const { userId, getToken } = await auth();
+  useEffect(() => {
+    let cancelled = false;
 
-  if (!userId) {
-    // AuthGuard in the layout handles the client-side redirect.
-    // Return empty here to avoid a server-side redirect race during
-    // Clerk auth hydration (cookie not yet propagated after sign-in).
-    return null;
-  }
+    async function load() {
+      const token = await getToken();
+      if (!token || cancelled) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/dashboard/stats`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("stats fetch failed");
+        const data: DashboardStats = await res.json();
+        if (!cancelled) setStats(data);
+      } catch {
+        if (!cancelled) setStats({ clients: 0, documents: 0, interactions: 0 });
+      }
+    }
 
-  const [user, token] = await Promise.all([currentUser(), getToken()]);
+    load();
+    return () => { cancelled = true; };
+  }, [getToken]);
 
   const displayName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "there";
   const email = user?.emailAddresses[0]?.emailAddress ?? "";
-  const stats = await fetchDashboardStats(token);
+
+  if (!stats) {
+    return (
+      <div className="px-8 py-8">
+        <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm animate-pulse">
+          <div className="h-3 w-20 rounded bg-gray-200" />
+          <div className="mt-3 h-6 w-64 rounded bg-gray-200" />
+          <div className="mt-2 h-4 w-40 rounded bg-gray-100" />
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-lg border border-gray-100 bg-gray-50 px-5 py-4">
+                <div className="h-7 w-10 rounded bg-gray-200" />
+                <div className="mt-2 h-4 w-20 rounded bg-gray-100" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-8 py-8">
@@ -146,7 +167,7 @@ export default async function DashboardPage() {
         <dl className="mt-4 space-y-3">
           <Row label="Name" value={displayName} />
           <Row label="Email" value={email || "—"} />
-          <Row label="User ID" value={userId} mono />
+          <Row label="User ID" value={userId || "—"} mono />
         </dl>
       </div>
     </div>
