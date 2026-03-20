@@ -8,6 +8,8 @@ succeeds regardless of whether action item extraction works.
 
 from __future__ import annotations
 
+import re
+
 import json
 import logging
 from datetime import date, datetime
@@ -112,13 +114,19 @@ async def extract_action_items(
 
     # ── Parse response ────────────────────────────────────────────────────
     raw = response.choices[0].message.content or "{}"
+
+    # Strip markdown code fences that GPT sometimes wraps around JSON
+    raw = re.sub(r"^```(?:json)?\s*\n?", "", raw.strip())
+    raw = re.sub(r"\n?\s*```$", "", raw.strip())
+
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
         logger.error(
-            "Failed to parse action items JSON for document %s: %s",
+            "Failed to parse action items JSON for document %s: %s\nRaw response: %s",
             document_id,
             exc,
+            raw[:500],
         )
         return []
 
