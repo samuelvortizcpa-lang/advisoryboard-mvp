@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/integrations/google/callback"
 
-    # ── Google AI (Gemini embeddings for multimodal RAG) ─────────────────────
+    # ── Google AI ───────────────────────────────────────────────────────────
     google_ai_api_key: str = ""
 
     # ── Stripe ──────────────────────────────────────────────────────────────

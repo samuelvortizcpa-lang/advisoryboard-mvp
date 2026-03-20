@@ -37,7 +37,7 @@ from app.models.client import Client
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page_image import DocumentPageImage
-from app.services import gemini_embeddings, storage_service
+from app.services import storage_service
 from app.services.chunking import chunk_text, get_chunk_params
 from app.services.query_router import classify_query, route_completion
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
@@ -420,61 +420,6 @@ async def search_chunks(
 
 
 # ---------------------------------------------------------------------------
-# Visual page image search (Gemini multimodal)
-# ---------------------------------------------------------------------------
-
-IMAGE_TOP_K = 3   # page images retrieved per query
-
-
-async def search_page_images(
-    db: Session,
-    client_id: UUID,
-    query: str,
-    limit: int = IMAGE_TOP_K,
-) -> list[tuple[DocumentPageImage, float]]:
-    """
-    Return the most visually similar document page images for *query*.
-
-    Uses Gemini text embeddings to search against page image embeddings.
-    Returns an empty list when Gemini is not configured (graceful fallback).
-    """
-    if not query.strip():
-        return []
-
-    if not gemini_embeddings.is_available():
-        return []
-
-    try:
-        query_embedding = gemini_embeddings.embed_text(query)
-    except Exception as exc:
-        logger.warning("Page image search: Gemini embed failed: %s", exc)
-        return []
-
-    distance_col = DocumentPageImage.image_embedding.cosine_distance(
-        query_embedding
-    ).label("distance")
-
-    rows = (
-        db.query(DocumentPageImage, distance_col)
-        .join(Document, DocumentPageImage.document_id == Document.id)
-        .filter(
-            Document.client_id == client_id,
-            DocumentPageImage.image_embedding.isnot(None),
-        )
-        .order_by(distance_col)
-        .limit(limit)
-        .all()
-    )
-
-    results: list[tuple[DocumentPageImage, float]] = []
-    for page_img, distance in rows:
-        confidence = (1 - distance / 2) * 100
-        results.append((page_img, round(confidence, 2)))
-
-    return results
-
-
-# ---------------------------------------------------------------------------
 # Q&A
 # ---------------------------------------------------------------------------
 
@@ -520,12 +465,7 @@ async def answer_question(
                          "score": float, "chunk_text": str, "chunk_index": int}]
         }
     """
-    # Text chunk search is the PRIMARY retrieval method.
-    # Gemini visual search supplements with page image matches.
     chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
-
-    # Run Gemini page image search in parallel (graceful — empty if unavailable)
-    gemini_page_results = await search_page_images(db, client_id, question)
 
     # ---- Keyword fallback: direct text search for specific phrases ----
     # Vector search alone struggles with structured forms (tax returns) where
@@ -793,23 +733,6 @@ async def answer_question(
                 preview += "…"
             best_chunk_preview[doc_id_str] = preview
             best_chunk_index[doc_id_str] = chunk.chunk_index
-
-    # --- Inject Gemini visual search results into page_images_by_doc ---
-    # These are pages that matched the query via embedding similarity even if
-    # they weren't in the text-chunk result set.
-    for pi, vis_score in gemini_page_results:
-        did = str(pi.document_id)
-        if did not in doc_map:
-            doc = db.query(Document).filter(Document.id == pi.document_id).first()
-            if doc and doc.client_id == client_id:
-                doc_map[did] = doc
-                best_chunk_score.setdefault(did, vis_score)
-                best_chunk_preview.setdefault(did, pi.page_text_preview or "")
-                best_chunk_index.setdefault(did, 0)
-        if did not in page_images_by_doc:
-            page_images_by_doc[did] = []
-        if not any(p.id == pi.id for p in page_images_by_doc[did]):
-            page_images_by_doc[did].append(pi)
 
     # --- Score every page of each candidate document ---
     # Two tiers: pages with answer values (preferred) and phrase-only pages (fallback)

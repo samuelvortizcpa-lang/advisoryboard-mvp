@@ -1,7 +1,6 @@
 """
 Page image service: converts PDF pages to JPEG images, uploads them to
-Supabase Storage, generates Gemini multimodal embeddings, and stores
-the results in the document_page_images table.
+Supabase Storage, and stores the results in the document_page_images table.
 
 This entire pipeline is best-effort — failures are logged but never
 prevent the main text-based RAG pipeline from completing.
@@ -20,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models.document import Document
 from app.models.document_page_image import DocumentPageImage
-from app.services import gemini_embeddings, storage_service
+from app.services import storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -76,21 +75,17 @@ def _process_single_page(temp_path: str, page_num: int, doc_label: str) -> tuple
 async def process_page_images(db: Session, document: Document) -> None:
     """
     Extract page images from a PDF document, upload to Supabase, and store
-    in the database.  Gemini embeddings are generated when available but are
-    optional — page images are always stored so the frontend can display them
-    even without Gemini.
+    in the database.
 
     Skips silently if the document is not a PDF.
     """
     if document.file_type != "pdf":
         return
 
-    gemini_available = gemini_embeddings.is_available()
-
     doc_label = f"{document.id} ({document.filename!r})"
     logger.info(
-        "Page images: starting extraction for %s (file_type=%s, gemini=%s)",
-        doc_label, document.file_type, gemini_available,
+        "Page images: starting extraction for %s (file_type=%s)",
+        doc_label, document.file_type,
     )
 
     temp_path = None
@@ -161,23 +156,11 @@ async def process_page_images(db: Session, document: Document) -> None:
                         page_num, len(text_preview),
                     )
 
-                # Generate Gemini embedding (best-effort)
-                embedding = None
-                if gemini_available:
-                    try:
-                        embedding = gemini_embeddings.embed_image(jpeg_bytes)
-                    except Exception as emb_exc:
-                        logger.warning(
-                            "Page images: Gemini embedding failed for %s page %d: %s",
-                            doc_label, page_num, emb_exc,
-                        )
-
                 page_image_rows.append(
                     DocumentPageImage(
                         document_id=document.id,
                         page_number=page_num,
                         image_path=storage_path,
-                        image_embedding=embedding,
                         page_text_preview=text_preview,
                     )
                 )

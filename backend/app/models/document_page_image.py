@@ -1,6 +1,5 @@
 """
-DocumentPageImage model: stores page-level JPEG snapshots of PDF documents
-along with their Gemini multimodal embeddings for visual retrieval.
+DocumentPageImage model: stores page-level JPEG snapshots of PDF documents.
 """
 
 import uuid
@@ -17,18 +16,11 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.document import Document
 
-# Gemini embedding dimension (gemini-embedding-exp-03-07 outputs 768 dims)
 IMAGE_EMBEDDING_DIM = 768
 
 
 class DocumentPageImage(Base):
-    """
-    A single page image extracted from a PDF document.
-
-    Each row stores:
-    - The Supabase Storage path to the JPEG image
-    - A 768-dim Gemini embedding of the page image for visual similarity search
-    """
+    """A single page image extracted from a PDF document."""
 
     __tablename__ = "document_page_images"
 
@@ -53,7 +45,7 @@ class DocumentPageImage(Base):
     # First ~500 chars of text extracted from this page (for chunk→page matching)
     page_text_preview: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # 768-dim Gemini multimodal embedding (NULL until embedded)
+    # Legacy vector column — unused, stays NULL (no migration needed to drop)
     image_embedding: Mapped[Optional[list[float]]] = mapped_column(
         Vector(IMAGE_EMBEDDING_DIM),
         nullable=True,
