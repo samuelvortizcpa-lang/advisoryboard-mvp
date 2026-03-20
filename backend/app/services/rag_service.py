@@ -227,7 +227,7 @@ async def process_document(db: Session, document: Document) -> None:
 
         # 2. Chunk (use smaller chunks for financial documents)
         chunk_size, chunk_overlap = get_chunk_params(document.document_type)
-        chunks = chunk_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+        chunks = await asyncio.to_thread(chunk_text, text, chunk_size, chunk_overlap)
         if not chunks:
             raise ValueError("Document produced no usable text chunks after extraction.")
 
