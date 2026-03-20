@@ -58,7 +58,7 @@ const PRICING: {
     annualMonthlyPrice: "$0",
     annualTotal: "$0",
     features: [
-      "3 clients",
+      "5 clients",
       "10 documents",
       "50 AI queries/month",
       "All document types",

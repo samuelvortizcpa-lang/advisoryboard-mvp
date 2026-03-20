@@ -2,7 +2,7 @@
 Subscription tier management and strategic query quota enforcement.
 
 Tiers:
-  - free:          50 queries/month, 3 clients, 10 documents, no Opus
+  - free:          50 queries/month, 5 clients, 10 documents, no Opus
   - starter:       factual only, no Claude access
   - professional:  100 strategic queries/month, 10 opus queries/month
   - firm:          500 strategic queries/month, 50 opus queries/month
@@ -28,7 +28,7 @@ TIER_DEFAULTS: dict[str, dict] = {
         "strategic_queries_limit": 50,
         "opus_queries_limit": 0,
         "models_allowed": ["gpt-4o-mini"],
-        "max_clients": 3,
+        "max_clients": 5,
         "max_documents": 10,
     },
     "starter": {
