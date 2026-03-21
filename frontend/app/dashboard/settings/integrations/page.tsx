@@ -64,6 +64,10 @@ export default function IntegrationsSettingsPage() {
   const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [connectingMicrosoft, setConnectingMicrosoft] = useState(false);
   const [connectingZoom, setConnectingZoom] = useState(false);
+  const [connectingFrontOAuth, setConnectingFrontOAuth] = useState(false);
+  const [connectingFrontToken, setConnectingFrontToken] = useState(false);
+  const [showFrontTokenInput, setShowFrontTokenInput] = useState(false);
+  const [frontApiToken, setFrontApiToken] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -105,9 +109,15 @@ export default function IntegrationsSettingsPage() {
       setSuccessMsg("Zoom connected successfully! Set up meeting rules below to start syncing recordings.");
       loadData();
     }
+    if (searchParams.get("connected") === "front") {
+      setSuccessMsg("Front connected successfully! Email routing rules will match conversations to clients.");
+      loadData();
+    }
     if (searchParams.get("integration_error")) {
       const err = searchParams.get("integration_error");
-      if (err?.includes("zoom")) {
+      if (err?.includes("front")) {
+        setError("Failed to connect Front. Please try again.");
+      } else if (err?.includes("zoom")) {
         setError("Failed to connect Zoom. Please try again.");
       } else if (err?.includes("microsoft")) {
         setError("Failed to connect Outlook. Please try again.");
@@ -152,6 +162,35 @@ export default function IntegrationsSettingsPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to get auth URL");
       setConnectingZoom(false);
+    }
+  };
+
+  const handleConnectFrontOAuth = async () => {
+    setConnectingFrontOAuth(true);
+    try {
+      const api = createIntegrationsApi(getToken);
+      const { authorization_url } = await api.getFrontAuthUrl();
+      window.location.href = authorization_url;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to get auth URL");
+      setConnectingFrontOAuth(false);
+    }
+  };
+
+  const handleConnectFrontToken = async () => {
+    if (!frontApiToken.trim()) return;
+    setConnectingFrontToken(true);
+    try {
+      const api = createIntegrationsApi(getToken);
+      await api.connectFrontToken(frontApiToken.trim());
+      setFrontApiToken("");
+      setShowFrontTokenInput(false);
+      setSuccessMsg("Front connected successfully via API token!");
+      await loadData();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Invalid Front API token");
+    } finally {
+      setConnectingFrontToken(false);
     }
   };
 
@@ -338,8 +377,8 @@ export default function IntegrationsSettingsPage() {
         </p>
         <h1 className="mt-1 text-2xl font-bold text-gray-900">Integrations</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Connect email accounts and Zoom to auto-ingest emails and meeting
-          recordings.
+          Connect your accounts to auto-ingest emails, meetings, and
+          conversations.
         </p>
       </div>
 
@@ -371,88 +410,31 @@ export default function IntegrationsSettingsPage() {
 
       {/* ───────── Connected Accounts ───────── */}
       <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+        <div className="border-b border-gray-100 px-6 py-4">
           <h2 className="text-sm font-semibold text-gray-900">
             Connected Accounts
           </h2>
-          {connections.length > 0 && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleConnectGmail}
-                disabled={connectingGoogle}
-                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-              >
-                {connectingGoogle ? <Spinner /> : <GmailIcon small />}
-                Add Gmail
-              </button>
-              <button
-                onClick={handleConnectOutlook}
-                disabled={connectingMicrosoft}
-                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-              >
-                {connectingMicrosoft ? <Spinner /> : <OutlookIcon small />}
-                Add Outlook
-              </button>
-              <button
-                onClick={handleConnectZoom}
-                disabled={connectingZoom}
-                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-              >
-                {connectingZoom ? <Spinner /> : <ZoomIcon small />}
-                Add Zoom
-              </button>
-            </div>
-          )}
         </div>
 
-        <div className="p-6">
-          {connections.length === 0 ? (
-            /* Empty state */
-            <div className="flex flex-col items-center rounded-lg border-2 border-dashed border-gray-200 px-6 py-10">
-              <div className="flex items-center gap-3">
-                <GmailIcon />
-                <OutlookIcon />
-                <ZoomIcon />
-              </div>
-              <p className="mt-3 text-sm font-medium text-gray-900">
-                No accounts connected
-              </p>
-              <p className="mt-1 text-xs text-gray-500">
-                Connect email or Zoom to auto-ingest client communications
-              </p>
-              <div className="mt-4 flex items-center gap-3">
-                <button
-                  onClick={handleConnectGmail}
-                  disabled={connectingGoogle}
-                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {connectingGoogle ? <Spinner /> : <GmailIcon small />}
-                  Connect Gmail
-                </button>
-                <button
-                  onClick={handleConnectOutlook}
-                  disabled={connectingMicrosoft}
-                  className="inline-flex items-center gap-2 rounded-md border-2 border-[#0078d4] bg-white px-4 py-2 text-sm font-medium text-[#0078d4] transition-colors hover:bg-[#0078d4]/5 disabled:opacity-50"
-                >
-                  {connectingMicrosoft ? <Spinner /> : <OutlookIcon small />}
-                  Connect Outlook
-                </button>
-                <button
-                  onClick={handleConnectZoom}
-                  disabled={connectingZoom}
-                  className="inline-flex items-center gap-2 rounded-md border-2 border-[#2D8CFF] bg-white px-4 py-2 text-sm font-medium text-[#2D8CFF] transition-colors hover:bg-[#2D8CFF]/5 disabled:opacity-50"
-                >
-                  {connectingZoom ? <Spinner /> : <ZoomIcon small />}
-                  Connect Zoom
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* Connection cards */
+        <div className="p-6 space-y-6">
+          {/* Active connection cards */}
+          {connections.length > 0 && (
             <div className="space-y-4">
               {connections.map((conn) => {
                 const isSyncing = syncingIds.has(conn.id);
                 const result = syncResults[conn.id];
+                const deepSyncTitle =
+                  conn.provider === "zoom"
+                    ? "Sync last 30 days (up to 100 recordings)"
+                    : conn.provider === "front"
+                    ? "Sync last 7 days (up to 200 conversations)"
+                    : "Sync last 7 days (up to 200 emails)";
+                const itemLabel =
+                  conn.provider === "zoom"
+                    ? "recordings"
+                    : conn.provider === "front"
+                    ? "conversations"
+                    : "emails";
 
                 return (
                   <div
@@ -460,34 +442,12 @@ export default function IntegrationsSettingsPage() {
                     className="rounded-lg border border-gray-200 p-4"
                   >
                     <div className="flex items-center justify-between">
-                      {/* Left: icon + info */}
                       <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                            conn.provider === "zoom"
-                              ? "bg-blue-50"
-                              : conn.provider === "microsoft"
-                              ? "bg-blue-50"
-                              : "bg-red-50"
-                          }`}
-                        >
-                          {conn.provider === "zoom" ? (
-                            <ZoomIcon />
-                          ) : conn.provider === "microsoft" ? (
-                            <OutlookIcon />
-                          ) : (
-                            <GmailIcon />
-                          )}
-                        </div>
+                        <ProviderIconBubble provider={conn.provider} />
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900">
-                              {conn.provider_email ||
-                                (conn.provider === "zoom"
-                                  ? "Zoom"
-                                  : conn.provider === "microsoft"
-                                  ? "Outlook"
-                                  : "Gmail")}
+                              {conn.provider_email || providerLabel(conn.provider)}
                             </p>
                             <ProviderBadge provider={conn.provider} />
                           </div>
@@ -499,7 +459,6 @@ export default function IntegrationsSettingsPage() {
                         </div>
                       </div>
 
-                      {/* Right: actions */}
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleSync(conn.id)}
@@ -513,7 +472,7 @@ export default function IntegrationsSettingsPage() {
                           onClick={() => handleDeepSync(conn.id)}
                           disabled={isSyncing}
                           className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                          title={conn.provider === "zoom" ? "Sync last 30 days (up to 100 recordings)" : "Sync last 7 days (up to 200 emails)"}
+                          title={deepSyncTitle}
                         >
                           Deep Sync
                         </button>
@@ -532,7 +491,6 @@ export default function IntegrationsSettingsPage() {
                       </div>
                     </div>
 
-                    {/* Sync result */}
                     {result && !isSyncing && (
                       <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-4 py-3">
                         <div className="flex items-center gap-4 text-xs">
@@ -550,9 +508,7 @@ export default function IntegrationsSettingsPage() {
                                   : "bg-red-500"
                               }`}
                             />
-                            {result.status === "completed"
-                              ? "Completed"
-                              : "Failed"}
+                            {result.status === "completed" ? "Completed" : "Failed"}
                           </span>
                           <span className="text-gray-600">
                             {result.emails_found} found
@@ -563,8 +519,8 @@ export default function IntegrationsSettingsPage() {
                           <span className="text-gray-500">
                             {result.emails_skipped} skipped
                           </span>
-                          {conn.provider === "zoom" && (
-                            <span className="text-[10px] text-gray-400">(recordings)</span>
+                          {(conn.provider === "zoom" || conn.provider === "front") && (
+                            <span className="text-[10px] text-gray-400">({itemLabel})</span>
                           )}
                         </div>
                         {result.error_message && (
@@ -575,7 +531,6 @@ export default function IntegrationsSettingsPage() {
                       </div>
                     )}
 
-                    {/* Sync history */}
                     {expandedHistoryId === conn.id &&
                       syncHistories[conn.id] && (
                         <div className="mt-3">
@@ -590,6 +545,125 @@ export default function IntegrationsSettingsPage() {
               })}
             </div>
           )}
+
+          {/* Provider connect grid */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Gmail */}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <ProviderIconBubble provider="google" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Gmail</p>
+                  <p className="text-xs text-gray-500">Auto-import emails from Gmail</p>
+                </div>
+              </div>
+              <button
+                onClick={handleConnectGmail}
+                disabled={connectingGoogle}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {connectingGoogle ? <Spinner /> : <GmailIcon small />}
+                Connect Gmail
+              </button>
+            </div>
+
+            {/* Outlook */}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <ProviderIconBubble provider="microsoft" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Outlook</p>
+                  <p className="text-xs text-gray-500">Auto-import emails from Outlook/365</p>
+                </div>
+              </div>
+              <button
+                onClick={handleConnectOutlook}
+                disabled={connectingMicrosoft}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#0078d4] bg-white px-4 py-2 text-sm font-medium text-[#0078d4] transition-colors hover:bg-[#0078d4]/5 disabled:opacity-50"
+              >
+                {connectingMicrosoft ? <Spinner /> : <OutlookIcon small />}
+                Connect Outlook
+              </button>
+            </div>
+
+            {/* Zoom */}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <ProviderIconBubble provider="zoom" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Zoom</p>
+                  <p className="text-xs text-gray-500">Auto-import meeting recordings and transcripts</p>
+                </div>
+              </div>
+              <button
+                onClick={handleConnectZoom}
+                disabled={connectingZoom}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2D8CFF] bg-white px-4 py-2 text-sm font-medium text-[#2D8CFF] transition-colors hover:bg-[#2D8CFF]/5 disabled:opacity-50"
+              >
+                {connectingZoom ? <Spinner /> : <ZoomIcon small />}
+                Connect Zoom
+              </button>
+            </div>
+
+            {/* Front */}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <ProviderIconBubble provider="front" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Front</p>
+                  <p className="text-xs text-gray-500">Auto-import conversations from Front shared inbox</p>
+                </div>
+              </div>
+              {showFrontTokenInput ? (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={frontApiToken}
+                      onChange={(e) => setFrontApiToken(e.target.value)}
+                      placeholder="Paste your Front API token..."
+                      className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={handleConnectFrontToken}
+                      disabled={connectingFrontToken || !frontApiToken.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-[#FF5C5C] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#e04e4e] disabled:opacity-50"
+                    >
+                      {connectingFrontToken ? <Spinner /> : "Connect"}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => { setShowFrontTokenInput(false); setFrontApiToken(""); }}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleConnectFrontOAuth}
+                      disabled={connectingFrontOAuth}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border-2 border-[#FF5C5C] bg-white px-4 py-2 text-sm font-medium text-[#FF5C5C] transition-colors hover:bg-[#FF5C5C]/5 disabled:opacity-50"
+                    >
+                      {connectingFrontOAuth ? <Spinner /> : <FrontIcon small />}
+                      Connect with OAuth
+                    </button>
+                    <button
+                      onClick={() => setShowFrontTokenInput(true)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                    >
+                      API Token
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    OAuth is recommended for team accounts. Use an API token for personal.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1082,7 +1156,9 @@ function ZoomIcon({ small }: { small?: boolean } = {}) {
 
 function ProviderBadge({ provider }: { provider: string }) {
   const config =
-    provider === "zoom"
+    provider === "front"
+      ? { bg: "bg-red-50", text: "text-red-600", label: "Front" }
+      : provider === "zoom"
       ? { bg: "bg-sky-100", text: "text-sky-700", label: "Zoom" }
       : provider === "microsoft"
       ? { bg: "bg-blue-100", text: "text-blue-700", label: "Outlook" }
@@ -1093,6 +1169,50 @@ function ProviderBadge({ provider }: { provider: string }) {
     >
       {config.label}
     </span>
+  );
+}
+
+function providerLabel(provider: string): string {
+  if (provider === "front") return "Front";
+  if (provider === "zoom") return "Zoom";
+  if (provider === "microsoft") return "Outlook";
+  return "Gmail";
+}
+
+function ProviderIconBubble({ provider }: { provider: string }) {
+  const bg =
+    provider === "front"
+      ? "bg-red-50"
+      : provider === "zoom"
+      ? "bg-blue-50"
+      : provider === "microsoft"
+      ? "bg-blue-50"
+      : "bg-red-50";
+  return (
+    <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${bg}`}>
+      {provider === "front" ? (
+        <FrontIcon />
+      ) : provider === "zoom" ? (
+        <ZoomIcon />
+      ) : provider === "microsoft" ? (
+        <OutlookIcon />
+      ) : (
+        <GmailIcon />
+      )}
+    </div>
+  );
+}
+
+function FrontIcon({ small }: { small?: boolean } = {}) {
+  const size = small ? "h-4 w-4" : "h-5 w-5";
+  return (
+    <svg className={`${size} shrink-0`} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="16" rx="2" stroke="#FF5C5C" strokeWidth="1.5" fill="none" />
+      <path d="M3 8h18" stroke="#FF5C5C" strokeWidth="1.5" />
+      <path d="M7 12h6" stroke="#FF5C5C" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M7 15.5h4" stroke="#FF5C5C" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="3" y="4" width="18" height="4" rx="2" fill="#FF5C5C" opacity="0.15" />
+    </svg>
   );
 }
 

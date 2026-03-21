@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     zoom_client_secret: str = ""
     zoom_redirect_uri: str = "http://localhost:8000/api/integrations/zoom/callback"
 
+    # ── Front OAuth ────────────────────────────────────────────────────────
+    front_client_id: str = ""
+    front_client_secret: str = ""
+    front_redirect_uri: str = "http://localhost:8000/api/integrations/front/callback"
+
     # ── Google AI ───────────────────────────────────────────────────────────
     google_ai_api_key: str = ""
 

@@ -993,6 +993,24 @@ export function createIntegrationsApi(getToken: GetToken) {
       );
     },
 
+    getFrontAuthUrl() {
+      return apiFetch<{ authorization_url: string }>(
+        getToken,
+        "/integrations/front/authorize"
+      );
+    },
+
+    connectFrontToken(apiToken: string) {
+      return apiFetch<IntegrationConnection>(
+        getToken,
+        "/integrations/front/connect-token",
+        {
+          method: "POST",
+          body: JSON.stringify({ api_token: apiToken }),
+        }
+      );
+    },
+
     // ── Connections ──
     listConnections() {
       return apiFetch<IntegrationConnection[]>(

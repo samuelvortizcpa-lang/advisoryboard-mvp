@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -15,7 +16,7 @@ from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.integration_connection import IntegrationConnection
-from app.services import email_router, gmail_sync_service, google_auth_service, microsoft_auth_service, outlook_sync_service, zoom_auth_service, zoom_sync_service
+from app.services import email_router, front_auth_service, front_sync_service, gmail_sync_service, google_auth_service, microsoft_auth_service, outlook_sync_service, zoom_auth_service, zoom_sync_service
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,10 @@ class AssignRecordingRequest(BaseModel):
     client_id: UUID
     create_rule: bool = True
     rule_match_field: str = "topic_contains"
+
+
+class FrontTokenRequest(BaseModel):
+    api_token: str
 
 
 class SyncLogResponse(BaseModel):
@@ -279,6 +284,119 @@ async def zoom_callback(
 
 
 # ---------------------------------------------------------------------------
+# Front OAuth + API token endpoints
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/integrations/front/authorize",
+    response_model=AuthorizeResponse,
+    summary="Get Front OAuth authorization URL",
+)
+async def front_authorize(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> AuthorizeResponse:
+    """
+    Return the Front OAuth2 authorization URL.  The frontend should
+    redirect the user to this URL to begin the consent flow.
+    """
+    user_id = current_user["user_id"]
+    url = front_auth_service.get_authorization_url(user_id)
+    return AuthorizeResponse(authorization_url=url)
+
+
+@router.get(
+    "/integrations/front/callback",
+    summary="Handle Front OAuth callback",
+)
+async def front_callback(
+    code: str = Query(..., description="Authorization code from Front"),
+    state: str = Query(..., description="State parameter (user_id)"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """
+    Front redirects here after the user grants consent.  We exchange the
+    authorization code for tokens, store them, and redirect to the
+    frontend settings page.
+    """
+    settings = get_settings()
+
+    try:
+        connection = await front_auth_service.handle_callback(
+            code=code,
+            state=state,
+            db=db,
+        )
+    except Exception as exc:
+        logger.exception("Front OAuth callback failed: %s", exc)
+        return RedirectResponse(
+            url=f"{settings.frontend_url}/dashboard/settings/integrations?integration_error=front_auth_failed",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    return RedirectResponse(
+        url=f"{settings.frontend_url}/dashboard/settings/integrations?connected=front",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.post(
+    "/integrations/front/connect-token",
+    response_model=ConnectionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Connect Front via API token",
+)
+async def front_connect_token(
+    body: FrontTokenRequest,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> ConnectionResponse:
+    """
+    Validate a Front API token and store the connection.  This lets users
+    paste their Front API token instead of going through OAuth.
+    """
+    user_id = current_user["user_id"]
+
+    if not body.api_token.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="api_token must not be empty",
+        )
+
+    try:
+        connection = await front_auth_service.handle_api_token_connection(
+            user_id=user_id,
+            api_token=body.api_token.strip(),
+            db=db,
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 401:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Front API token",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Front API error: {exc.response.status_code}",
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not reach Front API: {exc}",
+        )
+
+    return ConnectionResponse(
+        id=connection.id,
+        provider=connection.provider,
+        provider_email=connection.provider_email,
+        is_active=connection.is_active,
+        scopes=connection.scopes,
+        last_sync_at=connection.last_sync_at.isoformat() if connection.last_sync_at else None,
+        created_at=connection.created_at.isoformat(),
+        updated_at=connection.updated_at.isoformat(),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Connection management endpoints
 # ---------------------------------------------------------------------------
 
@@ -395,12 +513,21 @@ async def trigger_sync(
 ) -> SyncLogResponse:
     """
     Trigger a manual sync for a connected account.  Automatically detects
-    the provider (Google, Microsoft, or Zoom) and calls the right service.
+    the provider (Google, Microsoft, Zoom, or Front) and calls the right service.
     """
     user_id = current_user["user_id"]
     provider = _get_connection_provider(connection_id, user_id, db)
 
-    if provider == "zoom":
+    if provider == "front":
+        sync_log = await front_sync_service.sync_conversations(
+            connection_id=connection_id,
+            user_id=user_id,
+            db=db,
+            sync_type="manual",
+            max_results=max_results,
+            since_hours=since_hours,
+        )
+    elif provider == "zoom":
         days_back = max(since_hours // 24, 1)
         sync_log = await zoom_sync_service.sync_recordings(
             connection_id=connection_id,
@@ -445,12 +572,16 @@ async def get_sync_history(
 ) -> List[SyncLogResponse]:
     """
     Return recent sync logs for a connection, most recent first.
-    Works for all providers (Google, Microsoft, Zoom).
+    Works for all providers (Google, Microsoft, Zoom, Front).
     """
     user_id = current_user["user_id"]
     provider = _get_connection_provider(connection_id, user_id, db)
 
-    if provider == "zoom":
+    if provider == "front":
+        logs = front_sync_service.get_sync_history(
+            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
+        )
+    elif provider == "zoom":
         logs = zoom_sync_service.get_sync_history(
             user_id=user_id, connection_id=connection_id, db=db, limit=limit,
         )
@@ -483,7 +614,16 @@ async def trigger_deep_sync(
     user_id = current_user["user_id"]
     provider = _get_connection_provider(connection_id, user_id, db)
 
-    if provider == "zoom":
+    if provider == "front":
+        sync_log = await front_sync_service.sync_conversations(
+            connection_id=connection_id,
+            user_id=user_id,
+            db=db,
+            sync_type="manual",
+            max_results=200,
+            since_hours=168,  # 7 days
+        )
+    elif provider == "zoom":
         sync_log = await zoom_sync_service.sync_recordings(
             connection_id=connection_id,
             user_id=user_id,
