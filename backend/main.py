@@ -22,6 +22,7 @@ from app.api.timeline import router as timeline_router
 from app.api.usage import router as usage_router
 from app.api.admin import router as admin_router
 from app.api.stripe_routes import router as stripe_router
+from app.api.health import router as health_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -88,22 +89,6 @@ async def root():
     return {"status": "AdvisoryBoard API is running"}
 
 
-@app.get("/health")
-async def health():
-    """
-    Liveness probe used by Railway and other orchestrators.
-
-    Returns the current environment and whether TEST_MODE is active so
-    operators can verify production settings at a glance.
-    """
-    settings = get_settings()
-    return {
-        "status": "ok",
-        "environment": settings.environment,
-        "test_mode": settings.test_mode,
-    }
-
-
 # ── API routers ───────────────────────────────────────────────────────────────
 
 app.include_router(client_types_router, prefix="/api", tags=["client-types"])
@@ -119,3 +104,4 @@ app.include_router(timeline_router,     prefix="/api", tags=["timeline"])
 app.include_router(usage_router,       prefix="/api", tags=["usage"])
 app.include_router(admin_router,       prefix="/api/admin", tags=["admin"])
 app.include_router(stripe_router,      prefix="/api/stripe", tags=["stripe"])
+app.include_router(health_router,      prefix="/api", tags=["health"])
