@@ -53,3 +53,6 @@ sentry-sdk[fastapi]>=2.0.0
 
 # Scheduled auto-sync
 apscheduler>=3.10.0
+
+# Transactional email (consent e-signatures)
+resend>=2.0.0

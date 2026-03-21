@@ -28,6 +28,7 @@ from app.services.consent_service import (
     create_or_update_consent,
     generate_consent_form_pdf,
     get_consent_status,
+    send_consent_for_signature,
 )
 
 logger = logging.getLogger(__name__)
@@ -242,3 +243,52 @@ async def consent_history(
     )
 
     return [ConsentResponse.model_validate(r) for r in records]
+
+
+# ---------------------------------------------------------------------------
+# POST /api/clients/{client_id}/consent/send-for-signature
+# ---------------------------------------------------------------------------
+
+
+class SendForSignatureRequest(BaseModel):
+    taxpayer_email: str
+    taxpayer_name: str
+    preparer_name: str
+    preparer_firm: Optional[str] = None
+
+
+class SendForSignatureResponse(BaseModel):
+    success: bool
+    consent_id: UUID
+    message: str
+
+
+@router.post(
+    "/clients/{client_id}/consent/send-for-signature",
+    response_model=SendForSignatureResponse,
+    summary="Send a consent form for e-signature via email",
+)
+async def send_for_signature(
+    client_id: UUID,
+    body: SendForSignatureRequest,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> SendForSignatureResponse:
+    user = user_service.get_or_create_user(db, current_user)
+    _verify_client_ownership(db, client_id, user.id)
+
+    consent = send_consent_for_signature(
+        client_id=client_id,
+        user_id=user.clerk_id,
+        taxpayer_email=body.taxpayer_email,
+        taxpayer_name=body.taxpayer_name,
+        preparer_name=body.preparer_name,
+        preparer_firm=body.preparer_firm,
+        db=db,
+    )
+
+    return SendForSignatureResponse(
+        success=True,
+        consent_id=consent.id,
+        message=f"Consent request sent to {body.taxpayer_email}",
+    )

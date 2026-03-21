@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import io
 import logging
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.client import Client
@@ -497,6 +499,423 @@ def generate_consent_form_pdf(
     logger.info(
         "Generated consent form PDF for client %s (%d bytes)",
         client_id, len(pdf_bytes),
+    )
+
+    return pdf_bytes, storage_url
+
+
+# ---------------------------------------------------------------------------
+# E-signature workflow
+# ---------------------------------------------------------------------------
+
+
+def send_consent_for_signature(
+    client_id: UUID,
+    user_id: str,
+    db: Session,
+    to_email: str | None = None,
+) -> ClientConsent:
+    """
+    Create a consent record with a signing token, send the consent request
+    email to the taxpayer, and return the record.
+    """
+    from app.core.config import get_settings
+    from app.models.user import User
+    from app.services import email_service
+    from app.services.notification_service import send_notification
+
+    settings = get_settings()
+
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    email = to_email or (client.email if client.email else None)
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Client email required — provide an email address or set one on the client record",
+        )
+
+    user = db.query(User).filter(User.clerk_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    preparer_name = " ".join(
+        part for part in [user.first_name, user.last_name] if part
+    ) or ""
+
+    # Get firm name from latest consent record if available
+    latest = (
+        db.query(ClientConsent)
+        .filter(ClientConsent.client_id == client_id, ClientConsent.user_id == user_id)
+        .order_by(ClientConsent.created_at.desc())
+        .first()
+    )
+    preparer_firm = latest.preparer_firm if latest and latest.preparer_firm else None
+
+    now = datetime.now(timezone.utc)
+    token = secrets.token_urlsafe(48)
+
+    record = ClientConsent(
+        client_id=client_id,
+        user_id=user_id,
+        consent_type="both",
+        status="sent",
+        signing_token=token,
+        signing_token_expires_at=now + timedelta(days=30),
+        sent_to_email=email,
+        preparer_name=preparer_name,
+        preparer_firm=preparer_firm,
+        taxpayer_name=client.name,
+    )
+    db.add(record)
+
+    # Update client-level status
+    if client.consent_status in ("not_required", "pending"):
+        client.consent_status = "pending"
+
+    db.commit()
+    db.refresh(record)
+
+    # Build signing URL
+    signing_url = f"{settings.frontend_url}/consent/sign/{token}"
+
+    # Send email
+    try:
+        email_service.send_consent_request_email(
+            to_email=email,
+            client_name=client.name,
+            preparer_name=preparer_name,
+            preparer_firm=preparer_firm,
+            signing_url=signing_url,
+        )
+        record.sent_at = datetime.now(timezone.utc)
+        db.commit()
+    except Exception as exc:
+        logger.error("Failed to send consent email to %s: %s", email, exc)
+        # Record was created — leave it with sent_at=None so CPA can retry
+
+    # Slack notification
+    try:
+        import asyncio
+        asyncio.get_event_loop().create_task(
+            send_notification(
+                "consent_sent",
+                f"Consent form sent to {client.name} at {email}",
+            )
+        )
+    except Exception:
+        pass  # fire-and-forget
+
+    logger.info(
+        "Consent form sent for signing: client=%s email=%s token=%s",
+        client_id, email, token[:8] + "...",
+    )
+
+    return record
+
+
+def validate_signing_token(
+    token: str,
+    db: Session,
+) -> ClientConsent | None:
+    """
+    Look up a consent record by signing token.
+
+    Returns None if not found, expired, or already signed.
+    """
+    record = (
+        db.query(ClientConsent)
+        .filter(ClientConsent.signing_token == token)
+        .first()
+    )
+    if not record:
+        return None
+
+    # Already signed
+    if record.signed_at is not None:
+        return None
+
+    # Token expired
+    now = datetime.now(timezone.utc)
+    if record.signing_token_expires_at and record.signing_token_expires_at.astimezone(timezone.utc) < now:
+        return None
+
+    return record
+
+
+def complete_signing(
+    token: str,
+    typed_name: str,
+    ip_address: str | None,
+    user_agent: str | None,
+    db: Session,
+) -> ClientConsent:
+    """
+    Complete the e-signature flow: update the consent record, generate a
+    signed PDF, update client status, and send notifications.
+    """
+    from app.models.user import User
+    from app.services.notification_service import send_notification
+
+    record = validate_signing_token(token, db)
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired signing link")
+
+    now = datetime.now(timezone.utc)
+
+    record.status = "obtained"
+    record.consent_date = now
+    record.expiration_date = now + timedelta(days=365)
+    record.consent_method = "electronic"
+    record.signed_at = now
+    record.signer_typed_name = typed_name
+    record.signer_ip_address = ip_address
+    record.signer_user_agent = user_agent
+    record.taxpayer_name = typed_name
+
+    # Update client-level status
+    client = db.query(Client).filter(Client.id == record.client_id).first()
+    if client:
+        client.consent_status = "obtained"
+
+    db.commit()
+    db.refresh(record)
+
+    # Generate signed PDF
+    try:
+        pdf_bytes, storage_url = generate_signed_consent_pdf(record, db)
+        record.signed_pdf_url = storage_url
+        db.commit()
+    except Exception as exc:
+        logger.error("Failed to generate signed PDF: %s", exc)
+
+    # Slack notification
+    try:
+        import asyncio
+        client_name = client.name if client else "Unknown"
+        asyncio.get_event_loop().create_task(
+            send_notification(
+                "consent_signed",
+                f"{client_name} signed 7216 consent electronically",
+            )
+        )
+    except Exception:
+        pass
+
+    # Email CPA
+    try:
+        from app.services import email_service
+
+        user = db.query(User).filter(User.clerk_id == record.user_id).first()
+        if user and user.email:
+            client_name = client.name if client else "Unknown"
+            email_service.send_consent_signed_notification(
+                to_email=user.email,
+                client_name=client_name,
+                signer_name=typed_name,
+            )
+    except Exception as exc:
+        logger.error("Failed to send signed notification email: %s", exc)
+
+    logger.info(
+        "Consent signed: client_id=%s signer=%s ip=%s",
+        record.client_id, typed_name, ip_address,
+    )
+
+    return record
+
+
+# ---------------------------------------------------------------------------
+# Signed PDF generation (with e-signature embedded)
+# ---------------------------------------------------------------------------
+
+
+def generate_signed_consent_pdf(
+    consent_record: ClientConsent,
+    db: Session,
+) -> tuple[bytes, str]:
+    """
+    Generate a consent PDF with the electronic signature embedded.
+
+    Returns (pdf_bytes, storage_url).
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+    from app.services import storage_service
+
+    taxpayer_name = consent_record.taxpayer_name or consent_record.signer_typed_name or ""
+    preparer_name = consent_record.preparer_name or ""
+    preparer_firm = consent_record.preparer_firm or ""
+    signed_at = consent_record.signed_at or datetime.now(timezone.utc)
+    ip_address = consent_record.signer_ip_address or "Unknown"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=0.75 * inch,
+        rightMargin=0.75 * inch,
+        topMargin=0.75 * inch,
+        bottomMargin=0.75 * inch,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "Title2", parent=styles["Title"], fontSize=14, spaceAfter=6, alignment=1,
+    )
+    subtitle_style = ParagraphStyle(
+        "Sub2", parent=styles["Normal"], fontSize=10, spaceAfter=12, alignment=1,
+        textColor=colors.grey,
+    )
+    heading_style = ParagraphStyle(
+        "Head2", parent=styles["Heading2"], fontSize=11, spaceBefore=12, spaceAfter=4,
+        textColor=colors.HexColor("#1a1a1a"),
+    )
+    body_style = ParagraphStyle(
+        "Body2", parent=styles["Normal"], fontSize=9.5, leading=13, spaceAfter=8,
+    )
+    small_style = ParagraphStyle(
+        "Small2", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.grey,
+    )
+    esig_style = ParagraphStyle(
+        "ESig", parent=styles["Normal"], fontSize=9, leading=12,
+        textColor=colors.HexColor("#1e40af"),
+    )
+
+    elements: list = []
+
+    # Title
+    elements.append(Paragraph("CONSENT TO DISCLOSE TAX RETURN INFORMATION", title_style))
+    elements.append(Paragraph("IRC Section 7216 | Rev. Proc. 2013-14", subtitle_style))
+    elements.append(Spacer(1, 6))
+
+    # Required disclosure
+    elements.append(Paragraph("REQUIRED DISCLOSURE", heading_style))
+    elements.append(Paragraph(
+        "Federal law requires this consent form be provided to you. Unless "
+        "authorized by law, we cannot disclose your tax return information to "
+        "third parties for purposes other than the preparation and filing of "
+        "your tax return without your consent. If you consent to the disclosure "
+        "of your tax return information, Federal law may not protect your tax "
+        "return information from further use or distribution.",
+        body_style,
+    ))
+    elements.append(Paragraph(
+        "You are not required to complete this form to engage our tax return "
+        "preparation services. If you do not sign this consent form, we will "
+        "not disclose your tax return information to AdvisoryBoard Platform "
+        "for the purposes described below.",
+        body_style,
+    ))
+    elements.append(Spacer(1, 4))
+
+    # Parties
+    elements.append(Paragraph("PARTIES", heading_style))
+    party_data = [
+        ["Taxpayer Name:", taxpayer_name],
+        ["Tax Return Preparer:", preparer_name],
+        ["Preparer Firm Name:", preparer_firm or "\u2014"],
+    ]
+    party_table = Table(party_data, colWidths=[2 * inch, 4.5 * inch])
+    party_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LINEBELOW", (1, 0), (1, -1), 0.5, colors.lightgrey),
+    ]))
+    elements.append(party_table)
+    elements.append(Spacer(1, 8))
+
+    # Purpose
+    elements.append(Paragraph("PURPOSE OF DISCLOSURE AND USE", heading_style))
+    elements.append(Paragraph(
+        "To disclose and use your tax return information within the "
+        "AdvisoryBoard document intelligence platform for the purposes of: "
+        "AI-powered document analysis, automated action item extraction, "
+        "client brief generation, and question-answering with source "
+        "citations. Your tax return information will be processed by AI "
+        "models (OpenAI, Anthropic, Google) to provide these services to "
+        "your tax return preparer.",
+        body_style,
+    ))
+
+    # Recipient
+    elements.append(Paragraph("RECIPIENT", heading_style))
+    elements.append(Paragraph(
+        "AdvisoryBoard (myadvisoryboard.space), a cloud-based document "
+        "intelligence platform.",
+        body_style,
+    ))
+
+    # Duration
+    elements.append(Paragraph("DURATION", heading_style))
+    elements.append(Paragraph(
+        "This consent is valid for one (1) year from the date of signature.",
+        body_style,
+    ))
+    elements.append(Spacer(1, 12))
+
+    # Electronic signature block
+    elements.append(Paragraph("ELECTRONIC SIGNATURE", heading_style))
+
+    sig_date = signed_at.strftime("%B %d, %Y at %I:%M %p UTC")
+
+    elements.append(Paragraph(
+        f"Electronically signed by: <b>{taxpayer_name}</b>",
+        esig_style,
+    ))
+    elements.append(Paragraph(f"Date: {sig_date}", esig_style))
+    elements.append(Paragraph(f"IP Address: {ip_address}", esig_style))
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph(
+        "This document was electronically signed via AdvisoryBoard's secure "
+        "consent platform. Electronic signatures are valid for IRC Section "
+        "7216 consent per Treasury Regulation 301.7216-3(a).",
+        small_style,
+    ))
+    elements.append(Spacer(1, 12))
+
+    # TIGTA notice
+    elements.append(Paragraph(
+        "If you believe your tax return information has been disclosed or "
+        "used improperly in a manner unauthorized by law or without your "
+        "permission, you may contact the Treasury Inspector General for Tax "
+        "Administration (TIGTA) by telephone at 1-800-366-4484, or by email "
+        "at complaints@tigta.treas.gov.",
+        small_style,
+    ))
+
+    doc.build(elements)
+    pdf_bytes = buf.getvalue()
+    buf.close()
+
+    # Upload to Supabase Storage
+    storage_path = (
+        f"consents/{consent_record.user_id}/{consent_record.client_id}"
+        f"/signed_{consent_record.id}.pdf"
+    )
+    storage_service.upload_file_to_path(storage_path, pdf_bytes, "application/pdf")
+    storage_url = storage_service.get_signed_url(storage_path, expires_in=3600)
+
+    logger.info(
+        "Generated signed consent PDF for consent %s (%d bytes)",
+        consent_record.id, len(pdf_bytes),
     )
 
     return pdf_bytes, storage_url

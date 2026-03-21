@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     # ── Slack ──────────────────────────────────────────────────────────────
     slack_webhook_url: str | None = None
 
+    # ── Resend (transactional email) ─────────────────────────────────────
+    resend_api_key: str | None = None
+    resend_from_email: str | None = None
+
     # ── Encryption ───────────────────────────────────────────────────────────
     encryption_key: str = ""
 

@@ -54,6 +54,25 @@ class ClientConsent(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # E-signature fields
+    signing_token: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    signing_token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sent_to_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    signed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    signer_ip_address: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    signer_user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    signer_typed_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    signed_pdf_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
