@@ -100,6 +100,12 @@ async def root():
     return {"status": "AdvisoryBoard API is running"}
 
 
+@app.get("/health")
+async def health():
+    """Lightweight healthcheck for Railway — no auth, no DB."""
+    return {"status": "ok"}
+
+
 # ── API routers ───────────────────────────────────────────────────────────────
 
 app.include_router(client_types_router, prefix="/api", tags=["client-types"])
