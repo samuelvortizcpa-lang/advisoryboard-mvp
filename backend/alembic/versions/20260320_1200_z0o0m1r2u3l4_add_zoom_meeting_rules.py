@@ -1,6 +1,6 @@
 """Add zoom_meeting_rules table
 
-Revision ID: i8j9k0l1m2n3
+Revision ID: z0o0m1r2u3l4
 Revises: h7i8j9k0l1m2
 Create Date: 2026-03-20 12:00:00.000000
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 
 # revision identifiers, used by Alembic.
-revision = "i8j9k0l1m2n3"
+revision = "z0o0m1r2u3l4"
 down_revision = "h7i8j9k0l1m2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
