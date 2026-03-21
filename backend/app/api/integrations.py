@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -16,7 +16,7 @@ from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.integration_connection import IntegrationConnection
-from app.services import email_router, front_auth_service, front_sync_service, gmail_sync_service, google_auth_service, microsoft_auth_service, outlook_sync_service, zoom_auth_service, zoom_sync_service
+from app.services import email_router, fathom_sync_service, front_auth_service, front_sync_service, gmail_sync_service, google_auth_service, microsoft_auth_service, outlook_sync_service, zoom_auth_service, zoom_sync_service
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,17 @@ class AssignRecordingRequest(BaseModel):
 
 class FrontTokenRequest(BaseModel):
     api_token: str
+
+
+class FathomConnectRequest(BaseModel):
+    api_key: str
+
+
+class FathomConnectResponse(BaseModel):
+    connected: bool
+    api_available: bool
+    message: str
+    connection: Optional[ConnectionResponse] = None
 
 
 class SyncLogResponse(BaseModel):
@@ -397,6 +408,212 @@ async def front_connect_token(
 
 
 # ---------------------------------------------------------------------------
+# Fathom endpoints
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/integrations/fathom/connect",
+    response_model=FathomConnectResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Connect Fathom via API key",
+)
+async def fathom_connect(
+    body: FathomConnectRequest,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> FathomConnectResponse:
+    """
+    Validate a Fathom API key and store the connection.
+
+    If the Fathom API is reachable, auto-sync will be available.
+    If not, the connection is still stored for manual import tracking.
+    """
+    user_id = current_user["user_id"]
+
+    if not body.api_key.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="api_key must not be empty",
+        )
+
+    try:
+        connection, api_available = await fathom_sync_service.handle_api_key_connection(
+            user_id=user_id,
+            api_key=body.api_key.strip(),
+            db=db,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    message = (
+        "Fathom connected — auto-sync is available."
+        if api_available
+        else "Fathom connected — API not reachable, but you can import transcripts manually."
+    )
+
+    return FathomConnectResponse(
+        connected=True,
+        api_available=api_available,
+        message=message,
+        connection=ConnectionResponse(
+            id=connection.id,
+            provider=connection.provider,
+            provider_email=connection.provider_email,
+            is_active=connection.is_active,
+            scopes=connection.scopes,
+            last_sync_at=connection.last_sync_at.isoformat() if connection.last_sync_at else None,
+            created_at=connection.created_at.isoformat(),
+            updated_at=connection.updated_at.isoformat(),
+        ),
+    )
+
+
+@router.post(
+    "/integrations/fathom/import",
+    summary="Import a Fathom JSON transcript",
+)
+async def fathom_import(
+    file: UploadFile = File(...),
+    client_id: UUID = Query(..., description="Client to assign this transcript to"),
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Import a manually uploaded Fathom JSON transcript file.
+
+    Parses the JSON, builds a document, and ingests it through the RAG pipeline.
+    This is a streamlined version of regular document upload, specifically for
+    Fathom transcript files.
+    """
+    import uuid as _uuid
+
+    from app.models.client import Client
+    from app.models.document import Document
+    from app.models.user import User
+
+    user_id = current_user["user_id"]
+
+    # Resolve user
+    owner = db.query(User).filter(User.clerk_id == user_id).first()
+    if not owner:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Verify client ownership
+    client = (
+        db.query(Client)
+        .filter(Client.id == client_id, Client.owner_id == owner.id)
+        .first()
+    )
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found or not owned by user",
+        )
+
+    # Read the uploaded file
+    file_content = await file.read()
+    if not file_content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty",
+        )
+
+    # Parse the Fathom JSON
+    try:
+        parsed = fathom_sync_service.parse_fathom_json_upload(file_content)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    # Build document content using the sync service's formatter
+    call_data = parsed["raw_data"]
+    call_data["title"] = parsed["title"]  # ensure title is set
+    transcript_text = parsed["transcript_text"]
+
+    if not transcript_text and not parsed["summary"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No transcript or summary found in the Fathom JSON file",
+        )
+
+    content_text = fathom_sync_service.build_fathom_document_content(
+        call_data, transcript_text,
+    )
+    # Replace auto-synced label with manual import
+    content_text = content_text.replace(
+        "Source: Fathom (auto-synced)",
+        "Source: Fathom (manual import)",
+    )
+    content_bytes = content_text.encode("utf-8")
+
+    # Build filename
+    import re
+    clean_title = re.sub(r"[^\w\s-]", "", parsed["title"] or "meeting")
+    clean_title = re.sub(r"\s+", "_", clean_title.strip())[:80]
+    date_part = re.sub(r"[^\w-]", "", str(parsed["date"])[:10]) if parsed["date"] else "unknown"
+    filename = f"fathom_meeting_{clean_title}_{date_part}.txt"
+
+    # Upload to storage
+    file_id = str(_uuid.uuid4())
+    from app.services import storage_service
+
+    storage_path = storage_service.upload_file(
+        user_id=str(owner.id),
+        client_id=str(client_id),
+        file_id=file_id,
+        filename=filename,
+        file_bytes=content_bytes,
+        content_type="text/plain",
+    )
+
+    # Create document
+    try:
+        document = Document(
+            client_id=client_id,
+            uploaded_by=owner.id,
+            filename=filename,
+            file_path=storage_path,
+            file_type="txt",
+            file_size=len(content_bytes),
+            source="fathom",
+            external_id=None,  # manual imports don't have an external ID
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+    except Exception:
+        storage_service.delete_file(storage_path)
+        db.rollback()
+        raise
+
+    # Run RAG pipeline
+    try:
+        from app.services.rag_service import process_document
+        await process_document(db, document)
+    except Exception as rag_exc:
+        logger.warning(
+            "Fathom import: RAG processing failed for document %s: %s",
+            document.id, rag_exc,
+        )
+
+    return {
+        "status": "imported",
+        "document_id": str(document.id),
+        "filename": filename,
+        "title": parsed["title"],
+        "client_id": str(client_id),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Connection management endpoints
 # ---------------------------------------------------------------------------
 
@@ -513,12 +730,21 @@ async def trigger_sync(
 ) -> SyncLogResponse:
     """
     Trigger a manual sync for a connected account.  Automatically detects
-    the provider (Google, Microsoft, Zoom, or Front) and calls the right service.
+    the provider (Google, Microsoft, Zoom, Front, or Fathom) and calls the right service.
     """
     user_id = current_user["user_id"]
     provider = _get_connection_provider(connection_id, user_id, db)
 
-    if provider == "front":
+    if provider == "fathom":
+        sync_log = await fathom_sync_service.sync_calls(
+            connection_id=connection_id,
+            user_id=user_id,
+            db=db,
+            sync_type="manual",
+            max_results=max_results,
+            since_hours=since_hours,
+        )
+    elif provider == "front":
         sync_log = await front_sync_service.sync_conversations(
             connection_id=connection_id,
             user_id=user_id,
@@ -572,12 +798,16 @@ async def get_sync_history(
 ) -> List[SyncLogResponse]:
     """
     Return recent sync logs for a connection, most recent first.
-    Works for all providers (Google, Microsoft, Zoom, Front).
+    Works for all providers (Google, Microsoft, Zoom, Front, Fathom).
     """
     user_id = current_user["user_id"]
     provider = _get_connection_provider(connection_id, user_id, db)
 
-    if provider == "front":
+    if provider == "fathom":
+        logs = fathom_sync_service.get_sync_history(
+            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
+        )
+    elif provider == "front":
         logs = front_sync_service.get_sync_history(
             user_id=user_id, connection_id=connection_id, db=db, limit=limit,
         )
@@ -614,7 +844,16 @@ async def trigger_deep_sync(
     user_id = current_user["user_id"]
     provider = _get_connection_provider(connection_id, user_id, db)
 
-    if provider == "front":
+    if provider == "fathom":
+        sync_log = await fathom_sync_service.sync_calls(
+            connection_id=connection_id,
+            user_id=user_id,
+            db=db,
+            sync_type="manual",
+            max_results=100,
+            since_hours=720,  # 30 days
+        )
+    elif provider == "front":
         sync_log = await front_sync_service.sync_conversations(
             connection_id=connection_id,
             user_id=user_id,
