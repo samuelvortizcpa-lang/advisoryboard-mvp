@@ -18,6 +18,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.client_consent import ClientConsent
 from app.services.consent_service import complete_signing, validate_signing_token
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,36 @@ class SigningResultResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _check_token(token: str, db: Session) -> tuple[ClientConsent | None, bool, bool]:
+    """
+    Look up the token and determine its state.
+
+    Returns (consent_or_None, expired, already_signed).
+    """
+    from datetime import datetime, timezone
+
+    record = (
+        db.query(ClientConsent)
+        .filter(ClientConsent.signing_token == token)
+        .first()
+    )
+    if not record:
+        return None, False, False
+
+    if record.signed_at is not None:
+        return None, False, True
+
+    now = datetime.now(timezone.utc)
+    if record.signing_token_expires_at and record.signing_token_expires_at.astimezone(timezone.utc) < now:
+        return None, True, False
+
+    return record, False, False
+
+
+# ---------------------------------------------------------------------------
 # GET /api/consent/sign/{token}
 # ---------------------------------------------------------------------------
 
@@ -77,16 +108,15 @@ async def get_signing_form(
     token: str,
     db: Session = Depends(get_db),
 ) -> SigningFormResponse:
-    result = validate_signing_token(token, db)
+    consent, expired, already_signed = _check_token(token, db)
 
-    if not result["valid"]:
+    if consent is None:
         return SigningFormResponse(
             valid=False,
-            expired=result.get("expired", False),
-            already_signed=result.get("already_signed", False),
+            expired=expired,
+            already_signed=already_signed,
         )
 
-    consent = result["consent"]
     return SigningFormResponse(
         valid=True,
         client_name=consent.taxpayer_name,
@@ -111,20 +141,18 @@ async def submit_signing(
     request: Request,
     db: Session = Depends(get_db),
 ) -> SigningResultResponse:
-    # Re-validate the token
-    result = validate_signing_token(token, db)
-    if not result["valid"]:
+    consent = validate_signing_token(token, db)
+    if consent is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid, expired, or already-signed token",
         )
 
-    consent = result["consent"]
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent", "")
 
     complete_signing(
-        consent=consent,
+        token=token,
         typed_name=body.typed_name,
         ip_address=ip_address,
         user_agent=user_agent,
