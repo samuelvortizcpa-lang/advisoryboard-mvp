@@ -50,3 +50,6 @@ msal>=1.28.0
 
 # Error monitoring
 sentry-sdk[fastapi]>=2.0.0
+
+# Scheduled auto-sync
+apscheduler>=3.10.0

@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     # ── Encryption ───────────────────────────────────────────────────────────
     encryption_key: str = ""
 
+    # ── Auto-sync ──────────────────────────────────────────────────────────
+    auto_sync_enabled: bool = True
+
     # ── CORS ──────────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins, e.g.:
     #   ALLOWED_ORIGINS=https://yourapp.railway.app,https://yourapp.com

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -1443,3 +1443,67 @@ async def assign_recording(
         is_active=rule.is_active,
         created_at=rule.created_at.isoformat(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin: auto-sync endpoints
+# ---------------------------------------------------------------------------
+
+async def _require_admin_integrations(request: Any) -> None:
+    """Require admin auth via X-Admin-Key header or Clerk admin JWT."""
+    settings = get_settings()
+
+    api_key = request.headers.get("X-Admin-Key")
+    if api_key and settings.admin_api_key and api_key == settings.admin_api_key:
+        return
+
+    from fastapi.security import HTTPBearer
+    bearer = HTTPBearer(auto_error=False)
+    credentials = await bearer(request)
+    if credentials:
+        try:
+            from app.core.auth import verify_clerk_token
+            payload = await verify_clerk_token(credentials.credentials)
+            user_id = payload.get("sub")
+            if settings.admin_user_id and user_id == settings.admin_user_id:
+                return
+        except HTTPException:
+            pass
+
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+
+@router.post(
+    "/integrations/admin/trigger-sync",
+    summary="Manually trigger auto-sync (admin only)",
+)
+async def admin_trigger_sync(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Manually trigger the auto-sync loop for all active connections.
+    Requires admin authentication.
+    """
+    await _require_admin_integrations(request)
+
+    from app.services.auto_sync_service import run_auto_sync
+    summary = await run_auto_sync(db)
+    return summary
+
+
+@router.get(
+    "/integrations/admin/sync-status",
+    summary="Get auto-sync scheduler status (admin only)",
+)
+async def admin_sync_status(
+    request: Request,
+) -> Dict[str, Any]:
+    """
+    Return the current auto-sync scheduler status.
+    Requires admin authentication.
+    """
+    await _require_admin_integrations(request)
+
+    from app.services.auto_sync_service import get_scheduler_status
+    return get_scheduler_status()

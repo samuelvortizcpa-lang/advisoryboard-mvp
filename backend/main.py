@@ -81,6 +81,17 @@ async def _startup_log() -> None:
             "Clerk JWT verification.  Do NOT use this setting in production."
         )
 
+    # ── Auto-sync scheduler ──────────────────────────────────────────────
+    from app.services.auto_sync_service import start_scheduler
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+async def _shutdown() -> None:
+    """Clean up background services on shutdown."""
+    from app.services.auto_sync_service import stop_scheduler
+    stop_scheduler()
+
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
