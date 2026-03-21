@@ -64,8 +64,8 @@ export default function ConsentSignPage() {
         throw new Error(err?.detail || "Failed to submit consent");
       }
       setState({ kind: "success" });
-    } catch (e: any) {
-      setSubmitError(e.message || "Something went wrong. Please try again.");
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
