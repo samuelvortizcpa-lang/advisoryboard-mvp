@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,6 +64,14 @@ class Client(Base):
 
     # Per-client AI instruction override (optional)
     custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # IRC §7216 consent tracking
+    consent_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="not_required"
+    )
+    has_tax_documents: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
