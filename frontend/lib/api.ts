@@ -644,10 +644,97 @@ export function createBriefsApi(getToken: GetToken) {
   };
 }
 
+// ─── Consent types (IRC §7216) ───────────────────────────────────────────────
+
+export interface ConsentRecord {
+  id: string;
+  client_id: string;
+  user_id: string;
+  consent_type: string;
+  status: string;
+  consent_date: string | null;
+  expiration_date: string | null;
+  consent_method: string | null;
+  taxpayer_name: string | null;
+  preparer_name: string | null;
+  preparer_firm: string | null;
+  notes: string | null;
+  form_generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConsentStatus {
+  consent_status: string;
+  has_tax_documents: boolean;
+  latest_consent: ConsentRecord | null;
+  is_expired: boolean;
+  days_until_expiry: number | null;
+}
+
+export interface ConsentCreateRequest {
+  consent_type: string;
+  status: string;
+  consent_date?: string | null;
+  expiration_date?: string | null;
+  consent_method?: string | null;
+  taxpayer_name?: string | null;
+  preparer_name?: string | null;
+  preparer_firm?: string | null;
+  notes?: string | null;
+}
+
+// ─── Consent API factory ────────────────────────────────────────────────────
+
+export function createConsentApi(getToken: GetToken) {
+  return {
+    getStatus(clientId: string) {
+      return apiFetch<ConsentStatus>(getToken, `/clients/${clientId}/consent`);
+    },
+
+    create(clientId: string, data: ConsentCreateRequest) {
+      return apiFetch<ConsentRecord>(getToken, `/clients/${clientId}/consent`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    async downloadForm(clientId: string): Promise<void> {
+      const token = await getToken();
+      const res = await fetch(
+        `${API_BASE}/clients/${clientId}/consent/generate-form`,
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+      if (!res.ok) {
+        throw new Error(`PDF generation failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      a.download = match ? match[1] : "7216_consent_form.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+
+    history(clientId: string) {
+      return apiFetch<ConsentRecord[]>(
+        getToken,
+        `/clients/${clientId}/consent/history`
+      );
+    },
+  };
+}
+
 // ─── Alert types ───────────────────────────────────────────────────────────────
 
 export type AlertSeverity = "critical" | "warning" | "info";
-export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document";
+export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document" | "consent_needed" | "consent_expiring";
 
 export interface Alert {
   id: string;

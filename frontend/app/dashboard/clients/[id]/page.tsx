@@ -27,6 +27,7 @@ import DocumentComparisonReport from "@/components/documents/DocumentComparisonR
 import DocumentUpload from "@/components/documents/DocumentUpload";
 import ClientChat from "@/components/rag/ClientChat";
 import CalendarView from "@/components/timeline/CalendarView";
+import ConsentBanner from "@/components/consent/ConsentBanner";
 import Timeline from "@/components/timeline/Timeline";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -530,6 +531,13 @@ function ClientDetailContent() {
               </div>
             </div>
           </div>
+
+          {/* ── 7216 consent banner ────────────────────────────────────────── */}
+          <ConsentBanner
+            clientId={id}
+            clientName={client.name}
+            getToken={getToken}
+          />
 
           {/* ── Tab navigation bar ────────────────────────────────────────── */}
           <div className="sticky top-[56px] z-10 bg-white border-b border-gray-200 shadow-sm">
