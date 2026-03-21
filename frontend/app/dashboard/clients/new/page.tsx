@@ -237,6 +237,38 @@ export default function NewClientPage() {
             </p>
           </Field>
 
+          {/* §7216 compliance notice */}
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="flex items-start gap-3">
+              <svg
+                className="mt-0.5 h-5 w-5 shrink-0 text-blue-600"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-blue-800">
+                  Tax Document Compliance Notice
+                </p>
+                <p className="mt-1 text-sm text-blue-700">
+                  If you plan to upload tax returns or other tax return
+                  information for this client, IRC Section 7216 requires you to
+                  obtain written taxpayer consent before disclosing that
+                  information to third-party services. You can generate a consent
+                  form from the client&apos;s detail page after creation.
+                </p>
+                <LearnMoreToggle />
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
             <Link
               href="/dashboard/clients"
@@ -293,5 +325,32 @@ function Field({
 function Spinner() {
   return (
     <span className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+  );
+}
+
+function LearnMoreToggle() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="mt-1.5 text-xs font-medium text-blue-600 underline decoration-blue-300 hover:text-blue-800"
+      >
+        {open ? "Show less" : "Learn more"}
+      </button>
+      {open && (
+        <p className="mt-2 text-xs leading-relaxed text-blue-600">
+          Section 7216 makes it a federal misdemeanor for tax return preparers to
+          disclose or use tax return information without taxpayer consent.
+          AdvisoryBoard provides consent form templates and tracking to help you
+          stay compliant. Non-tax documents (meeting notes, engagement letters,
+          general correspondence) are not subject to Section 7216. If your
+          existing engagement letter already authorizes disclosure to third-party
+          document management platforms, you can record that as your consent
+          method — no new form needed.
+        </p>
+      )}
+    </>
   );
 }

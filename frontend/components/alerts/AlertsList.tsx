@@ -59,7 +59,10 @@ export default function AlertsList() {
   }
 
   function handleNavigate(alert: Alert) {
-    router.push(`/dashboard/clients/${alert.client_id}?tab=actions`);
+    const tab = alert.type === "consent_needed" || alert.type === "consent_expiring"
+      ? "overview"
+      : "actions";
+    router.push(`/dashboard/clients/${alert.client_id}?tab=${tab}`);
   }
 
   if (loading) {
@@ -132,7 +135,7 @@ export default function AlertsList() {
             >
               {/* Icon */}
               <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${config.iconBg}`}>
-                <SeverityIcon severity={alert.severity} />
+                <SeverityIcon severity={alert.severity} alertType={alert.type} />
               </div>
 
               {/* Content */}
@@ -223,7 +226,17 @@ function SmallSpinner() {
   );
 }
 
-function SeverityIcon({ severity }: { severity: string }) {
+function SeverityIcon({ severity, alertType }: { severity: string; alertType?: string }) {
+  // Shield icon for consent-related alerts
+  if (alertType === "consent_needed" || alertType === "consent_expiring") {
+    const color = alertType === "consent_needed" ? "text-amber-600" : "text-blue-600";
+    return (
+      <svg className={`h-3.5 w-3.5 ${color}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      </svg>
+    );
+  }
+
   if (severity === "critical") {
     return (
       <svg className="h-3.5 w-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
