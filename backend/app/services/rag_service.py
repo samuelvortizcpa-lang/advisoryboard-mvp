@@ -220,6 +220,20 @@ async def process_document(db: Session, document: Document) -> None:
                 classification["document_subtype"],
                 classification["classification_confidence"],
             )
+            # Check if this is a tax document — trigger §7216 consent tracking
+            try:
+                from app.services.consent_service import check_tax_document_upload
+                check_tax_document_upload(
+                    document.client_id,
+                    classification["document_type"],
+                    db,
+                )
+            except Exception as consent_exc:
+                logger.warning(
+                    "RAG: consent check failed for %s (non-fatal): %s",
+                    doc_label, consent_exc,
+                )
+
         except Exception as cls_exc:
             logger.warning(
                 "RAG: classification failed for %s (non-fatal): %s",

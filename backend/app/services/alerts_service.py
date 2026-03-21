@@ -6,6 +6,8 @@ Alert types:
 - upcoming_deadline:   pending action item with due_date within next 7 days
 - stale_client:        client with no documents and no chat messages in last 30 days
 - stuck_document:      document where processed = false (stuck in processing)
+- consent_needed:      tax documents uploaded but no §7216 consent on file
+- consent_expiring:    §7216 consent expires within 30 days
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.models.action_item import ActionItem
 from app.models.chat_message import ChatMessage
 from app.models.client import Client
+from app.models.client_consent import ClientConsent
 from app.models.dismissed_alert import DismissedAlert
 from app.models.document import Document
 
@@ -181,6 +184,56 @@ def compute_alerts(
                 + (f" — {doc.processing_error[:80]}" if doc.processing_error else ""),
             "related_id": str(doc.id),
             "created_at": doc.upload_date.isoformat() if doc.upload_date else datetime.now(timezone.utc).isoformat(),
+        })
+
+    # ── 5. Consent needed (tax docs uploaded but no consent on file) ─────
+    consent_needed_clients = (
+        db.query(Client)
+        .filter(
+            Client.owner_id == owner_id,
+            Client.has_tax_documents == True,  # noqa: E712
+            Client.consent_status == "pending",
+        )
+        .all()
+    )
+    for c in consent_needed_clients:
+        if ("consent_needed", c.id) in dismissed:
+            continue
+        alerts.append({
+            "id": str(c.id),
+            "type": "consent_needed",
+            "severity": "warning",
+            "client_id": str(c.id),
+            "client_name": c.name,
+            "message": (
+                f"Section 7216 consent needed for {c.name} "
+                f"\u2014 tax documents uploaded without recorded consent"
+            ),
+            "related_id": str(c.id),
+            "created_at": datetime.now(timezone.utc).date().isoformat(),
+        })
+
+    # ── 6. Consent expiring (within 30 days) ──────────────────────────────
+    from app.services.consent_service import get_expiring_consents
+
+    expiring = get_expiring_consents(clerk_user_id, db, days_ahead=30)
+    for item in expiring:
+        cid = item["client_id"]
+        if ("consent_expiring", cid) in dismissed:
+            continue
+        days_left = item["days_until_expiry"]
+        alerts.append({
+            "id": str(item["consent_id"]),
+            "type": "consent_expiring",
+            "severity": "info",
+            "client_id": str(cid),
+            "client_name": item["client_name"],
+            "message": (
+                f"Section 7216 consent for {item['client_name']} "
+                f"expires in {days_left} day{'s' if days_left != 1 else ''}"
+            ),
+            "related_id": str(cid),
+            "created_at": datetime.now(timezone.utc).date().isoformat(),
         })
 
     # Sort: critical first, then warning, then info; within same severity by date

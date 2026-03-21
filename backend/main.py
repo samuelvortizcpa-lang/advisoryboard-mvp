@@ -23,6 +23,7 @@ from app.api.usage import router as usage_router
 from app.api.admin import router as admin_router
 from app.api.stripe_routes import router as stripe_router
 from app.api.health import router as health_router
+from app.api.consents import router as consents_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -122,3 +123,4 @@ app.include_router(usage_router,       prefix="/api", tags=["usage"])
 app.include_router(admin_router,       prefix="/api/admin", tags=["admin"])
 app.include_router(stripe_router,      prefix="/api/stripe", tags=["stripe"])
 app.include_router(health_router,      prefix="/api", tags=["health"])
+app.include_router(consents_router,   prefix="/api", tags=["consents"])
