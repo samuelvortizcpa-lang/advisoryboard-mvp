@@ -660,6 +660,12 @@ export interface ConsentRecord {
   preparer_firm: string | null;
   notes: string | null;
   form_generated_at: string | null;
+  signing_token: string | null;
+  sent_to_email: string | null;
+  sent_at: string | null;
+  signed_at: string | null;
+  signer_typed_name: string | null;
+  signed_pdf_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -726,6 +732,20 @@ export function createConsentApi(getToken: GetToken) {
       return apiFetch<ConsentRecord[]>(
         getToken,
         `/clients/${clientId}/consent/history`
+      );
+    },
+
+    sendForSignature(
+      clientId: string,
+      data: { taxpayer_email: string; taxpayer_name: string; preparer_name: string; preparer_firm?: string }
+    ) {
+      return apiFetch<{ success: boolean; consent_id: string; message: string }>(
+        getToken,
+        `/clients/${clientId}/consent/send-for-signature`,
+        {
+          method: "POST",
+          body: JSON.stringify(data),
+        }
       );
     },
   };

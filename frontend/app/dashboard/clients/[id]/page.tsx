@@ -536,6 +536,7 @@ function ClientDetailContent() {
           <ConsentBanner
             clientId={id}
             clientName={client.name}
+            clientEmail={client.email}
             getToken={getToken}
           />
 

@@ -13,6 +13,7 @@ import {
 interface Props {
   clientId: string;
   clientName: string;
+  clientEmail?: string | null;
   getToken: () => Promise<string | null>;
   userName?: string;
 }
@@ -20,7 +21,7 @@ interface Props {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "\u2014";
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -38,11 +39,22 @@ function oneYearFromISO(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+function daysSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const diff = Date.now() - new Date(iso).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ConsentBanner({
   clientId,
   clientName,
+  clientEmail,
   getToken,
   userName,
 }: Props) {
@@ -56,7 +68,15 @@ export default function ConsentBanner({
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Form state
+  // Send-for-signature state
+  const [showSendForm, setShowSendForm] = useState(false);
+  const [sendEmail, setSendEmail] = useState(clientEmail ?? "");
+  const [sendTaxpayerName, setSendTaxpayerName] = useState(clientName);
+  const [sendPreparerName, setSendPreparerName] = useState(userName ?? "");
+  const [sendPreparerFirm, setSendPreparerFirm] = useState("");
+  const [sending, setSending] = useState(false);
+
+  // Record-consent form state
   const [consentType, setConsentType] = useState("both");
   const [consentMethod, setConsentMethod] = useState("paper");
   const [consentDate, setConsentDate] = useState(todayISO());
@@ -92,7 +112,7 @@ export default function ConsentBanner({
   // Auto-dismiss toast
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
+    const t = setTimeout(() => setToast(null), 5000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -147,13 +167,38 @@ export default function ConsentBanner({
     setGenerating(true);
     try {
       await api.downloadForm(clientId);
-      setToast("Consent form downloaded — have your client sign and return it");
+      setToast("Consent form downloaded \u2014 have your client sign and return it");
     } catch (err) {
       setToast(
         err instanceof Error ? err.message : "Failed to generate consent form"
       );
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleSendForSignature() {
+    if (!isValidEmail(sendEmail)) {
+      setToast("Please enter a valid email address");
+      return;
+    }
+    setSending(true);
+    try {
+      await api.sendForSignature(clientId, {
+        taxpayer_email: sendEmail,
+        taxpayer_name: sendTaxpayerName,
+        preparer_name: sendPreparerName,
+        preparer_firm: sendPreparerFirm || undefined,
+      });
+      setShowSendForm(false);
+      setToast(`Consent form sent to ${sendEmail} \u2014 you\u2019ll be notified when they sign`);
+      await refresh();
+    } catch (err) {
+      setToast(
+        err instanceof Error ? err.message : "Failed to send consent form"
+      );
+    } finally {
+      setSending(false);
     }
   }
 
@@ -175,6 +220,22 @@ export default function ConsentBanner({
     setConsentMethod("existing_engagement");
     setNotes("");
     setShowForm(true);
+    setShowSendForm(false);
+  }
+
+  function openRecordManually() {
+    setConsentMethod("paper");
+    setShowForm(true);
+    setShowSendForm(false);
+  }
+
+  function openSendForm() {
+    setSendEmail(clientEmail ?? "");
+    setSendTaxpayerName(clientName);
+    setSendPreparerName(userName ?? "");
+    setSendPreparerFirm("");
+    setShowSendForm(true);
+    setShowForm(false);
   }
 
   // ── Don't render if not applicable ──────────────────────────────────────────
@@ -215,20 +276,24 @@ export default function ConsentBanner({
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
-                  onClick={handleGenerateForm}
-                  disabled={generating}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
+                  onClick={openSendForm}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700"
                 >
-                  {generating ? "Generating..." : "Generate Consent Form"}
+                  <MailIcon className="h-3.5 w-3.5" />
+                  Send for Signature
                 </button>
                 <button
-                  onClick={() => {
-                    setConsentMethod("paper");
-                    setShowForm(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-50"
+                  onClick={handleGenerateForm}
+                  disabled={generating}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-50"
                 >
-                  Record Consent
+                  {generating ? "Generating..." : "Generate PDF"}
+                </button>
+                <button
+                  onClick={openRecordManually}
+                  className="text-xs font-medium text-amber-600 underline decoration-amber-300 hover:text-amber-800"
+                >
+                  Record Manually
                 </button>
               </div>
               <button
@@ -242,83 +307,301 @@ export default function ConsentBanner({
         </div>
       )}
 
-      {/* ── Obtained (not expired) ─────────────────────────────────────────── */}
-      {effectiveStatus === "obtained" && (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ShieldCheckIcon className="h-4 w-4 text-green-600" />
-              <p className="text-sm text-green-700">
-                <span className="font-medium">7216 Consent: </span>
-                Obtained on {fmtDate(latest_consent?.consent_date)}
-                {latest_consent?.expiration_date && (
-                  <>
-                    {" "}— Expires {fmtDate(latest_consent.expiration_date)}
-                    {days_until_expiry != null && (
-                      <span className="text-green-600">
-                        {" "}({days_until_expiry} days)
-                      </span>
-                    )}
-                  </>
-                )}
+      {/* ── Sent — awaiting signature ──────────────────────────────────────── */}
+      {effectiveStatus === "sent" && latest_consent && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-start gap-3">
+            <MailIcon className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-blue-800">
+                Consent Form Sent &mdash; Awaiting Signature
               </p>
+              <p className="mt-1 text-sm text-blue-700">
+                Sent to{" "}
+                <span className="font-medium">
+                  {latest_consent.sent_to_email}
+                </span>{" "}
+                on {fmtDate(latest_consent.sent_at)}
+              </p>
+              {(() => {
+                const days = daysSince(latest_consent.sent_at);
+                if (days != null && days >= 7) {
+                  return (
+                    <p className="mt-1.5 text-xs font-medium text-amber-700">
+                      It&apos;s been {days} days since this was sent. You may
+                      want to follow up.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={openSendForm}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50"
+                >
+                  Resend
+                </button>
+                <button
+                  onClick={openRecordManually}
+                  className="text-xs font-medium text-blue-600 underline decoration-blue-300 hover:text-blue-800"
+                >
+                  Record Manually
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => setShowDetails(!showDetails)}
-              className="text-xs font-medium text-green-600 hover:text-green-800"
-            >
-              {showDetails ? "Hide" : "View Details"}
-            </button>
           </div>
-
-          {showDetails && latest_consent && (
-            <div className="mt-3 border-t border-green-200 pt-3">
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-3">
-                <div>
-                  <dt className="text-green-600">Type</dt>
-                  <dd className="font-medium text-green-800">
-                    {consentTypeLabel(latest_consent.consent_type)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-green-600">Method</dt>
-                  <dd className="font-medium text-green-800">
-                    {methodLabel(latest_consent.consent_method)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-green-600">Taxpayer</dt>
-                  <dd className="font-medium text-green-800">
-                    {latest_consent.taxpayer_name ?? "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-green-600">Preparer</dt>
-                  <dd className="font-medium text-green-800">
-                    {latest_consent.preparer_name ?? "—"}
-                  </dd>
-                </div>
-                {latest_consent.preparer_firm && (
-                  <div>
-                    <dt className="text-green-600">Firm</dt>
-                    <dd className="font-medium text-green-800">
-                      {latest_consent.preparer_firm}
-                    </dd>
-                  </div>
-                )}
-                {latest_consent.notes && (
-                  <div className="col-span-full">
-                    <dt className="text-green-600">Notes</dt>
-                    <dd className="font-medium text-green-800">
-                      {latest_consent.notes}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </div>
-          )}
         </div>
       )}
+
+      {/* ── Obtained — electronic signature ────────────────────────────────── */}
+      {effectiveStatus === "obtained" &&
+        latest_consent?.consent_method === "electronic" && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheckIcon className="h-4 w-4 text-green-600" />
+                <p className="text-sm text-green-700">
+                  <span className="font-medium">7216 Consent: </span>
+                  Signed electronically by{" "}
+                  <span className="font-medium">
+                    {latest_consent.signer_typed_name ??
+                      latest_consent.taxpayer_name ??
+                      "client"}
+                  </span>{" "}
+                  on {fmtDate(latest_consent.signed_at ?? latest_consent.consent_date)}
+                  {latest_consent.expiration_date && (
+                    <>
+                      {" "}&mdash; Expires {fmtDate(latest_consent.expiration_date)}
+                      {days_until_expiry != null && (
+                        <span className="text-green-600">
+                          {" "}({days_until_expiry} days)
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {latest_consent.signed_pdf_url && (
+                  <a
+                    href={latest_consent.signed_pdf_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-medium text-green-600 hover:text-green-800"
+                  >
+                    Download Signed PDF
+                  </a>
+                )}
+                <button
+                  onClick={() => setShowDetails(!showDetails)}
+                  className="text-xs font-medium text-green-600 hover:text-green-800"
+                >
+                  {showDetails ? "Hide" : "Details"}
+                </button>
+              </div>
+            </div>
+
+            {showDetails && (
+              <div className="mt-3 border-t border-green-200 pt-3">
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-3">
+                  <div>
+                    <dt className="text-green-600">Type</dt>
+                    <dd className="font-medium text-green-800">
+                      {consentTypeLabel(latest_consent.consent_type)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Method</dt>
+                    <dd className="font-medium text-green-800">
+                      Electronic signature
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Signed by</dt>
+                    <dd className="font-medium text-green-800">
+                      {latest_consent.signer_typed_name ?? "\u2014"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Sent to</dt>
+                    <dd className="font-medium text-green-800">
+                      {latest_consent.sent_to_email ?? "\u2014"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Preparer</dt>
+                    <dd className="font-medium text-green-800">
+                      {latest_consent.preparer_name ?? "\u2014"}
+                    </dd>
+                  </div>
+                  {latest_consent.preparer_firm && (
+                    <div>
+                      <dt className="text-green-600">Firm</dt>
+                      <dd className="font-medium text-green-800">
+                        {latest_consent.preparer_firm}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
+          </div>
+        )}
+
+      {/* ── Obtained — engagement letter ───────────────────────────────────── */}
+      {effectiveStatus === "obtained" &&
+        latest_consent?.consent_method === "existing_engagement" && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheckIcon className="h-4 w-4 text-green-600" />
+                <p className="text-sm text-green-700">
+                  <span className="font-medium">7216 Consent: </span>
+                  Covered by existing engagement letter &mdash; recorded{" "}
+                  {fmtDate(latest_consent.consent_date)}
+                  {latest_consent.expiration_date && (
+                    <>
+                      {" "}&mdash; Expires {fmtDate(latest_consent.expiration_date)}
+                      {days_until_expiry != null && (
+                        <span className="text-green-600">
+                          {" "}({days_until_expiry} days)
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDetails(!showDetails)}
+                className="text-xs font-medium text-green-600 hover:text-green-800"
+              >
+                {showDetails ? "Hide" : "Details"}
+              </button>
+            </div>
+
+            {showDetails && (
+              <div className="mt-3 border-t border-green-200 pt-3">
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-3">
+                  <div>
+                    <dt className="text-green-600">Type</dt>
+                    <dd className="font-medium text-green-800">
+                      {consentTypeLabel(latest_consent.consent_type)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Method</dt>
+                    <dd className="font-medium text-green-800">
+                      Engagement letter
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Preparer</dt>
+                    <dd className="font-medium text-green-800">
+                      {latest_consent.preparer_name ?? "\u2014"}
+                    </dd>
+                  </div>
+                  {latest_consent.preparer_firm && (
+                    <div>
+                      <dt className="text-green-600">Firm</dt>
+                      <dd className="font-medium text-green-800">
+                        {latest_consent.preparer_firm}
+                      </dd>
+                    </div>
+                  )}
+                  {latest_consent.notes && (
+                    <div className="col-span-full">
+                      <dt className="text-green-600">Notes</dt>
+                      <dd className="font-medium text-green-800">
+                        {latest_consent.notes}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
+          </div>
+        )}
+
+      {/* ── Obtained — other methods (paper, verbal, etc.) ─────────────────── */}
+      {effectiveStatus === "obtained" &&
+        latest_consent?.consent_method !== "electronic" &&
+        latest_consent?.consent_method !== "existing_engagement" && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheckIcon className="h-4 w-4 text-green-600" />
+                <p className="text-sm text-green-700">
+                  <span className="font-medium">7216 Consent: </span>
+                  Obtained on {fmtDate(latest_consent?.consent_date)}
+                  {latest_consent?.expiration_date && (
+                    <>
+                      {" "}&mdash; Expires {fmtDate(latest_consent.expiration_date)}
+                      {days_until_expiry != null && (
+                        <span className="text-green-600">
+                          {" "}({days_until_expiry} days)
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDetails(!showDetails)}
+                className="text-xs font-medium text-green-600 hover:text-green-800"
+              >
+                {showDetails ? "Hide" : "View Details"}
+              </button>
+            </div>
+
+            {showDetails && latest_consent && (
+              <div className="mt-3 border-t border-green-200 pt-3">
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-3">
+                  <div>
+                    <dt className="text-green-600">Type</dt>
+                    <dd className="font-medium text-green-800">
+                      {consentTypeLabel(latest_consent.consent_type)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Method</dt>
+                    <dd className="font-medium text-green-800">
+                      {methodLabel(latest_consent.consent_method)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Taxpayer</dt>
+                    <dd className="font-medium text-green-800">
+                      {latest_consent.taxpayer_name ?? "\u2014"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-green-600">Preparer</dt>
+                    <dd className="font-medium text-green-800">
+                      {latest_consent.preparer_name ?? "\u2014"}
+                    </dd>
+                  </div>
+                  {latest_consent.preparer_firm && (
+                    <div>
+                      <dt className="text-green-600">Firm</dt>
+                      <dd className="font-medium text-green-800">
+                        {latest_consent.preparer_firm}
+                      </dd>
+                    </div>
+                  )}
+                  {latest_consent.notes && (
+                    <div className="col-span-full">
+                      <dt className="text-green-600">Notes</dt>
+                      <dd className="font-medium text-green-800">
+                        {latest_consent.notes}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
+          </div>
+        )}
 
       {/* ── Expired ────────────────────────────────────────────────────────── */}
       {effectiveStatus === "expired" && (
@@ -336,20 +619,24 @@ export default function ConsentBanner({
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
-                  onClick={handleGenerateForm}
-                  disabled={generating}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                  onClick={openSendForm}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700"
                 >
-                  {generating ? "Generating..." : "Generate New Consent Form"}
+                  <MailIcon className="h-3.5 w-3.5" />
+                  Send for Signature
                 </button>
                 <button
-                  onClick={() => {
-                    setConsentMethod("paper");
-                    setShowForm(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-50"
+                  onClick={handleGenerateForm}
+                  disabled={generating}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
                 >
-                  Record Renewal
+                  {generating ? "Generating..." : "Generate PDF"}
+                </button>
+                <button
+                  onClick={openRecordManually}
+                  className="text-xs font-medium text-red-600 underline decoration-red-300 hover:text-red-800"
+                >
+                  Record Manually
                 </button>
               </div>
             </div>
@@ -371,6 +658,82 @@ export default function ConsentBanner({
                 not be uploaded or analyzed for this client.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Send-for-signature inline form ──────────────────────────────────── */}
+      {showSendForm && (
+        <div className="mt-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900">
+            Send Consent Form for Electronic Signature
+          </h3>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Client Email
+              </label>
+              <input
+                type="email"
+                value={sendEmail}
+                onChange={(e) => setSendEmail(e.target.value)}
+                placeholder="client@example.com"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              {sendEmail && !isValidEmail(sendEmail) && (
+                <p className="mt-1 text-xs text-red-500">
+                  Please enter a valid email address
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Taxpayer Name
+              </label>
+              <input
+                type="text"
+                value={sendTaxpayerName}
+                onChange={(e) => setSendTaxpayerName(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Preparer Name
+              </label>
+              <input
+                type="text"
+                value={sendPreparerName}
+                onChange={(e) => setSendPreparerName(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Firm Name (optional)
+              </label>
+              <input
+                type="text"
+                value={sendPreparerFirm}
+                onChange={(e) => setSendPreparerFirm(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={handleSendForSignature}
+              disabled={sending || !isValidEmail(sendEmail) || !sendTaxpayerName.trim() || !sendPreparerName.trim()}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            >
+              {sending ? "Sending..." : "Send Consent Form"}
+            </button>
+            <button
+              onClick={() => setShowSendForm(false)}
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -610,7 +973,7 @@ export default function ConsentBanner({
                         {fmtDate(r.expiration_date)}
                       </td>
                       <td className="max-w-[200px] truncate px-3 py-2 text-gray-500">
-                        {r.notes ?? "—"}
+                        {r.notes ?? "\u2014"}
                       </td>
                     </tr>
                   ))}
@@ -627,7 +990,7 @@ export default function ConsentBanner({
 // ─── Helper label functions ───────────────────────────────────────────────────
 
 function consentTypeLabel(t: string | null): string {
-  if (!t) return "—";
+  if (!t) return "\u2014";
   if (t === "both") return "Disclosure & Use";
   if (t === "disclosure") return "Disclosure";
   if (t === "use") return "Use";
@@ -635,7 +998,7 @@ function consentTypeLabel(t: string | null): string {
 }
 
 function methodLabel(m: string | null): string {
-  if (!m) return "—";
+  if (!m) return "\u2014";
   const map: Record<string, string> = {
     paper: "Paper form",
     electronic: "Electronic",
@@ -653,6 +1016,8 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-green-100 text-green-700"
       : status === "pending"
       ? "bg-amber-100 text-amber-700"
+      : status === "sent"
+      ? "bg-blue-100 text-blue-700"
       : status === "expired" || status === "declined" || status === "revoked"
       ? "bg-red-100 text-red-700"
       : "bg-gray-100 text-gray-700";
@@ -697,6 +1062,23 @@ function ShieldCheckIcon({ className }: { className?: string }) {
     >
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <polyline points="9 12 11 14 15 10" />
+    </svg>
+  );
+}
+
+function MailIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
     </svg>
   );
 }
