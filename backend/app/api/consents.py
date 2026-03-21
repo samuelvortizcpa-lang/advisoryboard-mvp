@@ -280,11 +280,8 @@ async def send_for_signature(
     consent = send_consent_for_signature(
         client_id=client_id,
         user_id=user.clerk_id,
-        taxpayer_email=body.taxpayer_email,
-        taxpayer_name=body.taxpayer_name,
-        preparer_name=body.preparer_name,
-        preparer_firm=body.preparer_firm,
         db=db,
+        to_email=body.taxpayer_email,
     )
 
     return SendForSignatureResponse(
