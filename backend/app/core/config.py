@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/integrations/google/callback"
 
+    # ── Microsoft OAuth ───────────────────────────────────────────────────
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_redirect_uri: str = "http://localhost:8000/api/integrations/microsoft/callback"
+
     # ── Google AI ───────────────────────────────────────────────────────────
     google_ai_api_key: str = ""
 

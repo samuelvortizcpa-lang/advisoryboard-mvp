@@ -45,5 +45,8 @@ pytesseract
 # Stripe payments
 stripe>=8.0.0
 
+# Microsoft OAuth (Outlook integration)
+msal>=1.28.0
+
 # Error monitoring
 sentry-sdk[fastapi]>=2.0.0

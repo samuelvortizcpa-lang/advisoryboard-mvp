@@ -15,7 +15,7 @@ from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.integration_connection import IntegrationConnection
-from app.services import email_router, gmail_sync_service, google_auth_service
+from app.services import email_router, gmail_sync_service, google_auth_service, microsoft_auth_service, outlook_sync_service
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +134,62 @@ async def google_callback(
 
 
 # ---------------------------------------------------------------------------
+# Microsoft OAuth endpoints
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/integrations/microsoft/authorize",
+    response_model=AuthorizeResponse,
+    summary="Get Microsoft OAuth authorization URL",
+)
+async def microsoft_authorize(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> AuthorizeResponse:
+    """
+    Return the Microsoft OAuth2 authorization URL.  The frontend should
+    redirect the user to this URL to begin the consent flow.
+    """
+    user_id = current_user["user_id"]
+    url = microsoft_auth_service.get_authorization_url(user_id)
+    return AuthorizeResponse(authorization_url=url)
+
+
+@router.get(
+    "/integrations/microsoft/callback",
+    summary="Handle Microsoft OAuth callback",
+)
+async def microsoft_callback(
+    code: str = Query(..., description="Authorization code from Microsoft"),
+    state: str = Query(..., description="State parameter (user_id)"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """
+    Microsoft redirects here after the user grants consent.  We exchange the
+    authorization code for tokens, store them, and redirect to the
+    frontend settings page.
+    """
+    settings = get_settings()
+
+    try:
+        connection = await microsoft_auth_service.handle_callback(
+            code=code,
+            state=state,
+            db=db,
+        )
+    except Exception as exc:
+        logger.exception("Microsoft OAuth callback failed: %s", exc)
+        return RedirectResponse(
+            url=f"{settings.frontend_url}/dashboard/settings/integrations?integration_error=microsoft_auth_failed",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    return RedirectResponse(
+        url=f"{settings.frontend_url}/dashboard/settings/integrations?connected=microsoft",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Connection management endpoints
 # ---------------------------------------------------------------------------
 
@@ -201,6 +257,41 @@ async def disconnect_integration(
 # Sync endpoints
 # ---------------------------------------------------------------------------
 
+def _sync_log_response(sync_log: Any) -> SyncLogResponse:
+    """Convert a SyncLog to a SyncLogResponse."""
+    return SyncLogResponse(
+        id=sync_log.id,
+        connection_id=sync_log.connection_id,
+        sync_type=sync_log.sync_type,
+        status=sync_log.status,
+        emails_found=sync_log.emails_found,
+        emails_ingested=sync_log.emails_ingested,
+        emails_skipped=sync_log.emails_skipped,
+        error_message=sync_log.error_message,
+        started_at=sync_log.started_at.isoformat(),
+        completed_at=sync_log.completed_at.isoformat() if sync_log.completed_at else None,
+    )
+
+
+def _get_connection_provider(connection_id: UUID, user_id: str, db: Session) -> str:
+    """Look up the provider for a connection, raising 404 if not found."""
+    connection = (
+        db.query(IntegrationConnection)
+        .filter(
+            IntegrationConnection.id == connection_id,
+            IntegrationConnection.user_id == user_id,
+            IntegrationConnection.is_active == True,
+        )
+        .first()
+    )
+    if not connection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Connection not found",
+        )
+    return connection.provider
+
+
 @router.post(
     "/integrations/connections/{connection_id}/sync",
     response_model=SyncLogResponse,
@@ -214,31 +305,32 @@ async def trigger_sync(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> SyncLogResponse:
     """
-    Trigger a manual sync for a Gmail connection.  Fetches recent emails,
-    matches them to clients via routing rules, and ingests matched emails
-    as documents.
+    Trigger a manual sync for a connected email account.  Automatically
+    detects the provider (Google or Microsoft) and calls the right service.
     """
     user_id = current_user["user_id"]
-    sync_log = await gmail_sync_service.sync_emails(
-        connection_id=connection_id,
-        user_id=user_id,
-        db=db,
-        sync_type="manual",
-        max_results=max_results,
-        since_hours=since_hours,
-    )
-    return SyncLogResponse(
-        id=sync_log.id,
-        connection_id=sync_log.connection_id,
-        sync_type=sync_log.sync_type,
-        status=sync_log.status,
-        emails_found=sync_log.emails_found,
-        emails_ingested=sync_log.emails_ingested,
-        emails_skipped=sync_log.emails_skipped,
-        error_message=sync_log.error_message,
-        started_at=sync_log.started_at.isoformat(),
-        completed_at=sync_log.completed_at.isoformat() if sync_log.completed_at else None,
-    )
+    provider = _get_connection_provider(connection_id, user_id, db)
+
+    if provider == "microsoft":
+        sync_log = await outlook_sync_service.sync_emails(
+            connection_id=connection_id,
+            user_id=user_id,
+            db=db,
+            sync_type="manual",
+            max_results=max_results,
+            since_hours=since_hours,
+        )
+    else:
+        sync_log = await gmail_sync_service.sync_emails(
+            connection_id=connection_id,
+            user_id=user_id,
+            db=db,
+            sync_type="manual",
+            max_results=max_results,
+            since_hours=since_hours,
+        )
+
+    return _sync_log_response(sync_log)
 
 
 @router.get(
@@ -254,29 +346,21 @@ async def get_sync_history(
 ) -> List[SyncLogResponse]:
     """
     Return recent sync logs for a connection, most recent first.
+    Works for both Google and Microsoft connections.
     """
     user_id = current_user["user_id"]
-    logs = gmail_sync_service.get_sync_history(
-        user_id=user_id,
-        connection_id=connection_id,
-        db=db,
-        limit=limit,
-    )
-    return [
-        SyncLogResponse(
-            id=log.id,
-            connection_id=log.connection_id,
-            sync_type=log.sync_type,
-            status=log.status,
-            emails_found=log.emails_found,
-            emails_ingested=log.emails_ingested,
-            emails_skipped=log.emails_skipped,
-            error_message=log.error_message,
-            started_at=log.started_at.isoformat(),
-            completed_at=log.completed_at.isoformat() if log.completed_at else None,
+    provider = _get_connection_provider(connection_id, user_id, db)
+
+    if provider == "microsoft":
+        logs = outlook_sync_service.get_sync_history(
+            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
         )
-        for log in logs
-    ]
+    else:
+        logs = gmail_sync_service.get_sync_history(
+            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
+        )
+
+    return [_sync_log_response(log) for log in logs]
 
 
 @router.post(
@@ -291,29 +375,31 @@ async def trigger_deep_sync(
 ) -> SyncLogResponse:
     """
     Perform a deep sync: fetches up to 200 emails from the last 7 days.
-    Use this for initial connection setup or to catch up after downtime.
+    Automatically detects the provider and calls the right service.
     """
     user_id = current_user["user_id"]
-    sync_log = await gmail_sync_service.sync_emails(
-        connection_id=connection_id,
-        user_id=user_id,
-        db=db,
-        sync_type="manual",
-        max_results=200,
-        since_hours=168,  # 7 days
-    )
-    return SyncLogResponse(
-        id=sync_log.id,
-        connection_id=sync_log.connection_id,
-        sync_type=sync_log.sync_type,
-        status=sync_log.status,
-        emails_found=sync_log.emails_found,
-        emails_ingested=sync_log.emails_ingested,
-        emails_skipped=sync_log.emails_skipped,
-        error_message=sync_log.error_message,
-        started_at=sync_log.started_at.isoformat(),
-        completed_at=sync_log.completed_at.isoformat() if sync_log.completed_at else None,
-    )
+    provider = _get_connection_provider(connection_id, user_id, db)
+
+    if provider == "microsoft":
+        sync_log = await outlook_sync_service.sync_emails(
+            connection_id=connection_id,
+            user_id=user_id,
+            db=db,
+            sync_type="manual",
+            max_results=200,
+            since_hours=168,  # 7 days
+        )
+    else:
+        sync_log = await gmail_sync_service.sync_emails(
+            connection_id=connection_id,
+            user_id=user_id,
+            db=db,
+            sync_type="manual",
+            max_results=200,
+            since_hours=168,  # 7 days
+        )
+
+    return _sync_log_response(sync_log)
 
 
 # ---------------------------------------------------------------------------

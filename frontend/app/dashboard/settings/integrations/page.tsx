@@ -51,7 +51,8 @@ export default function IntegrationsSettingsPage() {
   );
 
   // ── Connecting ──
-  const [connecting, setConnecting] = useState(false);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [connectingMicrosoft, setConnectingMicrosoft] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -81,25 +82,45 @@ export default function IntegrationsSettingsPage() {
   useEffect(() => {
     if (searchParams.get("integration_connected") === "google") {
       setSuccessMsg("Gmail connected successfully! Set up routing rules below to start syncing emails.");
-      // Reload to pick up new connection
+      loadData();
+    }
+    if (searchParams.get("connected") === "microsoft") {
+      setSuccessMsg("Outlook connected successfully! Set up routing rules below to start syncing emails.");
       loadData();
     }
     if (searchParams.get("integration_error")) {
-      setError("Failed to connect Gmail. Please try again.");
+      const err = searchParams.get("integration_error");
+      if (err?.includes("microsoft")) {
+        setError("Failed to connect Outlook. Please try again.");
+      } else {
+        setError("Failed to connect Gmail. Please try again.");
+      }
     }
   }, [searchParams, loadData]);
 
   // ── Handlers ──
 
   const handleConnectGmail = async () => {
-    setConnecting(true);
+    setConnectingGoogle(true);
     try {
       const api = createIntegrationsApi(getToken);
       const { authorization_url } = await api.getGoogleAuthUrl();
       window.location.href = authorization_url;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to get auth URL");
-      setConnecting(false);
+      setConnectingGoogle(false);
+    }
+  };
+
+  const handleConnectOutlook = async () => {
+    setConnectingMicrosoft(true);
+    try {
+      const api = createIntegrationsApi(getToken);
+      const { authorization_url } = await api.getMicrosoftAuthUrl();
+      window.location.href = authorization_url;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to get auth URL");
+      setConnectingMicrosoft(false);
     }
   };
 
@@ -274,13 +295,24 @@ export default function IntegrationsSettingsPage() {
             Connected Accounts
           </h2>
           {connections.length > 0 && (
-            <button
-              onClick={handleConnectGmail}
-              disabled={connecting}
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-            >
-              + Add Account
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleConnectGmail}
+                disabled={connectingGoogle}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              >
+                {connectingGoogle ? <Spinner /> : <GmailIcon small />}
+                Add Gmail
+              </button>
+              <button
+                onClick={handleConnectOutlook}
+                disabled={connectingMicrosoft}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              >
+                {connectingMicrosoft ? <Spinner /> : <OutlookIcon small />}
+                Add Outlook
+              </button>
+            </div>
           )}
         </div>
 
@@ -288,25 +320,34 @@ export default function IntegrationsSettingsPage() {
           {connections.length === 0 ? (
             /* Empty state */
             <div className="flex flex-col items-center rounded-lg border-2 border-dashed border-gray-200 px-6 py-10">
-              <GmailIcon />
+              <div className="flex items-center gap-2">
+                <GmailIcon />
+                <OutlookIcon />
+              </div>
               <p className="mt-3 text-sm font-medium text-gray-900">
                 No accounts connected
               </p>
               <p className="mt-1 text-xs text-gray-500">
-                Connect your Gmail to auto-ingest client emails
+                Connect your email to auto-ingest client emails
               </p>
-              <button
-                onClick={handleConnectGmail}
-                disabled={connecting}
-                className="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-              >
-                {connecting ? (
-                  <Spinner />
-                ) : (
-                  <GmailIcon small />
-                )}
-                Connect Gmail
-              </button>
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  onClick={handleConnectGmail}
+                  disabled={connectingGoogle}
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {connectingGoogle ? <Spinner /> : <GmailIcon small />}
+                  Connect Gmail
+                </button>
+                <button
+                  onClick={handleConnectOutlook}
+                  disabled={connectingMicrosoft}
+                  className="inline-flex items-center gap-2 rounded-md border-2 border-[#0078d4] bg-white px-4 py-2 text-sm font-medium text-[#0078d4] transition-colors hover:bg-[#0078d4]/5 disabled:opacity-50"
+                >
+                  {connectingMicrosoft ? <Spinner /> : <OutlookIcon small />}
+                  Connect Outlook
+                </button>
+              </div>
             </div>
           ) : (
             /* Connection cards */
@@ -323,13 +364,39 @@ export default function IntegrationsSettingsPage() {
                     <div className="flex items-center justify-between">
                       {/* Left: icon + info */}
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50">
-                          <GmailIcon />
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                            conn.provider === "microsoft"
+                              ? "bg-blue-50"
+                              : "bg-red-50"
+                          }`}
+                        >
+                          {conn.provider === "microsoft" ? (
+                            <OutlookIcon />
+                          ) : (
+                            <GmailIcon />
+                          )}
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {conn.provider_email || "Gmail"}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900">
+                              {conn.provider_email ||
+                                (conn.provider === "microsoft"
+                                  ? "Outlook"
+                                  : "Gmail")}
+                            </p>
+                            <span
+                              className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                conn.provider === "microsoft"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {conn.provider === "microsoft"
+                                ? "Outlook"
+                                : "Gmail"}
+                            </span>
+                          </div>
                           <p className="text-xs text-gray-500">
                             {conn.last_sync_at
                               ? `Last synced ${formatRelative(conn.last_sync_at)}`
@@ -417,6 +484,7 @@ export default function IntegrationsSettingsPage() {
                         <div className="mt-3">
                           <SyncHistoryTable
                             logs={syncHistories[conn.id]}
+                            provider={conn.provider}
                           />
                         </div>
                       )}
@@ -595,7 +663,7 @@ export default function IntegrationsSettingsPage() {
 
 // ─── Sync History Table ──────────────────────────────────────────────────────
 
-function SyncHistoryTable({ logs }: { logs: SyncLog[] }) {
+function SyncHistoryTable({ logs, provider }: { logs: SyncLog[]; provider: string }) {
   if (logs.length === 0) {
     return (
       <p className="py-3 text-center text-xs text-gray-500">
@@ -610,6 +678,7 @@ function SyncHistoryTable({ logs }: { logs: SyncLog[] }) {
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50 text-left font-medium uppercase tracking-wide text-gray-400">
             <th className="px-3 py-2">Date</th>
+            <th className="px-3 py-2">Provider</th>
             <th className="px-3 py-2">Status</th>
             <th className="px-3 py-2">Found</th>
             <th className="px-3 py-2">Ingested</th>
@@ -622,6 +691,17 @@ function SyncHistoryTable({ logs }: { logs: SyncLog[] }) {
             <tr key={log.id}>
               <td className="px-3 py-2 text-gray-700">
                 {formatDateTime(log.started_at)}
+              </td>
+              <td className="px-3 py-2">
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                    provider === "microsoft"
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {provider === "microsoft" ? "Outlook" : "Gmail"}
+                </span>
               </td>
               <td className="px-3 py-2">
                 <span
@@ -713,6 +793,17 @@ function GmailIcon({ small }: { small?: boolean } = {}) {
         stroke="#EA4335"
         strokeWidth="1.5"
       />
+    </svg>
+  );
+}
+
+function OutlookIcon({ small }: { small?: boolean } = {}) {
+  const size = small ? "h-4 w-4" : "h-5 w-5";
+  return (
+    <svg className={`${size} shrink-0`} viewBox="0 0 24 24" fill="none">
+      <rect x="2" y="4" width="20" height="16" rx="2" stroke="#0078d4" strokeWidth="1.5" fill="none" />
+      <path d="M2 8l10 5 10-5" stroke="#0078d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 8l10 5 10-5V6a2 2 0 00-2-2H4a2 2 0 00-2 2v2z" fill="#0078d4" opacity="0.15" />
     </svg>
   );
 }

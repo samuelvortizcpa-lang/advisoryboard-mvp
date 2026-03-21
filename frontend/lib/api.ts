@@ -953,6 +953,13 @@ export function createIntegrationsApi(getToken: GetToken) {
       );
     },
 
+    getMicrosoftAuthUrl() {
+      return apiFetch<{ authorization_url: string }>(
+        getToken,
+        "/integrations/microsoft/authorize"
+      );
+    },
+
     // ── Connections ──
     listConnections() {
       return apiFetch<IntegrationConnection[]>(
