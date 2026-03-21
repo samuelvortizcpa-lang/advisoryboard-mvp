@@ -9,6 +9,7 @@ import {
   IntegrationConnection,
   RoutingRule,
   SyncLog,
+  ZoomRule,
   createClientsApi,
   createIntegrationsApi,
 } from "@/lib/api";
@@ -21,6 +22,7 @@ export default function IntegrationsSettingsPage() {
 
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
   const [rules, setRules] = useState<RoutingRule[]>([]);
+  const [zoomRules, setZoomRules] = useState<ZoomRule[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [syncHistories, setSyncHistories] = useState<
     Record<string, SyncLog[]>
@@ -42,8 +44,16 @@ export default function IntegrationsSettingsPage() {
   const [newRuleMatchType, setNewRuleMatchType] = useState("from");
   const [addingRule, setAddingRule] = useState(false);
 
+  // ── Zoom rule form ──
+  const [showAddZoomRule, setShowAddZoomRule] = useState(false);
+  const [newZoomMatchField, setNewZoomMatchField] = useState("topic_contains");
+  const [newZoomMatchValue, setNewZoomMatchValue] = useState("");
+  const [newZoomClientId, setNewZoomClientId] = useState("");
+  const [addingZoomRule, setAddingZoomRule] = useState(false);
+
   // ── Auto-generate state ──
   const [autoGenerating, setAutoGenerating] = useState(false);
+  const [autoGeneratingZoom, setAutoGeneratingZoom] = useState(false);
 
   // ── History expand ──
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(
@@ -53,18 +63,21 @@ export default function IntegrationsSettingsPage() {
   // ── Connecting ──
   const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [connectingMicrosoft, setConnectingMicrosoft] = useState(false);
+  const [connectingZoom, setConnectingZoom] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       const api = createIntegrationsApi(getToken);
       const clientsApi = createClientsApi(getToken);
-      const [conns, rls, clientList] = await Promise.all([
+      const [conns, rls, zRls, clientList] = await Promise.all([
         api.listConnections(),
         api.listRoutingRules(),
+        api.listZoomRules(),
         clientsApi.list(0, 200),
       ]);
       setConnections(conns);
       setRules(rls);
+      setZoomRules(zRls);
       setClients(clientList.items);
       setError(null);
     } catch (e: unknown) {
@@ -88,9 +101,15 @@ export default function IntegrationsSettingsPage() {
       setSuccessMsg("Outlook connected successfully! Set up routing rules below to start syncing emails.");
       loadData();
     }
+    if (searchParams.get("connected") === "zoom") {
+      setSuccessMsg("Zoom connected successfully! Set up meeting rules below to start syncing recordings.");
+      loadData();
+    }
     if (searchParams.get("integration_error")) {
       const err = searchParams.get("integration_error");
-      if (err?.includes("microsoft")) {
+      if (err?.includes("zoom")) {
+        setError("Failed to connect Zoom. Please try again.");
+      } else if (err?.includes("microsoft")) {
         setError("Failed to connect Outlook. Please try again.");
       } else {
         setError("Failed to connect Gmail. Please try again.");
@@ -121,6 +140,18 @@ export default function IntegrationsSettingsPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to get auth URL");
       setConnectingMicrosoft(false);
+    }
+  };
+
+  const handleConnectZoom = async () => {
+    setConnectingZoom(true);
+    try {
+      const api = createIntegrationsApi(getToken);
+      const { authorization_url } = await api.getZoomAuthUrl();
+      window.location.href = authorization_url;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to get auth URL");
+      setConnectingZoom(false);
     }
   };
 
@@ -238,6 +269,56 @@ export default function IntegrationsSettingsPage() {
     }
   };
 
+  const handleAddZoomRule = async () => {
+    if (!newZoomMatchValue || !newZoomClientId) return;
+    setAddingZoomRule(true);
+    try {
+      const api = createIntegrationsApi(getToken);
+      const rule = await api.createZoomRule({
+        match_field: newZoomMatchField,
+        match_value: newZoomMatchValue,
+        client_id: newZoomClientId,
+      });
+      setZoomRules((prev) => [...prev, rule]);
+      setNewZoomMatchValue("");
+      setNewZoomClientId("");
+      setNewZoomMatchField("topic_contains");
+      setShowAddZoomRule(false);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create Zoom rule");
+    } finally {
+      setAddingZoomRule(false);
+    }
+  };
+
+  const handleDeleteZoomRule = async (ruleId: string) => {
+    try {
+      const api = createIntegrationsApi(getToken);
+      await api.deleteZoomRule(ruleId);
+      setZoomRules((prev) => prev.filter((r) => r.id !== ruleId));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to delete Zoom rule");
+    }
+  };
+
+  const handleAutoGenerateZoomRules = async () => {
+    setAutoGeneratingZoom(true);
+    try {
+      const api = createIntegrationsApi(getToken);
+      const newRules = await api.autoGenerateZoomRules();
+      if (newRules.length === 0) {
+        setSuccessMsg("No new Zoom rules to generate. All client names already have matching rules.");
+      } else {
+        setZoomRules((prev) => [...prev, ...newRules]);
+        setSuccessMsg(`Auto-generated ${newRules.length} Zoom rule${newRules.length > 1 ? "s" : ""} from client names.`);
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to auto-generate Zoom rules");
+    } finally {
+      setAutoGeneratingZoom(false);
+    }
+  };
+
   // ── Render ──
 
   if (loading) {
@@ -257,8 +338,8 @@ export default function IntegrationsSettingsPage() {
         </p>
         <h1 className="mt-1 text-2xl font-bold text-gray-900">Integrations</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Connect email accounts and configure how incoming emails are routed to
-          clients.
+          Connect email accounts and Zoom to auto-ingest emails and meeting
+          recordings.
         </p>
       </div>
 
@@ -312,6 +393,14 @@ export default function IntegrationsSettingsPage() {
                 {connectingMicrosoft ? <Spinner /> : <OutlookIcon small />}
                 Add Outlook
               </button>
+              <button
+                onClick={handleConnectZoom}
+                disabled={connectingZoom}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              >
+                {connectingZoom ? <Spinner /> : <ZoomIcon small />}
+                Add Zoom
+              </button>
             </div>
           )}
         </div>
@@ -320,15 +409,16 @@ export default function IntegrationsSettingsPage() {
           {connections.length === 0 ? (
             /* Empty state */
             <div className="flex flex-col items-center rounded-lg border-2 border-dashed border-gray-200 px-6 py-10">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <GmailIcon />
                 <OutlookIcon />
+                <ZoomIcon />
               </div>
               <p className="mt-3 text-sm font-medium text-gray-900">
                 No accounts connected
               </p>
               <p className="mt-1 text-xs text-gray-500">
-                Connect your email to auto-ingest client emails
+                Connect email or Zoom to auto-ingest client communications
               </p>
               <div className="mt-4 flex items-center gap-3">
                 <button
@@ -346,6 +436,14 @@ export default function IntegrationsSettingsPage() {
                 >
                   {connectingMicrosoft ? <Spinner /> : <OutlookIcon small />}
                   Connect Outlook
+                </button>
+                <button
+                  onClick={handleConnectZoom}
+                  disabled={connectingZoom}
+                  className="inline-flex items-center gap-2 rounded-md border-2 border-[#2D8CFF] bg-white px-4 py-2 text-sm font-medium text-[#2D8CFF] transition-colors hover:bg-[#2D8CFF]/5 disabled:opacity-50"
+                >
+                  {connectingZoom ? <Spinner /> : <ZoomIcon small />}
+                  Connect Zoom
                 </button>
               </div>
             </div>
@@ -366,12 +464,16 @@ export default function IntegrationsSettingsPage() {
                       <div className="flex items-center gap-3">
                         <div
                           className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                            conn.provider === "microsoft"
+                            conn.provider === "zoom"
+                              ? "bg-blue-50"
+                              : conn.provider === "microsoft"
                               ? "bg-blue-50"
                               : "bg-red-50"
                           }`}
                         >
-                          {conn.provider === "microsoft" ? (
+                          {conn.provider === "zoom" ? (
+                            <ZoomIcon />
+                          ) : conn.provider === "microsoft" ? (
                             <OutlookIcon />
                           ) : (
                             <GmailIcon />
@@ -381,21 +483,13 @@ export default function IntegrationsSettingsPage() {
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900">
                               {conn.provider_email ||
-                                (conn.provider === "microsoft"
+                                (conn.provider === "zoom"
+                                  ? "Zoom"
+                                  : conn.provider === "microsoft"
                                   ? "Outlook"
                                   : "Gmail")}
                             </p>
-                            <span
-                              className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                                conn.provider === "microsoft"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : "bg-red-100 text-red-700"
-                              }`}
-                            >
-                              {conn.provider === "microsoft"
-                                ? "Outlook"
-                                : "Gmail"}
-                            </span>
+                            <ProviderBadge provider={conn.provider} />
                           </div>
                           <p className="text-xs text-gray-500">
                             {conn.last_sync_at
@@ -419,7 +513,7 @@ export default function IntegrationsSettingsPage() {
                           onClick={() => handleDeepSync(conn.id)}
                           disabled={isSyncing}
                           className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                          title="Sync last 7 days (up to 200 emails)"
+                          title={conn.provider === "zoom" ? "Sync last 30 days (up to 100 recordings)" : "Sync last 7 days (up to 200 emails)"}
                         >
                           Deep Sync
                         </button>
@@ -469,6 +563,9 @@ export default function IntegrationsSettingsPage() {
                           <span className="text-gray-500">
                             {result.emails_skipped} skipped
                           </span>
+                          {conn.provider === "zoom" && (
+                            <span className="text-[10px] text-gray-400">(recordings)</span>
+                          )}
                         </div>
                         {result.error_message && (
                           <p className="mt-1 text-xs text-red-600">
@@ -657,6 +754,178 @@ export default function IntegrationsSettingsPage() {
           )}
         </div>
       </section>
+
+      {/* ───────── Zoom Meeting Rules ───────── */}
+      <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Zoom Meeting Rules
+            </h2>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Map meeting topics, participant emails, or meeting IDs to clients
+              for auto-routing recordings
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAutoGenerateZoomRules}
+              disabled={autoGeneratingZoom}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            >
+              {autoGeneratingZoom ? <Spinner /> : <SparklesIcon />}
+              Auto-Generate
+            </button>
+            <button
+              onClick={() => setShowAddZoomRule(!showAddZoomRule)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              + Add Rule
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {/* Inline add form */}
+          {showAddZoomRule && (
+            <div className="mb-4 flex items-end gap-3 rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+              <div className="w-44">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Match Field
+                </label>
+                <select
+                  value={newZoomMatchField}
+                  onChange={(e) => setNewZoomMatchField(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="topic_contains">Topic Contains</option>
+                  <option value="participant_email">Participant Email</option>
+                  <option value="meeting_id_prefix">Meeting ID Prefix</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Match Value
+                </label>
+                <input
+                  type="text"
+                  value={newZoomMatchValue}
+                  onChange={(e) => setNewZoomMatchValue(e.target.value)}
+                  placeholder={
+                    newZoomMatchField === "topic_contains"
+                      ? "e.g. Weekly Standup"
+                      : newZoomMatchField === "participant_email"
+                      ? "e.g. client@example.com"
+                      : "e.g. 123456"
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div className="w-48">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Client
+                </label>
+                <select
+                  value={newZoomClientId}
+                  onChange={(e) => setNewZoomClientId(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">Select client...</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={handleAddZoomRule}
+                disabled={addingZoomRule || !newZoomMatchValue || !newZoomClientId}
+                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {addingZoomRule ? <Spinner /> : "Save"}
+              </button>
+              <button
+                onClick={() => setShowAddZoomRule(false)}
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {zoomRules.length === 0 && !showAddZoomRule ? (
+            <div className="flex flex-col items-center rounded-lg border-2 border-dashed border-gray-200 px-6 py-8">
+              <p className="text-sm text-gray-500">No Zoom meeting rules yet</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Add rules to route recordings to clients, or auto-generate from
+                client names
+              </p>
+            </div>
+          ) : (
+            zoomRules.length > 0 && (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
+                    <th className="pb-2 pr-4">Match Field</th>
+                    <th className="pb-2 pr-4">Match Value</th>
+                    <th className="pb-2 pr-4">Client</th>
+                    <th className="pb-2 pr-4">Status</th>
+                    <th className="pb-2 w-16"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {zoomRules.map((rule) => (
+                    <tr key={rule.id} className="group">
+                      <td className="py-2.5 pr-4">
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                          {rule.match_field === "topic_contains"
+                            ? "Topic Contains"
+                            : rule.match_field === "participant_email"
+                            ? "Participant Email"
+                            : "Meeting ID Prefix"}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-4 font-mono text-xs text-gray-900">
+                        {rule.match_value}
+                      </td>
+                      <td className="py-2.5 pr-4 text-gray-700">
+                        {rule.client_name}
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <span
+                          className={`inline-flex items-center gap-1 text-xs font-medium ${
+                            rule.is_active
+                              ? "text-green-700"
+                              : "text-gray-400"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              rule.is_active
+                                ? "bg-green-500"
+                                : "bg-gray-300"
+                            }`}
+                          />
+                          {rule.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="py-2.5">
+                        <button
+                          onClick={() => handleDeleteZoomRule(rule.id)}
+                          className="invisible text-xs text-red-500 hover:text-red-700 group-hover:visible"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -693,15 +962,7 @@ function SyncHistoryTable({ logs, provider }: { logs: SyncLog[]; provider: strin
                 {formatDateTime(log.started_at)}
               </td>
               <td className="px-3 py-2">
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                    provider === "microsoft"
-                      ? "bg-blue-100 text-blue-700"
-                      : "bg-red-100 text-red-700"
-                  }`}
-                >
-                  {provider === "microsoft" ? "Outlook" : "Gmail"}
-                </span>
+                <ProviderBadge provider={provider} />
               </td>
               <td className="px-3 py-2">
                 <span
@@ -805,6 +1066,33 @@ function OutlookIcon({ small }: { small?: boolean } = {}) {
       <path d="M2 8l10 5 10-5" stroke="#0078d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M2 8l10 5 10-5V6a2 2 0 00-2-2H4a2 2 0 00-2 2v2z" fill="#0078d4" opacity="0.15" />
     </svg>
+  );
+}
+
+function ZoomIcon({ small }: { small?: boolean } = {}) {
+  const size = small ? "h-4 w-4" : "h-5 w-5";
+  return (
+    <svg className={`${size} shrink-0`} viewBox="0 0 24 24" fill="none">
+      <rect x="2" y="5" width="20" height="14" rx="3" fill="#2D8CFF" opacity="0.15" stroke="#2D8CFF" strokeWidth="1.5" />
+      <path d="M16 10l4-2v8l-4-2" stroke="#2D8CFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="4" y="8" width="10" height="8" rx="1.5" stroke="#2D8CFF" strokeWidth="1.5" fill="none" />
+    </svg>
+  );
+}
+
+function ProviderBadge({ provider }: { provider: string }) {
+  const config =
+    provider === "zoom"
+      ? { bg: "bg-sky-100", text: "text-sky-700", label: "Zoom" }
+      : provider === "microsoft"
+      ? { bg: "bg-blue-100", text: "text-blue-700", label: "Outlook" }
+      : { bg: "bg-red-100", text: "text-red-700", label: "Gmail" };
+  return (
+    <span
+      className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${config.bg} ${config.text}`}
+    >
+      {config.label}
+    </span>
   );
 }
 

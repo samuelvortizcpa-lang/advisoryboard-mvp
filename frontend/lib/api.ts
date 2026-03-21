@@ -941,6 +941,32 @@ export interface RoutingRuleCreateData {
   match_type: string;
 }
 
+export interface ZoomRule {
+  id: string;
+  user_id: string;
+  match_field: string;
+  match_value: string;
+  client_id: string;
+  client_name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ZoomRuleCreateData {
+  match_field: string;
+  match_value: string;
+  client_id: string;
+}
+
+export interface UnmatchedRecording {
+  document_id: string;
+  filename: string;
+  file_size: number;
+  source: string;
+  external_id: string | null;
+  upload_date: string;
+}
+
 // ─── Integrations API factory ──────────────────────────────────────────────
 
 export function createIntegrationsApi(getToken: GetToken) {
@@ -957,6 +983,13 @@ export function createIntegrationsApi(getToken: GetToken) {
       return apiFetch<{ authorization_url: string }>(
         getToken,
         "/integrations/microsoft/authorize"
+      );
+    },
+
+    getZoomAuthUrl() {
+      return apiFetch<{ authorization_url: string }>(
+        getToken,
+        "/integrations/zoom/authorize"
       );
     },
 
@@ -1026,6 +1059,55 @@ export function createIntegrationsApi(getToken: GetToken) {
         getToken,
         "/integrations/routing-rules/auto-generate",
         { method: "POST" }
+      );
+    },
+
+    // ── Zoom rules ──
+    listZoomRules() {
+      return apiFetch<ZoomRule[]>(getToken, "/integrations/zoom-rules");
+    },
+
+    createZoomRule(data: ZoomRuleCreateData) {
+      return apiFetch<ZoomRule>(getToken, "/integrations/zoom-rules", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteZoomRule(ruleId: string) {
+      return apiFetch<void>(getToken, `/integrations/zoom-rules/${ruleId}`, {
+        method: "DELETE",
+      });
+    },
+
+    autoGenerateZoomRules() {
+      return apiFetch<ZoomRule[]>(
+        getToken,
+        "/integrations/zoom-rules/auto-generate",
+        { method: "POST" }
+      );
+    },
+
+    // ── Unmatched recordings ──
+    listUnmatchedRecordings() {
+      return apiFetch<UnmatchedRecording[]>(
+        getToken,
+        "/integrations/zoom/unmatched"
+      );
+    },
+
+    assignRecording(documentId: string, clientId: string, createRule?: { match_field: string; match_value: string }) {
+      return apiFetch<{ status: string }>(
+        getToken,
+        "/integrations/zoom/assign",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            document_id: documentId,
+            client_id: clientId,
+            create_rule: createRule,
+          }),
+        }
       );
     },
   };

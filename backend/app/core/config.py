@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     microsoft_client_secret: str = ""
     microsoft_redirect_uri: str = "http://localhost:8000/api/integrations/microsoft/callback"
 
+    # ── Zoom OAuth ─────────────────────────────────────────────────────────
+    zoom_client_id: str = ""
+    zoom_client_secret: str = ""
+    zoom_redirect_uri: str = "http://localhost:8000/api/integrations/zoom/callback"
+
     # ── Google AI ───────────────────────────────────────────────────────────
     google_ai_api_key: str = ""
 

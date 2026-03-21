@@ -18,6 +18,7 @@ from app.models.client_brief import ClientBrief
 from app.models.dismissed_alert import DismissedAlert
 from app.models.token_usage import TokenUsage
 from app.models.user_subscription import UserSubscription
+from app.models.zoom_meeting_rule import ZoomMeetingRule
 
 __all__ = [
     "User",
@@ -39,4 +40,5 @@ __all__ = [
     "DismissedAlert",
     "TokenUsage",
     "UserSubscription",
+    "ZoomMeetingRule",
 ]
