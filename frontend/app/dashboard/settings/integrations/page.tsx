@@ -69,6 +69,15 @@ export default function IntegrationsSettingsPage() {
   const [showFrontTokenInput, setShowFrontTokenInput] = useState(false);
   const [frontApiToken, setFrontApiToken] = useState("");
 
+  // ── Fathom ──
+  const [connectingFathom, setConnectingFathom] = useState(false);
+  const [fathomApiKey, setFathomApiKey] = useState("");
+  const [showFathomKeyInput, setShowFathomKeyInput] = useState(false);
+  const [fathomApiWarning, setFathomApiWarning] = useState<string | null>(null);
+  const [fathomImportFile, setFathomImportFile] = useState<File | null>(null);
+  const [fathomImportClientId, setFathomImportClientId] = useState("");
+  const [importingFathom, setImportingFathom] = useState(false);
+
   const loadData = useCallback(async () => {
     try {
       const api = createIntegrationsApi(getToken);
@@ -191,6 +200,40 @@ export default function IntegrationsSettingsPage() {
       setError(e instanceof Error ? e.message : "Invalid Front API token");
     } finally {
       setConnectingFrontToken(false);
+    }
+  };
+
+  const handleConnectFathom = async () => {
+    if (!fathomApiKey.trim()) return;
+    setConnectingFathom(true);
+    setFathomApiWarning(null);
+    try {
+      const api = createIntegrationsApi(getToken);
+      await api.connectFathom(fathomApiKey.trim());
+      setFathomApiKey("");
+      setShowFathomKeyInput(false);
+      setSuccessMsg("Fathom connected successfully!");
+      await loadData();
+    } catch (e: unknown) {
+      setFathomApiWarning(e instanceof Error ? e.message : "Invalid Fathom API key");
+    } finally {
+      setConnectingFathom(false);
+    }
+  };
+
+  const handleFathomImport = async () => {
+    if (!fathomImportFile || !fathomImportClientId) return;
+    setImportingFathom(true);
+    try {
+      const api = createIntegrationsApi(getToken);
+      await api.importFathomTranscript(fathomImportFile, fathomImportClientId);
+      setFathomImportFile(null);
+      setFathomImportClientId("");
+      setSuccessMsg("Fathom transcript imported successfully!");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to import transcript");
+    } finally {
+      setImportingFathom(false);
     }
   };
 
@@ -428,12 +471,16 @@ export default function IntegrationsSettingsPage() {
                     ? "Sync last 30 days (up to 100 recordings)"
                     : conn.provider === "front"
                     ? "Sync last 7 days (up to 200 conversations)"
+                    : conn.provider === "fathom"
+                    ? "Sync last 30 days (up to 100 meetings)"
                     : "Sync last 7 days (up to 200 emails)";
                 const itemLabel =
                   conn.provider === "zoom"
                     ? "recordings"
                     : conn.provider === "front"
                     ? "conversations"
+                    : conn.provider === "fathom"
+                    ? "meetings"
                     : "emails";
 
                 return (
@@ -519,7 +566,7 @@ export default function IntegrationsSettingsPage() {
                           <span className="text-gray-500">
                             {result.emails_skipped} skipped
                           </span>
-                          {(conn.provider === "zoom" || conn.provider === "front") && (
+                          {(conn.provider === "zoom" || conn.provider === "front" || conn.provider === "fathom") && (
                             <span className="text-[10px] text-gray-400">({itemLabel})</span>
                           )}
                         </div>
@@ -663,6 +710,123 @@ export default function IntegrationsSettingsPage() {
                 </div>
               )}
             </div>
+
+            {/* Fathom */}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <ProviderIconBubble provider="fathom" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Fathom</p>
+                  <p className="text-xs text-gray-500">Auto-import meeting notes and transcripts</p>
+                </div>
+              </div>
+              {showFathomKeyInput ? (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={fathomApiKey}
+                      onChange={(e) => { setFathomApiKey(e.target.value); setFathomApiWarning(null); }}
+                      placeholder="Paste your Fathom API key..."
+                      className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={handleConnectFathom}
+                      disabled={connectingFathom || !fathomApiKey.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-[#7C3AED] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6D28D9] disabled:opacity-50"
+                    >
+                      {connectingFathom ? <Spinner /> : "Connect"}
+                    </button>
+                  </div>
+                  {fathomApiWarning && (
+                    <p className="text-xs text-red-600">{fathomApiWarning}</p>
+                  )}
+                  <button
+                    onClick={() => { setShowFathomKeyInput(false); setFathomApiKey(""); setFathomApiWarning(null); }}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowFathomKeyInput(true)}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#7C3AED] bg-white px-4 py-2 text-sm font-medium text-[#7C3AED] transition-colors hover:bg-[#7C3AED]/5 disabled:opacity-50"
+                >
+                  <FathomIcon small />
+                  Connect with API Key
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────── Import Fathom Transcript ───────── */}
+      <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="border-b border-gray-100 px-6 py-4">
+          <h2 className="text-sm font-semibold text-gray-900">
+            Import Fathom Transcript
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-500">
+            Upload a Fathom JSON transcript and assign it to a client
+          </p>
+        </div>
+        <div className="p-6">
+          <div className="flex items-end gap-4">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Transcript File (.json)
+              </label>
+              <div
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && file.name.endsWith(".json")) {
+                    setFathomImportFile(file);
+                  }
+                }}
+                className="relative"
+              >
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={(e) => setFathomImportFile(e.target.files?.[0] ?? null)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs file:font-medium file:text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                {fathomImportFile && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Selected: {fathomImportFile.name} ({(fathomImportFile.size / 1024).toFixed(1)} KB)
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="w-48">
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Client
+              </label>
+              <select
+                value={fathomImportClientId}
+                onChange={(e) => setFathomImportClientId(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">Select client...</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleFathomImport}
+              disabled={importingFathom || !fathomImportFile || !fathomImportClientId}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#7C3AED] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6D28D9] disabled:opacity-50"
+            >
+              {importingFathom ? <Spinner /> : "Import"}
+            </button>
           </div>
         </div>
       </section>
@@ -1156,7 +1320,9 @@ function ZoomIcon({ small }: { small?: boolean } = {}) {
 
 function ProviderBadge({ provider }: { provider: string }) {
   const config =
-    provider === "front"
+    provider === "fathom"
+      ? { bg: "bg-purple-50", text: "text-purple-700", label: "Fathom" }
+      : provider === "front"
       ? { bg: "bg-red-50", text: "text-red-600", label: "Front" }
       : provider === "zoom"
       ? { bg: "bg-sky-100", text: "text-sky-700", label: "Zoom" }
@@ -1173,6 +1339,7 @@ function ProviderBadge({ provider }: { provider: string }) {
 }
 
 function providerLabel(provider: string): string {
+  if (provider === "fathom") return "Fathom";
   if (provider === "front") return "Front";
   if (provider === "zoom") return "Zoom";
   if (provider === "microsoft") return "Outlook";
@@ -1181,7 +1348,9 @@ function providerLabel(provider: string): string {
 
 function ProviderIconBubble({ provider }: { provider: string }) {
   const bg =
-    provider === "front"
+    provider === "fathom"
+      ? "bg-purple-50"
+      : provider === "front"
       ? "bg-red-50"
       : provider === "zoom"
       ? "bg-blue-50"
@@ -1190,7 +1359,9 @@ function ProviderIconBubble({ provider }: { provider: string }) {
       : "bg-red-50";
   return (
     <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${bg}`}>
-      {provider === "front" ? (
+      {provider === "fathom" ? (
+        <FathomIcon />
+      ) : provider === "front" ? (
         <FrontIcon />
       ) : provider === "zoom" ? (
         <ZoomIcon />
@@ -1212,6 +1383,29 @@ function FrontIcon({ small }: { small?: boolean } = {}) {
       <path d="M7 12h6" stroke="#FF5C5C" strokeWidth="1.5" strokeLinecap="round" />
       <path d="M7 15.5h4" stroke="#FF5C5C" strokeWidth="1.5" strokeLinecap="round" />
       <rect x="3" y="4" width="18" height="4" rx="2" fill="#FF5C5C" opacity="0.15" />
+    </svg>
+  );
+}
+
+function FathomIcon({ small }: { small?: boolean } = {}) {
+  const size = small ? "h-4 w-4" : "h-5 w-5";
+  return (
+    <svg className={`${size} shrink-0`} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7z"
+        stroke="#7C3AED"
+        strokeWidth="1.5"
+        fill="#7C3AED"
+        opacity="0.15"
+      />
+      <path
+        d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7z"
+        stroke="#7C3AED"
+        strokeWidth="1.5"
+        fill="none"
+      />
+      <path d="M9 21h6" stroke="#7C3AED" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M10 19v2M14 19v2" stroke="#7C3AED" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }

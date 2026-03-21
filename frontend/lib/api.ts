@@ -75,10 +75,11 @@ async function apiFetch<T>(
 ): Promise<T> {
   const token = await getToken();
 
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
@@ -1007,6 +1008,31 @@ export function createIntegrationsApi(getToken: GetToken) {
         {
           method: "POST",
           body: JSON.stringify({ api_token: apiToken }),
+        }
+      );
+    },
+
+    connectFathom(apiKey: string) {
+      return apiFetch<IntegrationConnection>(
+        getToken,
+        "/integrations/fathom/connect",
+        {
+          method: "POST",
+          body: JSON.stringify({ api_key: apiKey }),
+        }
+      );
+    },
+
+    importFathomTranscript(file: File, clientId: string) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("client_id", clientId);
+      return apiFetch<{ status: string; document_id: string }>(
+        getToken,
+        "/integrations/fathom/import",
+        {
+          method: "POST",
+          body: formData,
         }
       );
     },
