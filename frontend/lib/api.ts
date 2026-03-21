@@ -1140,6 +1140,21 @@ export function createIntegrationsApi(getToken: GetToken) {
       );
     },
 
+    getAutoSyncStatus() {
+      return apiFetch<{
+        scheduler_running: boolean;
+        last_run_at: string | null;
+        next_run_at: string | null;
+        active_syncs: string[];
+        last_run_summary: {
+          connections_checked: number;
+          connections_synced: number;
+          connections_skipped: number;
+          connections_failed: number;
+        } | null;
+      }>(getToken, "/integrations/admin/sync-status");
+    },
+
     assignRecording(documentId: string, clientId: string, createRule?: { match_field: string; match_value: string }) {
       return apiFetch<{ status: string }>(
         getToken,

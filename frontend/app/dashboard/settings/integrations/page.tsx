@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   Client,
@@ -78,6 +78,25 @@ export default function IntegrationsSettingsPage() {
   const [fathomImportClientId, setFathomImportClientId] = useState("");
   const [importingFathom, setImportingFathom] = useState(false);
 
+  // ── Auto-sync status ──
+  const [autoSyncStatus, setAutoSyncStatus] = useState<{
+    scheduler_running: boolean;
+    last_run_at: string | null;
+    next_run_at: string | null;
+    active_syncs: string[];
+    last_run_summary: {
+      connections_checked: number;
+      connections_synced: number;
+      connections_skipped: number;
+      connections_failed: number;
+    } | null;
+  } | null>(null);
+
+  // ── Activity feed ──
+  const [activityFeed, setActivityFeed] = useState<SyncLog[]>([]);
+  const [showActivityFeed, setShowActivityFeed] = useState(false);
+  const activityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const loadData = useCallback(async () => {
     try {
       const api = createIntegrationsApi(getToken);
@@ -93,6 +112,9 @@ export default function IntegrationsSettingsPage() {
       setZoomRules(zRls);
       setClients(clientList.items);
       setError(null);
+
+      // Load auto-sync status (non-blocking — may fail if not admin)
+      api.getAutoSyncStatus().then(setAutoSyncStatus).catch(() => {});
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load data");
     } finally {
@@ -103,6 +125,46 @@ export default function IntegrationsSettingsPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Auto-refresh activity feed every 30 seconds
+  const loadActivityFeed = useCallback(async () => {
+    try {
+      const api = createIntegrationsApi(getToken);
+      const conns = connections.length > 0 ? connections : await api.listConnections();
+      const allLogs: SyncLog[] = [];
+      // Fetch last 5 logs per connection (in parallel)
+      const results = await Promise.allSettled(
+        conns.map((c) => api.getSyncHistory(c.id, 5))
+      );
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled") {
+          r.value.forEach((log) => {
+            // Tag each log with the provider for display
+            (log as SyncLog & { _provider?: string })._provider = conns[i].provider;
+            allLogs.push(log);
+          });
+        }
+      });
+      // Sort by started_at descending, take most recent 15
+      allLogs.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+      setActivityFeed(allLogs.slice(0, 15));
+    } catch {
+      // Non-critical
+    }
+  }, [getToken, connections]);
+
+  useEffect(() => {
+    if (showActivityFeed) {
+      loadActivityFeed();
+      activityIntervalRef.current = setInterval(loadActivityFeed, 30_000);
+    }
+    return () => {
+      if (activityIntervalRef.current) {
+        clearInterval(activityIntervalRef.current);
+        activityIntervalRef.current = null;
+      }
+    };
+  }, [showActivityFeed, loadActivityFeed]);
 
   // Check for OAuth callback params
   useEffect(() => {
@@ -451,6 +513,49 @@ export default function IntegrationsSettingsPage() {
         </div>
       )}
 
+      {/* ───────── Auto-Sync Status ───────── */}
+      {connections.length > 0 && (
+        <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                autoSyncStatus?.scheduler_running ? "bg-green-500" : "bg-gray-400"
+              }`}
+            />
+            <span className="text-sm font-medium text-gray-700">
+              Auto-sync:{" "}
+              {autoSyncStatus?.scheduler_running ? (
+                <span className="text-green-700">Active</span>
+              ) : (
+                <span className="text-gray-500">Inactive</span>
+              )}
+            </span>
+            {autoSyncStatus?.scheduler_running && (
+              <span className="text-xs text-gray-500">
+                Runs every 15 minutes
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            {autoSyncStatus?.last_run_at && (
+              <span>
+                Last run: {formatRelative(autoSyncStatus.last_run_at)}
+              </span>
+            )}
+            {autoSyncStatus?.next_run_at && (
+              <span>
+                Next: {formatRelative(autoSyncStatus.next_run_at)}
+              </span>
+            )}
+            {autoSyncStatus?.last_run_summary && (
+              <span className="text-green-700">
+                {autoSyncStatus.last_run_summary.connections_synced} synced
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ───────── Connected Accounts ───────── */}
       <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-100 px-6 py-4">
@@ -502,6 +607,11 @@ export default function IntegrationsSettingsPage() {
                             {conn.last_sync_at
                               ? `Last synced ${formatRelative(conn.last_sync_at)}`
                               : "Never synced"}
+                            {conn.last_sync_at && autoSyncStatus?.scheduler_running && (
+                              <span className="ml-1.5 inline-flex rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                                auto
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -1164,6 +1274,86 @@ export default function IntegrationsSettingsPage() {
           )}
         </div>
       </section>
+
+      {/* ───────── Sync Activity Feed ───────── */}
+      {connections.length > 0 && (
+        <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">
+                Sync Activity
+              </h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Recent sync activity across all connected providers
+                {showActivityFeed && (
+                  <span className="ml-1 text-gray-400">(auto-refreshes every 30s)</span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowActivityFeed(!showActivityFeed)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              {showActivityFeed ? "Hide" : "Show"}
+            </button>
+          </div>
+
+          {showActivityFeed && (
+            <div className="p-6">
+              {activityFeed.length === 0 ? (
+                <p className="py-3 text-center text-xs text-gray-500">
+                  No sync activity yet
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {activityFeed.map((log) => {
+                    const logProvider = (log as SyncLog & { _provider?: string })._provider || "google";
+                    return (
+                      <div
+                        key={log.id}
+                        className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              log.status === "completed"
+                                ? "bg-green-500"
+                                : log.status === "running"
+                                ? "bg-blue-500"
+                                : "bg-red-500"
+                            }`}
+                          />
+                          <ProviderBadge provider={logProvider} />
+                          <span
+                            className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                              log.sync_type === "scheduled"
+                                ? "bg-blue-50 text-blue-600"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {log.sync_type === "scheduled" ? "auto" : "manual"}
+                          </span>
+                          <span className="text-xs text-gray-600">
+                            {log.emails_found} found, {log.emails_ingested} ingested
+                          </span>
+                          {log.error_message && (
+                            <span className="text-xs text-red-500 truncate max-w-[200px]">
+                              {log.error_message}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-400">
+                          {formatRelative(log.started_at)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
@@ -1186,6 +1376,7 @@ function SyncHistoryTable({ logs, provider }: { logs: SyncLog[]; provider: strin
           <tr className="border-b border-gray-100 bg-gray-50 text-left font-medium uppercase tracking-wide text-gray-400">
             <th className="px-3 py-2">Date</th>
             <th className="px-3 py-2">Provider</th>
+            <th className="px-3 py-2">Type</th>
             <th className="px-3 py-2">Status</th>
             <th className="px-3 py-2">Found</th>
             <th className="px-3 py-2">Ingested</th>
@@ -1201,6 +1392,17 @@ function SyncHistoryTable({ logs, provider }: { logs: SyncLog[]; provider: strin
               </td>
               <td className="px-3 py-2">
                 <ProviderBadge provider={provider} />
+              </td>
+              <td className="px-3 py-2">
+                <span
+                  className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                    log.sync_type === "scheduled"
+                      ? "bg-blue-50 text-blue-600"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {log.sync_type === "scheduled" ? "auto" : "manual"}
+                </span>
               </td>
               <td className="px-3 py-2">
                 <span
