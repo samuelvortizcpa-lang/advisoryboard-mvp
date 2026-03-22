@@ -283,7 +283,7 @@ async def admin_overview(
     mrr = (
         by_tier.get("starter", 0) * 99
         + by_tier.get("professional", 0) * 149
-        + by_tier.get("firm", 0) * 249
+        + by_tier.get("firm", 0) * 349
     )
 
     return AdminOverviewResponse(
