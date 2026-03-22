@@ -275,12 +275,12 @@ async def semantic_search(
 
     results = [
         SearchResult(
-            chunk_text=c.chunk_text,
-            document_id=str(c.document_id),
-            filename=c.document.filename if c.document else "unknown",
-            chunk_index=c.chunk_index,
+            chunk_text=chunk.chunk_text,
+            document_id=str(chunk.document_id),
+            filename=chunk.document.filename if chunk.document else "unknown",
+            chunk_index=chunk.chunk_index,
         )
-        for c in chunks
+        for chunk, _score in chunks
     ]
 
     return SearchResponse(results=results)

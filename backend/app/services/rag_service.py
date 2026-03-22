@@ -41,6 +41,7 @@ from app.models.document_page_image import DocumentPageImage
 from app.services import storage_service
 from app.services.chunking import chunk_text, get_chunk_params
 from app.services.query_router import classify_query, route_completion
+from app.services.tax_terms import expand_query as expand_financial_terms
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
 
 logger = logging.getLogger(__name__)
@@ -357,31 +358,63 @@ async def search_chunks(
     Return the *limit* most semantically similar DocumentChunks for *query*
     within the given client's documents, along with a confidence score (0–100).
 
-    Uses a JOIN through Document to double-verify client ownership — guards
-    against any data-integrity drift in the denormalised client_id column.
+    Uses multi-query retrieval for financial terms: the original query is
+    searched alongside an expanded query that includes synonym/line-number
+    expansions (e.g. "AGI" → "Adjusted Gross Income, Line 11, Form 1040").
+    Results are merged, deduplicated, and re-ranked with keyword + form
+    boosting so that the chunk containing the actual answer rises to the top.
     """
     if not query.strip():
         return []
 
-    query_embedding = await embed_text(query)
-
-    distance_col = DocumentChunk.embedding.cosine_distance(query_embedding).label("distance")
-
-    rows = (
-        db.query(DocumentChunk, distance_col)
-        .join(Document, DocumentChunk.document_id == Document.id)
-        .filter(
-            DocumentChunk.client_id == client_id,
-            Document.client_id == client_id,
-            DocumentChunk.embedding.isnot(None),
+    # --- Financial term expansion ---
+    expansion_terms, relevant_forms = expand_financial_terms(query)
+    if expansion_terms:
+        logger.info(
+            "Term expansion: %s → expansions=%s, forms=%s",
+            query, expansion_terms[:5], relevant_forms,
         )
-        .order_by(distance_col)
-        .limit(FETCH_K)
-        .all()
-    )
 
-    # Extract keyword phrases from the query for boosting
-    import re as _re
+    # --- Multi-query: embed original + expanded query ---
+    queries_to_embed = [query]
+    if expansion_terms:
+        expanded_query = query + " " + " ".join(expansion_terms[:6])
+        queries_to_embed.append(expanded_query)
+
+    client = _openai()
+    embed_response = await client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=[q.replace("\n", " ") for q in queries_to_embed],
+    )
+    embeddings = [d.embedding for d in embed_response.data]
+
+    # --- Run vector search for each embedding and merge ---
+    seen_chunk_ids: set = set()
+    all_rows: list[tuple[DocumentChunk, float, str]] = []  # (chunk, distance, source)
+
+    for embed_idx, query_embedding in enumerate(embeddings):
+        source = "original" if embed_idx == 0 else "expanded"
+        distance_col = DocumentChunk.embedding.cosine_distance(query_embedding).label("distance")
+
+        rows = (
+            db.query(DocumentChunk, distance_col)
+            .join(Document, DocumentChunk.document_id == Document.id)
+            .filter(
+                DocumentChunk.client_id == client_id,
+                Document.client_id == client_id,
+                DocumentChunk.embedding.isnot(None),
+            )
+            .order_by(distance_col)
+            .limit(FETCH_K)
+            .all()
+        )
+
+        for chunk, distance in rows:
+            if chunk.id not in seen_chunk_ids:
+                seen_chunk_ids.add(chunk.id)
+                all_rows.append((chunk, distance, source))
+
+    # --- Build keyword phrases from query for boosting ---
     query_lower = query.lower()
     tokens = query_lower.split()
     key_phrases: list[str] = []
@@ -396,8 +429,14 @@ async def search_chunks(
                                       "with", "your", "about", "which"):
             key_phrases.append(t)
 
+    # Also add expansion terms as keyword phrases for direct text matching
+    for term in expansion_terms:
+        if term.lower() not in {p.lower() for p in key_phrases}:
+            key_phrases.append(term.lower())
+
+    # --- Score and rank ---
     results: list[tuple[DocumentChunk, float]] = []
-    for chunk, distance in rows:
+    for chunk, distance, source in all_rows:
         # Convert cosine distance (0–2) to confidence percentage (0–100)
         confidence = (1 - distance / 2) * 100
 
@@ -406,18 +445,39 @@ async def search_chunks(
         if doc and not doc.is_superseded:
             confidence = min(100.0, confidence + 5.0)
 
-        # Keyword boost: +3% per matching phrase found in chunk text
+        # Keyword boost: +3% per matching query phrase, +5% per expansion term
         chunk_lower = (chunk.chunk_text or "").lower()
         keyword_boost = 0.0
         for phrase in key_phrases:
             if phrase in chunk_lower:
-                keyword_boost += 3.0
+                # Expansion terms get a stronger boost since they represent
+                # domain-specific matches (e.g. "line 11" in a chunk about AGI)
+                if phrase in {e.lower() for e in expansion_terms}:
+                    keyword_boost += 5.0
+                else:
+                    keyword_boost += 3.0
         confidence = min(100.0, confidence + keyword_boost)
+
+        # Form-type boost: if chunk text mentions a relevant form, boost it.
+        # Chunks with [Page N] markers that contain "Form 1040" should rank
+        # higher when the user asks about AGI.
+        if relevant_forms:
+            form_boost = 0.0
+            for form_name in relevant_forms:
+                # Match "form 1040", "1040", "schedule c", "schedule a", etc.
+                if form_name.lower() in chunk_lower:
+                    form_boost += 5.0
+            if form_boost > 0:
+                confidence = min(100.0, confidence + form_boost)
+                logger.info(
+                    "Form boost +%.1f%% for chunk %d (forms: %s)",
+                    form_boost, chunk.chunk_index, relevant_forms,
+                )
 
         if keyword_boost > 0:
             logger.info(
-                "Keyword boost +%.1f%% for chunk %d (phrases matched)",
-                keyword_boost, chunk.chunk_index,
+                "Keyword boost +%.1f%% for chunk %d (%s query)",
+                keyword_boost, chunk.chunk_index, source,
             )
 
         results.append((chunk, round(confidence, 2)))
@@ -485,9 +545,9 @@ async def answer_question(
 
     # ---- Keyword fallback: direct text search for specific phrases ----
     # Vector search alone struggles with structured forms (tax returns) where
-    # many chunks have near-identical embeddings.  If the question contains
-    # identifiable key phrases, also fetch chunks via SQL ILIKE and merge
-    # them into the result set so the LLM has the best possible context.
+    # many chunks have near-identical embeddings.  Search for:
+    #   1. Query bigrams (e.g. "2024 agi")
+    #   2. Financial term expansions (e.g. "adjusted gross income", "line 11")
     import re as _re_kw
     _kw_tokens = question.lower().split()
     _kw_bigrams = [
@@ -498,13 +558,20 @@ async def answer_question(
     _stop_bigrams = {"what is", "is the", "of the", "on the", "in the", "for the", "from the"}
     _kw_bigrams = [b for b in _kw_bigrams if b not in _stop_bigrams and len(b) > 5]
 
+    # Add financial term expansions to the keyword search
+    _expansion_terms, _relevant_forms = expand_financial_terms(question)
+    _kw_search_phrases = list(_kw_bigrams)
+    for term in _expansion_terms:
+        if len(term) >= 4 and term.lower() not in {b.lower() for b in _kw_search_phrases}:
+            _kw_search_phrases.append(term.lower())
+
     # Track which keyword phrase matched each fallback chunk (for page matching)
     _keyword_for_chunk: dict[int, str] = {}
 
-    if _kw_bigrams:
+    if _kw_search_phrases:
         existing_chunk_ids = {id(c) for c, _ in chunk_results}
-        for bigram in _kw_bigrams[:3]:  # limit to top 3 phrases
-            pattern = f"%{bigram}%"
+        for phrase in _kw_search_phrases[:8]:  # search up to 8 phrases
+            pattern = f"%{phrase}%"
             keyword_rows = (
                 db.query(DocumentChunk)
                 .join(Document, DocumentChunk.document_id == Document.id)
@@ -519,13 +586,15 @@ async def answer_question(
             for kw_chunk in keyword_rows:
                 if id(kw_chunk) not in existing_chunk_ids:
                     existing_chunk_ids.add(id(kw_chunk))
-                    _keyword_for_chunk[id(kw_chunk)] = bigram
-                    chunk_results.append((kw_chunk, 90.0))
+                    _keyword_for_chunk[id(kw_chunk)] = phrase
+                    # Expansion-matched chunks get high confidence
+                    kw_score = 92.0 if phrase in {e.lower() for e in _expansion_terms} else 90.0
+                    chunk_results.append((kw_chunk, kw_score))
                     logger.info(
                         "Keyword fallback: added chunk %d from %s (matched '%s')",
                         kw_chunk.chunk_index,
                         kw_chunk.document.filename if kw_chunk.document else "?",
-                        bigram,
+                        phrase,
                     )
 
     if not chunk_results:
@@ -675,8 +744,11 @@ async def answer_question(
 
     # --- Build relevance phrases from the question ---
     # Reuse _kw_bigrams (e.g. "total income", "line 9") already computed above.
-    # Also extract standalone "line N" patterns.
+    # Also include financial term expansions and "line N" patterns.
     question_phrases: list[str] = list(_kw_bigrams)
+    for term in _expansion_terms:
+        if term.lower() not in {p.lower() for p in question_phrases}:
+            question_phrases.append(term.lower())
     line_match = re.search(r"line\s+\d+", question, re.IGNORECASE)
     if line_match:
         question_phrases.append(line_match.group(0).lower())
