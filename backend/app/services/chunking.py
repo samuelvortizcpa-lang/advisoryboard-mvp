@@ -58,6 +58,9 @@ def get_chunk_params(document_type: Optional[str] = None) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
+_PAGE_MARKER_RE = re.compile(r"^\[Page\s+\d+\]", re.MULTILINE)
+
+
 def chunk_text(
     text: str,
     chunk_size: int = CHUNK_SIZE,
@@ -65,6 +68,11 @@ def chunk_text(
 ) -> list[str]:
     """
     Split *text* into overlapping chunks of at most *chunk_size* characters.
+
+    If the text contains ``[Page N]`` markers (inserted by the PDF extractor),
+    page boundaries act as hard chunk breaks so that page context is never
+    lost across chunks.  Each chunk inherits the ``[Page N]`` header of the
+    page it starts on.
 
     Returns a list of non-empty strings, each at least MIN_CHUNK_LEN chars.
     """
@@ -74,6 +82,53 @@ def chunk_text(
     # Normalise: collapse runs of blank lines
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
 
+    # If page markers are present, split on them and chunk each page
+    # independently so that page context is never lost across chunks.
+    if _PAGE_MARKER_RE.search(text):
+        return _chunk_with_page_markers(text, chunk_size, overlap)
+
+    return _chunk_plain(text, chunk_size, overlap)
+
+
+def _chunk_with_page_markers(
+    text: str,
+    chunk_size: int,
+    overlap: int,
+) -> list[str]:
+    """Split text that contains [Page N] markers, keeping each page as a
+    separate chunking unit so page headers propagate into every chunk."""
+    # Split on [Page N] boundaries, keeping the marker with its content
+    parts = _PAGE_MARKER_RE.split(text)
+    markers = _PAGE_MARKER_RE.findall(text)
+
+    # parts[0] is text before first marker (usually empty), then alternating
+    # Build list of (marker, body) tuples
+    pages: list[tuple[str, str]] = []
+    for i, marker in enumerate(markers):
+        body = parts[i + 1] if (i + 1) < len(parts) else ""
+        body = body.strip()
+        if body:
+            pages.append((marker, body))
+
+    all_chunks: list[str] = []
+    for marker, body in pages:
+        # Chunk this page's body normally
+        page_chunks = _chunk_plain(body, chunk_size - len(marker) - 1, overlap)
+        for pc in page_chunks:
+            all_chunks.append(f"{marker}\n{pc}")
+        # If the page body is small enough to not produce any chunks, include it whole
+        if not page_chunks and len(body) >= MIN_CHUNK_LEN:
+            all_chunks.append(f"{marker}\n{body}")
+
+    return all_chunks
+
+
+def _chunk_plain(
+    text: str,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
+) -> list[str]:
+    """Original paragraph-based chunking for text without page markers."""
     # Split into paragraphs
     paragraphs = [p.strip() for p in re.split(r"\n\n+", text) if p.strip()]
 

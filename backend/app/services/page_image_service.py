@@ -52,8 +52,8 @@ def _process_single_page(temp_path: str, page_num: int, doc_label: str) -> tuple
     # OCR this page for text preview
     text_preview = None
     try:
-        raw = pytesseract.image_to_string(image) or ""
-        text_preview = raw[:500] if raw.strip() else None
+        raw = pytesseract.image_to_string(image, config="--psm 6") or ""
+        text_preview = raw.strip() if raw.strip() else None
     except Exception as ocr_exc:
         logger.warning(
             "Page images: Tesseract OCR failed for %s page %d: %s",

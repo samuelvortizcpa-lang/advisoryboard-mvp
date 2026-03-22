@@ -122,7 +122,15 @@ _COMMON_WORDS = {
 
 
 def _is_garbled(text: str, threshold: float = 0.15) -> bool:
-    """Detect whether extracted PDF text is garbled."""
+    """Detect whether extracted PDF text is garbled.
+
+    Checks for:
+    - Too short or too few words
+    - Reversed words (even 1 means the PDF uses a custom font encoding
+      that pdfplumber can't decode — the entire page is unreliable)
+    - CID references like ``(cid:123)`` — unmapped glyphs
+    - Low ratio of recognised English words
+    """
     import re as _re
 
     if not text or len(text.strip()) < 20:
@@ -132,13 +140,23 @@ def _is_garbled(text: str, threshold: float = 0.15) -> bool:
     if len(words) < 5:
         return True
 
-    # Check for reversed words (strong signal — e.g. "mroF" for "Form")
+    # Check for CID references — unmapped glyphs, clear sign of encoding failure
+    cid_count = len(_re.findall(r"\(cid:\d+\)", text))
+    if cid_count >= 3:
+        logger.info("Garbled detection: found %d (cid:N) references", cid_count)
+        return True
+
+    # Check for reversed words (strong signal — e.g. "mroF" for "Form").
+    # Even ONE reversed common word means the PDF uses a custom font encoding
+    # that pdfplumber can't reliably decode.  The page may look partially
+    # readable but critical data (line numbers, dollar amounts) is often
+    # missing or scrambled.
     reversed_hits = 0
     for w in words:
         if w.lower()[::-1] in _COMMON_WORDS and w.lower() not in _COMMON_WORDS:
             reversed_hits += 1
-    if reversed_hits >= 2:
-        logger.info(f"Garbled detection: found {reversed_hits} reversed words")
+    if reversed_hits >= 1:
+        logger.info("Garbled detection: found %d reversed words", reversed_hits)
         return True
 
     # Check ratio of recognised words
@@ -146,8 +164,8 @@ def _is_garbled(text: str, threshold: float = 0.15) -> bool:
     ratio = recognised / len(words)
     if ratio < threshold:
         logger.info(
-            f"Garbled detection: only {ratio:.1%} recognised words "
-            f"({recognised}/{len(words)})"
+            "Garbled detection: only %.1f%% recognised words (%d/%d)",
+            ratio * 100, recognised, len(words),
         )
         return True
 
@@ -203,50 +221,101 @@ def _extract_pdf_ocr(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _ocr_single_page(path: Path, page_num: int) -> str:
+    """OCR a single page (1-indexed) via Tesseract. Returns extracted text or ''."""
+    import gc
+    from pdf2image import convert_from_path
+    import pytesseract
+
+    try:
+        images = convert_from_path(
+            str(path),
+            first_page=page_num,
+            last_page=page_num,
+            dpi=150,
+        )
+        image = images[0]
+        text = pytesseract.image_to_string(image, config="--psm 6")
+        image.close()
+        del image, images
+        gc.collect()
+        return (text or "").strip()
+    except Exception as e:
+        logger.error("OCR failed for page %d of %s: %s", page_num, path.name, e)
+        return ""
+
+
 def _extract_pdf(path: Path) -> str:
-    """Extract text from PDF with automatic OCR fallback for garbled output."""
+    """Extract text from PDF with per-page OCR fallback for garbled pages.
+
+    Each page is checked individually for garbled text.  Pages where
+    pdfplumber produces garbled output (common on Form 1040 from certain
+    tax-software renderers) are re-extracted via Tesseract OCR, while
+    clean pages keep their pdfplumber text.
+
+    Every page is prefixed with a ``[Page N]`` marker so downstream
+    chunking preserves page context for the LLM.
+    """
     try:
         import pdfplumber
     except ImportError as exc:
         raise ExtractionError("pdfplumber is not installed") from exc
 
-    # Step 1: Try pdfplumber
-    pages: list[str] = []
+    # Step 1: Extract every page with pdfplumber
+    pdfplumber_pages: list[tuple[int, str]] = []  # (1-indexed page_num, text)
     try:
         with pdfplumber.open(str(path)) as pdf:
-            for page in pdf.pages:
+            for i, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text()
-                if text and text.strip():
-                    pages.append(text.strip())
+                pdfplumber_pages.append((i, (text or "").strip()))
     except Exception as exc:
         raise ExtractionError(f"PDF extraction failed: {exc}") from exc
 
-    pdfplumber_text = "\n\n".join(pages)
+    if not pdfplumber_pages:
+        raise ExtractionError(f"PDF has no pages: {path.name}")
 
-    # Step 2: Check quality — if pdfplumber output looks good, use it
-    if not _is_garbled(pdfplumber_text):
-        logger.info(f"PDF extraction: pdfplumber output OK for {path.name}")
-        return pdfplumber_text
+    # Step 2: Per-page quality check — OCR only the garbled pages
+    final_pages: list[str] = []
+    ocr_count = 0
 
-    # Step 3: Fall back to Tesseract OCR
-    logger.warning(
-        f"PDF extraction: pdfplumber output garbled for {path.name}, "
-        "falling back to Tesseract OCR"
+    for page_num, page_text in pdfplumber_pages:
+        if _is_garbled(page_text):
+            # This page is garbled — try OCR
+            logger.info(
+                "PDF extraction: page %d of %s is garbled, attempting OCR",
+                page_num, path.name,
+            )
+            ocr_text = _ocr_single_page(path, page_num)
+            if ocr_text and len(ocr_text) > len(page_text):
+                page_text = ocr_text
+                ocr_count += 1
+            elif not page_text and ocr_text:
+                page_text = ocr_text
+                ocr_count += 1
+            # else: keep pdfplumber text (both are poor; pdfplumber is at least consistent)
+
+        if page_text:
+            final_pages.append(f"[Page {page_num}]\n{page_text}")
+
+    if not final_pages:
+        # All pages empty — try full OCR as last resort
+        logger.warning(
+            "PDF extraction: all pdfplumber pages empty for %s, trying full OCR",
+            path.name,
+        )
+        try:
+            ocr_text = _extract_pdf_ocr(path)
+            if ocr_text and ocr_text.strip():
+                return ocr_text
+        except Exception as e:
+            logger.error("Full OCR fallback also failed: %s", e)
+        raise ExtractionError(f"No text could be extracted from {path.name}")
+
+    logger.info(
+        "PDF extraction: %s — %d pages, %d needed OCR",
+        path.name, len(pdfplumber_pages), ocr_count,
     )
-    try:
-        ocr_text = _extract_pdf_ocr(path)
-        if ocr_text and len(ocr_text.strip()) > 100:
-            logger.info("OCR produced good output")
-            return ocr_text
-        elif ocr_text and len(ocr_text.strip()) > len(pdfplumber_text.strip()):
-            logger.warning("OCR output also marginal; using it (longer than pdfplumber)")
-            return ocr_text
-        else:
-            logger.warning("OCR output also poor; returning pdfplumber result")
-            return pdfplumber_text
-    except Exception as e:
-        logger.error(f"OCR fallback failed: {e}. Using pdfplumber output.")
-        return pdfplumber_text
+    return "\n\n".join(final_pages)
 
 
 def _extract_docx(path: Path) -> str:
