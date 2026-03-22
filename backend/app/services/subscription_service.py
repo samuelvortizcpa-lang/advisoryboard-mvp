@@ -166,13 +166,14 @@ def check_opus_quota(db: Session, user_id: str) -> dict:
     }
 
 
-def check_client_limit(db: Session, user_id: str, owner_id) -> dict:
+def check_client_limit(db: Session, user_id: str, owner_id=None, org_id=None) -> dict:
     """
-    Check whether the user can add another client.
+    Check whether the user/org can add another client.
 
     Args:
         user_id: Clerk ID (for subscription lookup)
-        owner_id: User UUID (for client ownership count)
+        owner_id: User UUID — legacy path, counts by owner_id
+        org_id: Organization UUID — new path, counts by org_id
 
     Returns {allowed, current, limit}.
     """
@@ -183,11 +184,19 @@ def check_client_limit(db: Session, user_id: str, owner_id) -> dict:
     if limit is None:
         return {"allowed": True, "current": 0, "limit": None}
 
-    current = (
-        db.query(func.count(Client.id))
-        .filter(Client.owner_id == owner_id)
-        .scalar()
-    ) or 0
+    if org_id is not None:
+        current = (
+            db.query(func.count(Client.id))
+            .filter(Client.org_id == org_id)
+            .scalar()
+        ) or 0
+    else:
+        # Legacy fallback
+        current = (
+            db.query(func.count(Client.id))
+            .filter(Client.owner_id == owner_id)
+            .scalar()
+        ) or 0
 
     result = {"allowed": current < limit, "current": current, "limit": limit}
     if not result["allowed"]:

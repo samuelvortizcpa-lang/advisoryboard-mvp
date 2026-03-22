@@ -1,44 +1,40 @@
-from typing import Dict, Any
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.schemas.client import (
     ClientCreate,
+    ClientDetailResponse,
     ClientListResponse,
     ClientResponse,
     ClientUpdate,
 )
-from app.services import client_service, user_service
+from app.services import client_service
+from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.subscription_service import check_client_limit
 
 router = APIRouter()
-
-# ---------------------------------------------------------------------------
-# Note on @require_auth vs Depends(get_current_user)
-# ---------------------------------------------------------------------------
-# The @require_auth decorator injects `current_user` by modifying the
-# wrapper's __signature__.  It only does this when `current_user` is NOT
-# already declared in the function; but without that declaration the
-# function body can't reference the variable.  The explicit
-# `Depends(get_current_user)` pattern is the idiomatic FastAPI solution —
-# it's what @require_auth wraps internally, and it avoids the edge case.
-# ---------------------------------------------------------------------------
 
 
 @router.get("/clients", response_model=ClientListResponse)
 async def list_clients(
     skip: int = 0,
     limit: int = 50,
+    assigned_to_me: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ClientListResponse:
-    user = user_service.get_or_create_user(db, current_user)
     clients, total = client_service.get_clients(
-        db, owner_id=user.id, skip=skip, limit=limit
+        db,
+        org_id=auth.org_id,
+        user_id=auth.user_id,
+        org_role=auth.org_role,
+        skip=skip,
+        limit=limit,
+        assigned_to_me=assigned_to_me or False,
     )
     return ClientListResponse(items=clients, total=total, skip=skip, limit=limit)
 
@@ -47,26 +43,32 @@ async def list_clients(
 async def create_client(
     data: ClientCreate,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ClientResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    limit_check = check_client_limit(db, user.clerk_id, user.id)
+    limit_check = check_client_limit(db, auth.user_id, org_id=auth.org_id)
     if not limit_check["allowed"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Client limit reached. Upgrade your plan to add more clients.",
         )
-    return client_service.create_client(db, data=data, owner_id=user.id)
+    return client_service.create_client(
+        db,
+        data=data,
+        org_id=auth.org_id,
+        created_by=auth.user_id,
+    )
 
 
-@router.get("/clients/{client_id}", response_model=ClientResponse)
+@router.get("/clients/{client_id}", response_model=ClientDetailResponse)
 async def get_client(
     client_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> ClientResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    client = client_service.get_client(db, client_id=client_id, owner_id=user.id)
+    auth: AuthContext = Depends(get_auth),
+) -> ClientDetailResponse:
+    check_client_access(auth, client_id, db)
+    client = client_service.get_client_detail(
+        db, client_id=client_id, org_id=auth.org_id
+    )
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     return client
@@ -77,11 +79,14 @@ async def update_client(
     client_id: UUID,
     data: ClientUpdate,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ClientResponse:
-    user = user_service.get_or_create_user(db, current_user)
+    check_client_access(auth, client_id, db)
+    # Readonly members cannot update
+    if auth.org_role != "admin":
+        client_service.require_write_access(db, client_id, auth.user_id)
     client = client_service.update_client(
-        db, client_id=client_id, data=data, owner_id=user.id
+        db, client_id=client_id, data=data, org_id=auth.org_id
     )
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
@@ -92,9 +97,10 @@ async def update_client(
 async def delete_client(
     client_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> None:
-    user = user_service.get_or_create_user(db, current_user)
-    deleted = client_service.delete_client(db, client_id=client_id, owner_id=user.id)
+    check_client_access(auth, client_id, db)
+    client_service.authorize_delete(db, client_id, auth)
+    deleted = client_service.delete_client(db, client_id=client_id, org_id=auth.org_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")

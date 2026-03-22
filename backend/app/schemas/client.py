@@ -35,12 +35,29 @@ class ClientUpdate(BaseModel):
 class ClientResponse(ClientBase):
     id: UUID
     owner_id: UUID
+    org_id: Optional[UUID] = None
+    created_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     client_type: Optional[ClientTypeResponse] = None
 
     class Config:
         from_attributes = True
+
+
+class ClientAccessMember(BaseModel):
+    user_id: str
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    access_level: str
+
+    class Config:
+        from_attributes = True
+
+
+class ClientDetailResponse(ClientResponse):
+    """Extended response for the single-client detail endpoint."""
+    members: list[ClientAccessMember] = []
 
 
 class ClientListResponse(BaseModel):
