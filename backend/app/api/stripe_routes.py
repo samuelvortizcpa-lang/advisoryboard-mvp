@@ -2,17 +2,16 @@
 Stripe payment API endpoints.
 
 Routes:
-  POST /api/stripe/create-checkout   — Create Stripe Checkout session (auth required)
-  POST /api/stripe/create-portal     — Create Billing Portal session (auth required)
+  POST /api/stripe/create-checkout   — Create Stripe Checkout session (auth required, admin only)
+  POST /api/stripe/create-portal     — Create Billing Portal session (auth required, admin only)
   POST /api/stripe/webhook           — Stripe webhook handler (NO auth — signature verified)
-  GET  /api/stripe/status            — Current user's Stripe subscription status (auth required)
+  GET  /api/stripe/status            — Current org's Stripe subscription status (auth required)
   GET  /api/stripe/sync              — Manual reconciliation from Stripe (auth required)
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
 
 import sentry_sdk
 
@@ -20,12 +19,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.processed_webhook_event import ProcessedWebhookEvent
 from app.models.user_subscription import UserSubscription
-from app.services import stripe_service, user_service
+from app.services import stripe_service
+from app.services.auth_context import AuthContext, get_auth, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -72,22 +71,29 @@ class StripeStatusResponse(BaseModel):
 async def create_checkout(
     body: CheckoutRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> CheckoutResponse:
     _require_stripe()
+    require_admin(auth)
 
     if body.tier not in ("starter", "professional", "firm"):
         raise HTTPException(status_code=400, detail="Invalid tier")
     if body.billing_interval not in ("monthly", "annual"):
         raise HTTPException(status_code=400, detail="Invalid billing interval")
 
-    user = user_service.get_or_create_user(db, current_user)
+    # Resolve email for Stripe customer
+    from app.models.user import User
+    user = db.query(User).filter(User.clerk_id == auth.user_id).first()
+    user_email = user.email if user else None
+
     try:
         url = stripe_service.create_checkout_session(
-            user_id=user.clerk_id,
-            user_email=user.email,
+            user_id=auth.user_id,
+            user_email=user_email,
             tier=body.tier,
             billing_interval=body.billing_interval,
+            org_id=auth.org_id,
+            db=db,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -102,16 +108,23 @@ async def create_checkout(
 )
 async def create_portal(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> PortalResponse:
     _require_stripe()
+    require_admin(auth)
 
-    user = user_service.get_or_create_user(db, current_user)
+    # Look up subscription by org_id first, then user_id
     sub = (
         db.query(UserSubscription)
-        .filter(UserSubscription.user_id == user.clerk_id)
+        .filter(UserSubscription.org_id == auth.org_id)
         .first()
     )
+    if sub is None:
+        sub = (
+            db.query(UserSubscription)
+            .filter(UserSubscription.user_id == auth.user_id)
+            .first()
+        )
 
     if not sub or not sub.stripe_customer_id:
         raise HTTPException(status_code=400, detail="No Stripe subscription found")
@@ -192,18 +205,24 @@ async def stripe_webhook(request: Request):
 @router.get(
     "/status",
     response_model=StripeStatusResponse,
-    summary="Get current user's Stripe subscription status",
+    summary="Get current org's Stripe subscription status",
 )
 async def stripe_status(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> StripeStatusResponse:
-    user = user_service.get_or_create_user(db, current_user)
+    # Try org-level subscription first, then user-level fallback
     sub = (
         db.query(UserSubscription)
-        .filter(UserSubscription.user_id == user.clerk_id)
+        .filter(UserSubscription.org_id == auth.org_id)
         .first()
     )
+    if sub is None:
+        sub = (
+            db.query(UserSubscription)
+            .filter(UserSubscription.user_id == auth.user_id)
+            .first()
+        )
 
     if not sub:
         return StripeStatusResponse(stripe_status="none", tier="free")
@@ -223,16 +242,22 @@ async def stripe_status(
 )
 async def stripe_sync(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> StripeStatusResponse:
     _require_stripe()
 
-    user = user_service.get_or_create_user(db, current_user)
+    # Try org-level subscription first, then user-level fallback
     sub = (
         db.query(UserSubscription)
-        .filter(UserSubscription.user_id == user.clerk_id)
+        .filter(UserSubscription.org_id == auth.org_id)
         .first()
     )
+    if sub is None:
+        sub = (
+            db.query(UserSubscription)
+            .filter(UserSubscription.user_id == auth.user_id)
+            .first()
+        )
 
     if not sub or not sub.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No Stripe subscription to sync")

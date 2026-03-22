@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 import sentry_sdk
 
@@ -18,7 +19,7 @@ from app.core.config import get_settings
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
 from app.services.notification_service import notify
-from app.services.subscription_service import TIER_DEFAULTS
+from app.services.subscription_service import TIER_DEFAULTS, update_org_seat_limit
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,27 @@ def _tier_for_price(price_id: str) -> str:
     return mapping.get(price_id, "free")
 
 
+def _lookup_sub(db: Session, *, org_id: str | None, user_id: str | None) -> UserSubscription | None:
+    """Look up a subscription by org_id first, then user_id fallback."""
+    sub = None
+    if org_id:
+        try:
+            sub = (
+                db.query(UserSubscription)
+                .filter(UserSubscription.org_id == UUID(org_id))
+                .first()
+            )
+        except (ValueError, TypeError):
+            pass
+    if sub is None and user_id:
+        sub = (
+            db.query(UserSubscription)
+            .filter(UserSubscription.user_id == user_id)
+            .first()
+        )
+    return sub
+
+
 # ---------------------------------------------------------------------------
 # Checkout & Portal
 # ---------------------------------------------------------------------------
@@ -81,6 +103,9 @@ def create_checkout_session(
     user_email: str | None,
     tier: str,
     billing_interval: str = "monthly",
+    *,
+    org_id: UUID | None = None,
+    db: Session | None = None,
 ) -> str:
     """Create a Stripe Checkout session and return the URL."""
     stripe = _stripe()
@@ -88,25 +113,42 @@ def create_checkout_session(
     settings = get_settings()
     base_url = settings.frontend_url.rstrip("/")
 
+    metadata: dict = {
+        "user_id": user_id,
+        "tier": tier,
+        "billing_interval": billing_interval,
+    }
+    if org_id is not None:
+        metadata["org_id"] = str(org_id)
+
     params: dict = {
         "mode": "subscription",
         "line_items": [{"price": price_id, "quantity": 1}],
         "success_url": f"{base_url}/dashboard/settings/subscriptions?success=true",
         "cancel_url": f"{base_url}/dashboard/settings/subscriptions?canceled=true",
-        "metadata": {
-            "user_id": user_id,
-            "tier": tier,
-            "billing_interval": billing_interval,
-        },
+        "metadata": metadata,
     }
-    if user_email:
+
+    # Reuse existing Stripe customer if the org already has one
+    if org_id is not None and db is not None:
+        existing_sub = (
+            db.query(UserSubscription)
+            .filter(UserSubscription.org_id == org_id)
+            .first()
+        )
+        if existing_sub and existing_sub.stripe_customer_id:
+            params["customer"] = existing_sub.stripe_customer_id
+
+    if "customer" not in params and user_email:
         params["customer_email"] = user_email
 
     session = stripe.checkout.Session.create(**params)
     return session.url
 
 
-def create_customer_portal_session(stripe_customer_id: str) -> str:
+def create_customer_portal_session(
+    stripe_customer_id: str,
+) -> str:
     """Create a Stripe Billing Portal session and return the URL."""
     stripe = _stripe()
     settings = get_settings()
@@ -148,6 +190,7 @@ def sync_subscription_from_stripe(db: Session, stripe_subscription_id: str) -> U
 
     # Map price to tier
     items = stripe_sub.get("items", {}).get("data", [])
+    new_tier = sub.tier
     if items:
         price_id = items[0].get("price", {}).get("id", "")
         new_tier = _tier_for_price(price_id)
@@ -170,9 +213,13 @@ def sync_subscription_from_stripe(db: Session, stripe_subscription_id: str) -> U
     db.commit()
     db.refresh(sub)
 
+    # Sync org seat limit if applicable
+    if sub.org_id:
+        update_org_seat_limit(sub.org_id, new_tier, db)
+
     logger.info(
-        "Synced subscription from Stripe: user=%s tier=%s status=%s",
-        sub.user_id, sub.tier, sub.stripe_status,
+        "Synced subscription from Stripe: user=%s org=%s tier=%s status=%s",
+        sub.user_id, sub.org_id, sub.tier, sub.stripe_status,
     )
     return sub
 
@@ -187,6 +234,7 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
     metadata = session.get("metadata", {})
     user_id = metadata.get("user_id")
     tier = metadata.get("tier")
+    org_id_str = metadata.get("org_id")
 
     if not user_id or not tier:
         logger.warning("Checkout completed without user_id/tier metadata: %s", session.get("id"))
@@ -198,7 +246,9 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
         return
 
     now = datetime.now(timezone.utc)
-    sub = db.query(UserSubscription).filter(UserSubscription.user_id == user_id).first()
+
+    # Look up subscription: org_id first, then user_id
+    sub = _lookup_sub(db, org_id=org_id_str, user_id=user_id)
 
     if sub is None:
         sub = UserSubscription(
@@ -209,6 +259,11 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
             billing_period_start=now,
             billing_period_end=now + timedelta(days=30),
         )
+        if org_id_str:
+            try:
+                sub.org_id = UUID(org_id_str)
+            except (ValueError, TypeError):
+                pass
         db.add(sub)
 
     sub.tier = tier
@@ -218,6 +273,13 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
     sub.stripe_status = "active"
     sub.payment_status = "active"
     sub.updated_at = now
+
+    # Backfill org_id if present in metadata but not yet on record
+    if org_id_str and sub.org_id is None:
+        try:
+            sub.org_id = UUID(org_id_str)
+        except (ValueError, TypeError):
+            pass
 
     # Use Stripe's billing period if available via the subscription object
     stripe_sub_id = session.get("subscription")
@@ -244,12 +306,16 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
 
     db.commit()
 
+    # Sync org seat limit
+    if sub.org_id:
+        update_org_seat_limit(sub.org_id, tier, db)
+
     user_email = session.get("customer_email") or session.get("customer_details", {}).get("email") or user_id
     notify("upgrade", "User upgraded subscription", {"email": user_email, "tier": tier, "mrr_impact": "+$99"})
 
     logger.info(
-        "Checkout completed: user=%s tier=%s stripe_sub=%s",
-        user_id, tier, session.get("subscription"),
+        "Checkout completed: user=%s org=%s tier=%s stripe_sub=%s",
+        user_id, sub.org_id, tier, session.get("subscription"),
     )
 
 
@@ -266,6 +332,7 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
         return
 
     # Get the current price from the subscription items
+    new_tier = sub.tier
     items = subscription.get("items", {}).get("data", [])
     if items:
         price_id = items[0].get("price", {}).get("id", "")
@@ -288,9 +355,13 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
     sub.updated_at = datetime.now(timezone.utc)
     db.commit()
 
+    # Sync org seat limit
+    if sub.org_id:
+        update_org_seat_limit(sub.org_id, new_tier, db)
+
     logger.info(
-        "Subscription updated: user=%s tier=%s status=%s",
-        sub.user_id, sub.tier, sub.stripe_status,
+        "Subscription updated: user=%s org=%s tier=%s status=%s",
+        sub.user_id, sub.org_id, sub.tier, sub.stripe_status,
     )
 
 
@@ -319,11 +390,15 @@ def handle_subscription_deleted(db: Session, subscription: dict) -> None:
     sub.updated_at = now
     db.commit()
 
+    # Sync org seat limit to free tier
+    if sub.org_id:
+        update_org_seat_limit(sub.org_id, "free", db)
+
     user_obj = db.query(User).filter(User.clerk_id == sub.user_id).first()
     user_email = user_obj.email if user_obj else sub.user_id
     notify("churn", "User canceled subscription", {"email": user_email, "previous_tier": old_tier})
 
-    logger.info("Subscription canceled — downgraded to free: user=%s", sub.user_id)
+    logger.info("Subscription canceled — downgraded to free: user=%s org=%s", sub.user_id, sub.org_id)
 
 
 def handle_payment_failed(db: Session, invoice: dict) -> None:
@@ -349,4 +424,4 @@ def handle_payment_failed(db: Session, invoice: dict) -> None:
     user_email = user_obj.email if user_obj else sub.user_id
     notify("payment_failed", "Payment failed", {"email": user_email, "tier": sub.tier})
 
-    logger.warning("Payment failed for user=%s subscription=%s", sub.user_id, stripe_sub_id)
+    logger.warning("Payment failed for user=%s org=%s subscription=%s", sub.user_id, sub.org_id, stripe_sub_id)
