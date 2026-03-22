@@ -552,6 +552,7 @@ async def update_member_role(
 @router.delete(
     "/organizations/{org_id}/members/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="Remove a member from the organization",
 )
 async def remove_member(
@@ -745,6 +746,7 @@ async def grant_client_access(
 @router.delete(
     "/organizations/{org_id}/clients/{client_id}/access/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="Revoke a member's access to a client",
 )
 async def revoke_client_access(
