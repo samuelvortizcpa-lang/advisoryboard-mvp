@@ -13,7 +13,7 @@ export default async function Home() {
     <main className="min-h-screen flex flex-col items-center justify-center bg-white px-4">
       <div className="max-w-lg w-full text-center">
         <h1 className="text-4xl font-semibold tracking-tight text-gray-900">
-          AdvisoryBoard
+          Callwen
         </h1>
         <p className="mt-4 text-lg text-gray-500 leading-relaxed">
           Your AI-powered advisory board — strategic guidance from world-class

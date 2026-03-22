@@ -343,7 +343,7 @@ function LearnMoreToggle() {
         <p className="mt-2 text-xs leading-relaxed text-blue-600">
           Section 7216 makes it a federal misdemeanor for tax return preparers to
           disclose or use tax return information without taxpayer consent.
-          AdvisoryBoard provides consent form templates and tracking to help you
+          Callwen provides consent form templates and tracking to help you
           stay compliant. Non-tax documents (meeting notes, engagement letters,
           general correspondence) are not subject to Section 7216. If your
           existing engagement letter already authorizes disclosure to third-party

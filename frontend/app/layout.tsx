@@ -17,7 +17,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "AdvisoryBoard",
+  title: "Callwen",
   description: "Your AI-powered advisory board",
 };
 

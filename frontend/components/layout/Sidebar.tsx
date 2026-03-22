@@ -62,7 +62,7 @@ export default function Sidebar() {
             <>
               <LogoIcon />
               <span className="truncate text-sm font-semibold text-gray-900">
-                AdvisoryBoard
+                Callwen
               </span>
             </>
           )}

@@ -179,13 +179,13 @@ export default function ConsentSignPage() {
           <p>
             You are not required to complete this form. If you do not sign this
             consent form, your tax return preparer will not disclose your tax
-            return information to AdvisoryBoard for the purposes described below.
+            return information to Callwen for the purposes described below.
           </p>
 
           <p>
             <strong>Purpose of Disclosure:</strong> Your tax return preparer
             requests consent to disclose and use your tax return information
-            within AdvisoryBoard, a secure cloud-based document intelligence
+            within Callwen, a secure cloud-based document intelligence
             platform, for the following purposes: AI-powered document analysis to
             assist in tax preparation and planning, automated identification of
             action items and deadlines, client brief generation for meeting
@@ -193,7 +193,7 @@ export default function ConsentSignPage() {
           </p>
 
           <p>
-            <strong>Recipient:</strong> AdvisoryBoard (myadvisoryboard.space)
+            <strong>Recipient:</strong> Callwen (callwen.com)
           </p>
 
           <p>
@@ -304,7 +304,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {/* Header */}
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
-              AdvisoryBoard
+              Callwen
             </h1>
             <p className="mt-2 text-base text-gray-600 sm:text-lg">
               Consent to Disclose Tax Return Information
@@ -319,7 +319,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
           {/* Footer */}
           <p className="mt-8 text-center text-xs text-gray-400">
-            Powered by AdvisoryBoard &middot; myadvisoryboard.space
+            Powered by Callwen &middot; callwen.com
           </p>
         </div>
       </div>

@@ -5,7 +5,7 @@ export default function SignUpPage() {
     <main className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-semibold tracking-tight text-gray-900">
-          AdvisoryBoard
+          Callwen
         </h1>
         <p className="mt-2 text-sm text-gray-500">
           Create an account to get started
