@@ -92,9 +92,9 @@ const PRICING: {
   },
   {
     tier: "firm",
-    monthlyPrice: "$249",
-    annualMonthlyPrice: "$199",
-    annualTotal: "$2,388",
+    monthlyPrice: "$349",
+    annualMonthlyPrice: "$279",
+    annualTotal: "$3,348",
     features: [
       "Unlimited clients",
       "Unlimited documents",
@@ -128,6 +128,10 @@ export default function SubscriptionManagementPage() {
   const [checkoutTier, setCheckoutTier] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [billingInterval, setBillingInterval] = useState<"monthly" | "annual">("monthly");
+
+  // Firm seat selector state
+  const [showSeatSelector, setShowSeatSelector] = useState(false);
+  const [firmAddonSeats, setFirmAddonSeats] = useState(0);
 
   // Banners from URL params
   const showSuccess = searchParams.get("success") === "true";
@@ -195,10 +199,20 @@ export default function SubscriptionManagementPage() {
     }
   }
 
-  async function handleCheckout(tier: string) {
+  function handleUpgradeClick(tier: string) {
+    if (tier === "firm") {
+      setFirmAddonSeats(0);
+      setShowSeatSelector(true);
+      return;
+    }
+    handleCheckout(tier, 0);
+  }
+
+  async function handleCheckout(tier: string, addonSeats: number) {
     setCheckoutTier(tier);
+    setShowSeatSelector(false);
     try {
-      const { url } = await createStripeApi(getToken).createCheckout(tier, billingInterval);
+      const { url } = await createStripeApi(getToken).createCheckout(tier, billingInterval, addonSeats);
       window.location.href = url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create checkout");
@@ -412,8 +426,20 @@ export default function SubscriptionManagementPage() {
                       <p className="mt-1 text-2xl font-bold text-gray-900">
                         {displayPrice}<span className="text-sm font-normal text-gray-500">/mo</span>
                       </p>
-                      {!isFreeCard && isAnnual && (
+                      {!isFreeCard && isAnnual && plan.tier !== "firm" && (
                         <p className="text-[11px] text-gray-400">Billed annually at {plan.annualTotal}</p>
+                      )}
+                      {plan.tier === "firm" && isAnnual && (
+                        <>
+                          <p className="text-[11px] text-gray-400">Billed annually at {plan.annualTotal}/yr</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">3 seats included · + $63/mo per additional seat</p>
+                        </>
+                      )}
+                      {plan.tier === "firm" && !isAnnual && (
+                        <>
+                          <p className="text-[11px] text-gray-500 mt-0.5">3 seats included</p>
+                          <p className="text-[11px] text-gray-500">+ $79/mo per additional seat</p>
+                        </>
                       )}
                       <ul className="mt-3 space-y-1.5">
                         {plan.features.map((f) => (
@@ -426,7 +452,7 @@ export default function SubscriptionManagementPage() {
                       {/* Show Upgrade button only on paid cards when user is on a lower tier */}
                       {!isCurrent && !isFreeCard && isUpgrade && (
                         <button
-                          onClick={() => handleCheckout(plan.tier)}
+                          onClick={() => handleUpgradeClick(plan.tier)}
                           disabled={checkoutTier !== null}
                           className="mt-4 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                         >
@@ -447,6 +473,70 @@ export default function SubscriptionManagementPage() {
                   );
                 })}
               </div>
+
+              {/* Firm seat selector modal */}
+              {showSeatSelector && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                  <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+                    <h3 className="text-sm font-semibold text-gray-900">Configure Firm Seats</h3>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Your Firm plan includes 3 seats. Add more below.
+                    </p>
+                    <div className="mt-4">
+                      <label className="text-xs font-medium text-gray-500">
+                        Additional seats beyond the 3 included
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={47}
+                        value={firmAddonSeats}
+                        onChange={(e) => setFirmAddonSeats(Math.max(0, Math.min(47, parseInt(e.target.value) || 0)))}
+                        className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                      {billingInterval === "monthly" ? (
+                        <>
+                          <p className="text-xs text-gray-600">
+                            $349 base{firmAddonSeats > 0 && <> + {firmAddonSeats} × $79</>} ={" "}
+                            <span className="font-semibold text-gray-900">
+                              ${(349 + firmAddonSeats * 79).toLocaleString()}/month
+                            </span>
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xs text-gray-600">
+                            $3,348/yr base{firmAddonSeats > 0 && <> + {firmAddonSeats} × $756/yr</>} ={" "}
+                            <span className="font-semibold text-gray-900">
+                              ${(3348 + firmAddonSeats * 756).toLocaleString()}/year
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            (${Math.round((3348 + firmAddonSeats * 756) / 12).toLocaleString()}/mo effective)
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={() => handleCheckout("firm", firmAddonSeats)}
+                        disabled={checkoutTier !== null}
+                        className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {checkoutTier === "firm" ? "Redirecting\u2026" : "Continue to Checkout"}
+                      </button>
+                      <button
+                        onClick={() => setShowSeatSelector(false)}
+                        className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">

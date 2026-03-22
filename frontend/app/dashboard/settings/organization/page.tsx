@@ -5,10 +5,13 @@ import { useEffect, useState, useCallback } from "react";
 
 import {
   createOrganizationsApi,
+  createStripeApi,
   OrgDetail,
   OrgMember,
+  SeatInfo,
 } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
+import Link from "next/link";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -31,6 +34,7 @@ function fmtDate(iso: string | null) {
 
 export default function OrganizationSettingsPage() {
   const { getToken } = useAuth();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { orgs, activeOrg, setActiveOrg, isLoading: orgLoading } = useOrg();
 
   // Data state
@@ -66,6 +70,12 @@ export default function OrganizationSettingsPage() {
   // Remove confirmation
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
 
+  // Seat management state
+  const [seatInfo, setSeatInfo] = useState<SeatInfo | null>(null);
+  const [showManageSeats, setShowManageSeats] = useState(false);
+  const [newAddonSeats, setNewAddonSeats] = useState(0);
+  const [updatingSeats, setUpdatingSeats] = useState(false);
+
   const showFeedback = (message: string, type: "success" | "error") => {
     setFeedback({ message, type });
     setTimeout(() => setFeedback(null), 3000);
@@ -83,6 +93,8 @@ export default function OrganizationSettingsPage() {
   }, [orgLoading, activeOrg, selectedOrgId]);
 
   // Load org detail + members
+  const stripeApi = useCallback(() => createStripeApi(getToken), [getToken]);
+
   const loadOrgDetail = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
@@ -93,6 +105,18 @@ export default function OrganizationSettingsPage() {
       setOrgDetail(detail);
       setMembers(memberList);
       setNameValue(detail.name);
+
+      // Load seat info for firm tier
+      if (detail.subscription_tier === "firm") {
+        try {
+          const seats = await stripeApi().getSeats();
+          setSeatInfo(seats);
+        } catch {
+          // Seat info not available — non-critical
+        }
+      } else {
+        setSeatInfo(null);
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -100,7 +124,7 @@ export default function OrganizationSettingsPage() {
           : "Failed to load organization details"
       );
     }
-  }, [api, selectedOrgId]);
+  }, [api, stripeApi, selectedOrgId]);
 
   useEffect(() => {
     if (selectedOrgId) loadOrgDetail();
@@ -139,12 +163,35 @@ export default function OrganizationSettingsPage() {
       showFeedback("Member added successfully", "success");
       await loadOrgDetail();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to add member";
+      if (msg.includes("Seat limit") || msg.includes("seat limit")) {
+        showFeedback(
+          "Seat limit reached. Add more seats in Organization Settings to invite more members.",
+          "error"
+        );
+      } else {
+        showFeedback(msg, "error");
+      }
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleUpdateSeats() {
+    setUpdatingSeats(true);
+    try {
+      const updated = await stripeApi().updateSeats(newAddonSeats);
+      setSeatInfo(updated);
+      setShowManageSeats(false);
+      showFeedback("Seats updated successfully", "success");
+      await loadOrgDetail();
+    } catch (err) {
       showFeedback(
-        err instanceof Error ? err.message : "Failed to add member",
+        err instanceof Error ? err.message : "Failed to update seats",
         "error"
       );
     } finally {
-      setInviting(false);
+      setUpdatingSeats(false);
     }
   }
 
@@ -617,7 +664,122 @@ export default function OrganizationSettingsPage() {
           )}
         </div>
 
-        {/* ── Section 3: Subscription ──────────────────────────────────── */}
+        {/* ── Section 3: Seats & Billing (Firm only) ─────────────────── */}
+        {orgDetail && tierLabel === "firm" && seatInfo && (
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-900">Seats & Billing</h2>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setNewAddonSeats(seatInfo.addon_purchased);
+                    setShowManageSeats(true);
+                  }}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                >
+                  Manage Seats
+                </button>
+              )}
+            </div>
+            {/* Seat progress bar */}
+            <div className="mb-3">
+              <div className="flex items-baseline justify-between mb-1">
+                <p className="text-xs font-medium text-gray-700">Seats Used</p>
+                <p className="text-xs text-gray-500">
+                  {seatInfo.current_used} of {seatInfo.total_allowed}
+                </p>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                {(() => {
+                  const pct = seatInfo.total_allowed > 0
+                    ? Math.min(100, (seatInfo.current_used / seatInfo.total_allowed) * 100)
+                    : 0;
+                  const color = pct > 90 ? "bg-red-500" : pct > 70 ? "bg-yellow-400" : "bg-green-500";
+                  return (
+                    <div
+                      className={`h-full rounded-full transition-all ${color}`}
+                      style={{ width: `${Math.max(2, pct)}%` }}
+                    />
+                  );
+                })()}
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">
+              {seatInfo.included} included + {seatInfo.addon_purchased} add-on = {seatInfo.total_allowed} total
+            </p>
+          </div>
+        )}
+
+        {orgDetail && tierLabel !== "firm" && (
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-gray-900 mb-2">Seats & Billing</h2>
+            <p className="text-xs text-gray-500">
+              <Link href="/dashboard/settings/subscriptions" className="text-blue-600 hover:text-blue-700 font-medium">
+                Upgrade to Firm
+              </Link>{" "}
+              to add team members and manage seats.
+            </p>
+          </div>
+        )}
+
+        {/* Manage Seats modal */}
+        {showManageSeats && seatInfo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+              <h3 className="text-sm font-semibold text-gray-900">Manage Add-On Seats</h3>
+              <p className="mt-1 text-xs text-gray-500">
+                Your Firm plan includes 3 seats. Add-on seats are ${seatInfo.per_seat_price}/mo each.
+              </p>
+              <div className="mt-4">
+                <label className="text-xs font-medium text-gray-500">
+                  Current add-on seats: {seatInfo.addon_purchased}
+                </label>
+              </div>
+              <div className="mt-2">
+                <label className="text-xs font-medium text-gray-500">
+                  New add-on seats
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={47}
+                  value={newAddonSeats}
+                  onChange={(e) => setNewAddonSeats(Math.max(0, Math.min(47, parseInt(e.target.value) || 0)))}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">
+                  From ${(349 + seatInfo.addon_purchased * seatInfo.per_seat_price).toLocaleString()}/mo
+                  {" → "}
+                  <span className="font-semibold text-gray-900">
+                    ${(349 + newAddonSeats * seatInfo.per_seat_price).toLocaleString()}/mo
+                  </span>
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Changes will be prorated to your current billing cycle
+                </p>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={handleUpdateSeats}
+                  disabled={updatingSeats || newAddonSeats === seatInfo.addon_purchased}
+                  className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {updatingSeats ? "Updating\u2026" : "Update Seats"}
+                </button>
+                <button
+                  onClick={() => setShowManageSeats(false)}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Section 4: Subscription ──────────────────────────────────── */}
         {orgDetail && (
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <h2 className="text-sm font-semibold text-gray-900 mb-4">

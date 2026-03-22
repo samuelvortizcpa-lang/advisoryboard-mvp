@@ -261,6 +261,19 @@ export interface SubscriptionInfo {
   current_clients: number;
   max_documents: number | null;
   current_documents: number;
+  seats_included: number;
+  seats_addon: number;
+  seats_total: number;
+  seats_used: number;
+}
+
+export interface SeatInfo {
+  included: number;
+  addon_purchased: number;
+  total_allowed: number;
+  current_used: number;
+  can_add: boolean;
+  per_seat_price: number;
 }
 
 export interface ProcessResponse {
@@ -610,10 +623,14 @@ export interface StripeStatus {
 export function createStripeApi(getToken: GetToken, orgId?: string) {
   const f = boundFetch(getToken, orgId);
   return {
-    createCheckout(tier: string, billingInterval: "monthly" | "annual" = "monthly") {
+    createCheckout(tier: string, billingInterval: "monthly" | "annual" = "monthly", addonSeats?: number) {
+      const body: Record<string, unknown> = { tier, billing_interval: billingInterval };
+      if (addonSeats !== undefined && addonSeats > 0 && tier === "firm") {
+        body.addon_seats = addonSeats;
+      }
       return f<{ url: string }>("/stripe/create-checkout", {
         method: "POST",
-        body: JSON.stringify({ tier, billing_interval: billingInterval }),
+        body: JSON.stringify(body),
       });
     },
 
@@ -625,6 +642,17 @@ export function createStripeApi(getToken: GetToken, orgId?: string) {
 
     status() {
       return f<StripeStatus>("/stripe/status");
+    },
+
+    getSeats() {
+      return f<SeatInfo>("/stripe/seats");
+    },
+
+    updateSeats(addonSeats: number) {
+      return f<SeatInfo>("/stripe/update-seats", {
+        method: "POST",
+        body: JSON.stringify({ addon_seats: addonSeats }),
+      });
     },
   };
 }

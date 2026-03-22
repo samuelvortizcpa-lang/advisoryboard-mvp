@@ -28,6 +28,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const { getToken } = useAuth();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { activeOrg, orgs, isPersonalOrg, isAdmin } = useOrg();
   const [alertCount, setAlertCount] = useState(0);
 
