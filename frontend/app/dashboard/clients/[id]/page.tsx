@@ -6,17 +6,21 @@ import { ChangeEvent, FormEvent, Suspense, useEffect, useState } from "react";
 
 import {
   Client,
+  ClientAccessSummary,
   ClientBrief,
   ClientType,
   ClientUpdateData,
   CompareResponse,
   ComparisonType,
   Document,
+  OrgMember,
+  Organization,
   createActionItemsApi,
   createBriefsApi,
   createClientTypesApi,
   createClientsApi,
   createDocumentsApi,
+  createOrganizationsApi,
   createRagApi,
 } from "@/lib/api";
 import ActionItemList from "@/components/action-items/ActionItemList";
@@ -44,9 +48,9 @@ const ENTITY_TYPES = [
   "Other",
 ];
 
-type TabId = "overview" | "documents" | "actions" | "chat" | "timeline";
+type TabId = "overview" | "documents" | "actions" | "chat" | "timeline" | "access";
 
-const TABS: { id: TabId; label: string }[] = [
+const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "documents", label: "Documents" },
   { id: "actions", label: "Actions" },
@@ -137,6 +141,18 @@ function ClientDetailContent() {
   // ── Shared refresh key ──────────────────────────────────────────────────────
   const [actionItemsRefreshKey, setActionItemsRefreshKey] = useState(0);
 
+  // ── Organization / team access state ────────────────────────────────────────
+  const [org, setOrg] = useState<Organization | null>(null);
+  const [accessSummary, setAccessSummary] = useState<ClientAccessSummary | null>(null);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessActionLoading, setAccessActionLoading] = useState<string | null>(null);
+  const [accessFeedback, setAccessFeedback] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [orgMembers, setOrgMembers] = useState<OrgMember[]>([]);
+  const [showAddAccess, setShowAddAccess] = useState(false);
+  const [openConfirm, setOpenConfirm] = useState(false);
+
+  const isFirmAdmin = org?.org_type === "firm" && org?.role === "admin";
+
   // ── Overview summary data ───────────────────────────────────────────────────
   const [pendingActionsCount, setPendingActionsCount] = useState<number | null>(null);
   const [nextDeadline, setNextDeadline] = useState<string | null | undefined>(undefined);
@@ -193,7 +209,46 @@ function ClientDetailContent() {
         }
       })
       .catch(() => setLastChatDate(null));
+
+    // Org check — load org info to determine if Team Access tab should show
+    createOrganizationsApi(getToken)
+      .list()
+      .then((orgs) => {
+        const firmOrg = orgs.find((o) => o.org_type === "firm" && o.role === "admin");
+        if (firmOrg) {
+          setOrg(firmOrg);
+        }
+      })
+      .catch(() => {/* non-fatal */});
   }, [id, getToken]);
+
+  // Load team access data when org is available
+  useEffect(() => {
+    if (!org) return;
+    loadAccessData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org, id]);
+
+  function loadAccessData() {
+    if (!org) return;
+    setAccessLoading(true);
+    const api = createOrganizationsApi(getToken);
+    Promise.all([
+      api.fetchClientAccess(org.id, id),
+      api.listMembers(org.id),
+    ])
+      .then(([access, members]) => {
+        setAccessSummary(access);
+        setOrgMembers(members.filter((m) => m.is_active));
+      })
+      .catch(() => {/* non-fatal */})
+      .finally(() => setAccessLoading(false));
+  }
+
+  // Build tabs — add "Team Access" if firm admin
+  const TABS = isFirmAdmin
+    ? [...BASE_TABS, { id: "access" as TabId, label: "Team Access" }]
+    : BASE_TABS;
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -315,6 +370,94 @@ function ClientDetailContent() {
       setBriefLoading(false);
     }
   }
+
+  // ── Team access handlers ────────────────────────────────────────────────────
+
+  function showAccessFeedback(message: string, type: "success" | "error") {
+    setAccessFeedback({ message, type });
+    setTimeout(() => setAccessFeedback(null), 3000);
+  }
+
+  async function handleRestrictAccess() {
+    if (!org) return;
+    setAccessActionLoading("restrict");
+    try {
+      const result = await createOrganizationsApi(getToken).restrictClient(org.id, id);
+      setAccessSummary(result);
+      showAccessFeedback("Access restricted to assigned members", "success");
+    } catch (err) {
+      showAccessFeedback(err instanceof Error ? err.message : "Failed to restrict access", "error");
+    } finally {
+      setAccessActionLoading(null);
+    }
+  }
+
+  async function handleOpenAccess() {
+    if (!org || !accessSummary) return;
+    setAccessActionLoading("open");
+    setOpenConfirm(false);
+    try {
+      const api = createOrganizationsApi(getToken);
+      // Delete all access records to revert to open mode
+      for (const rec of accessSummary.records) {
+        await api.revokeClientAccess(org.id, id, rec.user_id);
+      }
+      setAccessSummary({ mode: "open", records: [] });
+      showAccessFeedback("Access opened to all team members", "success");
+    } catch (err) {
+      showAccessFeedback(err instanceof Error ? err.message : "Failed to open access", "error");
+      loadAccessData();
+    } finally {
+      setAccessActionLoading(null);
+    }
+  }
+
+  async function handleChangeAccessLevel(userId: string, newLevel: string) {
+    if (!org) return;
+    setAccessActionLoading(userId);
+    try {
+      await createOrganizationsApi(getToken).grantClientAccess(org.id, id, userId, newLevel);
+      showAccessFeedback("Access level updated", "success");
+      loadAccessData();
+    } catch (err) {
+      showAccessFeedback(err instanceof Error ? err.message : "Failed to update access", "error");
+    } finally {
+      setAccessActionLoading(null);
+    }
+  }
+
+  async function handleGrantAccess(userId: string) {
+    if (!org) return;
+    setAccessActionLoading(userId);
+    try {
+      await createOrganizationsApi(getToken).grantClientAccess(org.id, id, userId, "full");
+      showAccessFeedback("Access granted", "success");
+      setShowAddAccess(false);
+      loadAccessData();
+    } catch (err) {
+      showAccessFeedback(err instanceof Error ? err.message : "Failed to grant access", "error");
+    } finally {
+      setAccessActionLoading(null);
+    }
+  }
+
+  async function handleRevokeAccess(userId: string) {
+    if (!org) return;
+    setAccessActionLoading(userId);
+    try {
+      await createOrganizationsApi(getToken).revokeClientAccess(org.id, id, userId);
+      showAccessFeedback("Access revoked", "success");
+      loadAccessData();
+    } catch (err) {
+      showAccessFeedback(err instanceof Error ? err.message : "Failed to revoke access", "error");
+    } finally {
+      setAccessActionLoading(null);
+    }
+  }
+
+  // Unassigned members (not in current access records)
+  const assignedUserIds = new Set(accessSummary?.records.map((r) => r.user_id) ?? []);
+  const unassignedMembers = orgMembers.filter((m) => !assignedUserIds.has(m.user_id));
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -862,6 +1005,196 @@ function ClientDetailContent() {
                 />
               </div>
             )}
+
+            {/* ── Team Access ───────────────────────────────────────────── */}
+            {activeTab === "access" && isFirmAdmin && (
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-900">Team Access</h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {accessSummary?.mode === "restricted"
+                        ? "Access is restricted to assigned members"
+                        : "This client is accessible to all team members"}
+                    </p>
+                  </div>
+                  <div>
+                    {accessSummary?.mode === "open" ? (
+                      <button
+                        onClick={handleRestrictAccess}
+                        disabled={accessActionLoading !== null}
+                        className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {accessActionLoading === "restrict" ? "Restricting..." : "Restrict Access"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setOpenConfirm(true)}
+                        disabled={accessActionLoading !== null}
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        {accessActionLoading === "open" ? "Opening..." : "Open to All"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Open to All confirmation */}
+                {openConfirm && (
+                  <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+                    <p className="text-sm text-yellow-800">
+                      This will remove all access restrictions. All team members will be able to see this client.
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={handleOpenAccess}
+                        className="rounded-lg bg-yellow-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-yellow-700"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => setOpenConfirm(false)}
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Feedback */}
+                {accessFeedback && (
+                  <div
+                    className={`rounded-xl border px-5 py-3 text-sm font-medium ${
+                      accessFeedback.type === "success"
+                        ? "border-green-200 bg-green-50 text-green-700"
+                        : "border-red-200 bg-red-50 text-red-700"
+                    }`}
+                  >
+                    {accessFeedback.message}
+                  </div>
+                )}
+
+                {/* Loading */}
+                {accessLoading && (
+                  <div className="flex justify-center py-8">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  </div>
+                )}
+
+                {/* Member access table (restricted mode) */}
+                {!accessLoading && accessSummary?.mode === "restricted" && (
+                  <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+                      <p className="text-xs font-medium text-gray-500">
+                        {accessSummary.records.length} member{accessSummary.records.length !== 1 ? "s" : ""} assigned
+                      </p>
+                      {unassignedMembers.length > 0 && (
+                        <button
+                          onClick={() => setShowAddAccess(!showAddAccess)}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                        >
+                          Add Member
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Quick-assign dropdown */}
+                    {showAddAccess && unassignedMembers.length > 0 && (
+                      <div className="border-b border-gray-100 bg-gray-50 px-5 py-3">
+                        <p className="text-xs font-medium text-gray-700 mb-2">Grant access to:</p>
+                        <div className="space-y-1.5">
+                          {unassignedMembers.map((m) => (
+                            <div
+                              key={m.user_id}
+                              className="flex items-center justify-between rounded-lg bg-white px-3 py-2 border border-gray-100"
+                            >
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {m.user_name || m.user_email || m.user_id}
+                                </p>
+                                {m.user_email && m.user_name && (
+                                  <p className="text-xs text-gray-400">{m.user_email}</p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleGrantAccess(m.user_id)}
+                                disabled={accessActionLoading === m.user_id}
+                                className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {accessActionLoading === m.user_id ? "Adding..." : "Grant Full Access"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-xs font-medium uppercase tracking-wide text-gray-400">
+                            <th className="px-5 py-3">Member</th>
+                            <th className="px-5 py-3">Email</th>
+                            <th className="px-5 py-3">Access Level</th>
+                            <th className="px-5 py-3">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accessSummary.records.map((rec) => (
+                            <tr key={rec.user_id} className="border-b border-gray-50">
+                              <td className="px-5 py-3">
+                                <p className="font-medium text-gray-900">
+                                  {rec.user_name || rec.user_id}
+                                </p>
+                              </td>
+                              <td className="px-5 py-3 text-xs text-gray-500">
+                                {rec.user_email || "\u2014"}
+                              </td>
+                              <td className="px-5 py-3">
+                                <select
+                                  value={rec.access_level}
+                                  onChange={(e) => handleChangeAccessLevel(rec.user_id, e.target.value)}
+                                  disabled={accessActionLoading === rec.user_id}
+                                  className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 disabled:opacity-50"
+                                >
+                                  <option value="full">Full</option>
+                                  <option value="readonly">Read-Only</option>
+                                  <option value="none">No Access</option>
+                                </select>
+                              </td>
+                              <td className="px-5 py-3">
+                                <button
+                                  onClick={() => handleRevokeAccess(rec.user_id)}
+                                  disabled={accessActionLoading === rec.user_id}
+                                  className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  {accessActionLoading === rec.user_id ? "..." : "Revoke"}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Open mode placeholder */}
+                {!accessLoading && accessSummary?.mode === "open" && (
+                  <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                    <TeamAccessOpenIcon />
+                    <p className="mt-3 text-sm text-gray-500">
+                      All team members can view and interact with this client.
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Click &quot;Restrict Access&quot; to control which members can access this client.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </main>
         </>
       )}
@@ -1104,6 +1437,14 @@ function OverviewChatIcon() {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+    </svg>
+  );
+}
+
+function TeamAccessOpenIcon() {
+  return (
+    <svg className="mx-auto h-10 w-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
     </svg>
   );
 }

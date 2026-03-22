@@ -5,7 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Client, ClientListResponse, createClientsApi } from "@/lib/api";
+import {
+  Client,
+  ClientAccessSummary,
+  ClientListResponse,
+  Organization,
+  createClientsApi,
+  createOrganizationsApi,
+} from "@/lib/api";
 
 // ─── Color map for client-type badges ─────────────────────────────────────────
 
@@ -32,24 +39,66 @@ export default function ClientsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Org / access state
+  const [firmOrg, setFirmOrg] = useState<Organization | null>(null);
+  const [accessMap, setAccessMap] = useState<Record<string, ClientAccessSummary>>({});
+  const [filterMode, setFilterMode] = useState<"all" | "mine">("all");
+
   useEffect(() => {
     createClientsApi(getToken)
       .list()
       .then(setResponse)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
+
+    // Check for firm org
+    createOrganizationsApi(getToken)
+      .list()
+      .then((orgs) => {
+        const firm = orgs.find((o) => o.org_type === "firm");
+        if (firm) setFirmOrg(firm);
+      })
+      .catch(() => {/* non-fatal */});
   }, [getToken]);
 
-  // Client-side search filter
+  // Load access summaries for all clients when firm org is available
+  useEffect(() => {
+    if (!firmOrg || !response) return;
+    const orgApi = createOrganizationsApi(getToken);
+    const map: Record<string, ClientAccessSummary> = {};
+    Promise.all(
+      response.items.map((c) =>
+        orgApi
+          .fetchClientAccess(firmOrg.id, c.id)
+          .then((summary) => { map[c.id] = summary; })
+          .catch(() => {/* non-fatal — client may not belong to this org */})
+      )
+    ).then(() => setAccessMap(map));
+  }, [firmOrg, response, getToken]);
+
+  // Client-side search + access filter
   const filteredItems = (response?.items ?? []).filter((c) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(q) ||
-      (c.business_name?.toLowerCase().includes(q) ?? false) ||
-      (c.industry?.toLowerCase().includes(q) ?? false) ||
-      (c.client_type?.name.toLowerCase().includes(q) ?? false)
-    );
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        c.name.toLowerCase().includes(q) ||
+        (c.business_name?.toLowerCase().includes(q) ?? false) ||
+        (c.industry?.toLowerCase().includes(q) ?? false) ||
+        (c.client_type?.name.toLowerCase().includes(q) ?? false);
+      if (!matchesSearch) return false;
+    }
+    // "My Clients Only" filter — show only clients where user has explicit access
+    // (or all clients if not in restricted mode)
+    if (filterMode === "mine" && firmOrg) {
+      const summary = accessMap[c.id];
+      if (summary?.mode === "restricted") {
+        // In restricted mode, check if user has a non-"none" access record
+        const myAccess = summary.records.find((r) => r.access_level !== "none");
+        if (!myAccess) return false;
+      }
+    }
+    return true;
   });
 
   async function handleDelete() {
@@ -95,28 +144,40 @@ export default function ClientsPage() {
         </Link>
       </div>
 
-      {/* ── Search ───────────────────────────────────────────────────────── */}
-      <div className="relative mb-4 w-64">
-        <svg
-          className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      {/* ── Search + Filter ────────────────────────────────────────────────── */}
+      <div className="mb-4 flex items-center gap-3">
+        <div className="relative w-64">
+          <svg
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search clients…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-md border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           />
-        </svg>
-        <input
-          type="text"
-          placeholder="Search clients…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full rounded-md border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-        />
+        </div>
+        {firmOrg && (
+          <select
+            value={filterMode}
+            onChange={(e) => setFilterMode(e.target.value as "all" | "mine")}
+            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="all">All Clients</option>
+            <option value="mine">My Clients Only</option>
+          </select>
+        )}
       </div>
 
       {/* ── Error ────────────────────────────────────────────────────────── */}
@@ -196,12 +257,26 @@ export default function ClientsPage() {
                 >
                   {/* Name */}
                   <td className="px-4 py-3.5">
-                    <p className="text-sm font-medium text-gray-900">
-                      {client.name}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium text-gray-900">
+                        {client.name}
+                      </p>
+                      {firmOrg && accessMap[client.id]?.mode === "restricted" && (
+                        <span title="Restricted access">
+                          <RestrictedIcon />
+                        </span>
+                      )}
+                    </div>
                     {client.business_name && (
                       <p className="text-xs text-gray-400">
                         {client.business_name}
+                      </p>
+                    )}
+                    {firmOrg && accessMap[client.id] && (
+                      <p className="text-[11px] text-gray-400">
+                        {accessMap[client.id].mode === "restricted"
+                          ? `Shared with ${accessMap[client.id].records.filter((r) => r.access_level !== "none").length} member${accessMap[client.id].records.filter((r) => r.access_level !== "none").length !== 1 ? "s" : ""}`
+                          : "All team access"}
                       </p>
                     )}
                   </td>
@@ -360,5 +435,23 @@ function TrashIcon() {
 function SmallSpinner() {
   return (
     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+  );
+}
+
+function RestrictedIcon() {
+  return (
+    <svg
+      className="h-3.5 w-3.5 text-amber-500"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
+      />
+    </svg>
   );
 }

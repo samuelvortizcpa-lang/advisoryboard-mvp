@@ -1352,5 +1352,59 @@ export function createOrganizationsApi(getToken: GetToken) {
         method: "DELETE",
       });
     },
+
+    // ── Client access delegation ──
+
+    fetchClientAccess(orgId: string, clientId: string) {
+      return apiFetch<ClientAccessSummary>(
+        getToken,
+        `/organizations/${orgId}/clients/${clientId}/access`
+      );
+    },
+
+    grantClientAccess(orgId: string, clientId: string, userId: string, accessLevel: string = "full") {
+      return apiFetch<ClientAccess>(
+        getToken,
+        `/organizations/${orgId}/clients/${clientId}/access`,
+        {
+          method: "POST",
+          body: JSON.stringify({ user_id: userId, access_level: accessLevel }),
+        }
+      );
+    },
+
+    revokeClientAccess(orgId: string, clientId: string, userId: string) {
+      return apiFetch<void>(
+        getToken,
+        `/organizations/${orgId}/clients/${clientId}/access/${userId}`,
+        { method: "DELETE" }
+      );
+    },
+
+    restrictClient(orgId: string, clientId: string) {
+      return apiFetch<ClientAccessSummary>(
+        getToken,
+        `/organizations/${orgId}/clients/${clientId}/access/restrict`,
+        { method: "POST" }
+      );
+    },
   };
+}
+
+// ─── Client access types ─────────────────────────────────────────────────────
+
+export interface ClientAccess {
+  id: string;
+  client_id: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  access_level: string;
+  assigned_by: string | null;
+  created_at: string;
+}
+
+export interface ClientAccessSummary {
+  mode: "open" | "restricted";
+  records: ClientAccess[];
 }
