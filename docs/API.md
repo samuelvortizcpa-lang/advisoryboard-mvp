@@ -1,8 +1,8 @@
-# AdvisoryBoard API Documentation
+# Callwen API Documentation
 
 ## Overview
 
-The AdvisoryBoard API is a FastAPI-based backend for AI-powered client context management for CPA firms.
+The Callwen API is a FastAPI-based backend for AI-powered client context management for CPA firms.
 
 **Base URL:** `http://localhost:8000`
 
@@ -17,7 +17,7 @@ Returns the API status.
 **Response:**
 ```json
 {
-  "status": "AdvisoryBoard API is running"
+  "status": "Callwen API is running"
 }
 ```
 
