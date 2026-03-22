@@ -514,6 +514,8 @@ def send_consent_for_signature(
     user_id: str,
     db: Session,
     to_email: str | None = None,
+    preparer_name: str | None = None,
+    preparer_firm: str | None = None,
 ) -> ClientConsent:
     """
     Create a consent record with a signing token, send the consent request
@@ -541,18 +543,21 @@ def send_consent_for_signature(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    preparer_name = " ".join(
-        part for part in [user.first_name, user.last_name] if part
-    ) or ""
+    # Resolve preparer name: param → user record → fallback
+    if not preparer_name or not preparer_name.strip():
+        preparer_name = " ".join(
+            part for part in [user.first_name, user.last_name] if part
+        ) or "Your tax professional"
 
-    # Get firm name from latest consent record if available
-    latest = (
-        db.query(ClientConsent)
-        .filter(ClientConsent.client_id == client_id, ClientConsent.user_id == user_id)
-        .order_by(ClientConsent.created_at.desc())
-        .first()
-    )
-    preparer_firm = latest.preparer_firm if latest and latest.preparer_firm else None
+    # Resolve preparer firm: param → latest consent record → None
+    if not preparer_firm or not preparer_firm.strip():
+        latest = (
+            db.query(ClientConsent)
+            .filter(ClientConsent.client_id == client_id, ClientConsent.user_id == user_id)
+            .order_by(ClientConsent.created_at.desc())
+            .first()
+        )
+        preparer_firm = latest.preparer_firm if latest and latest.preparer_firm else None
 
     now = datetime.now(timezone.utc)
     token = secrets.token_urlsafe(48)

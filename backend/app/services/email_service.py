@@ -41,6 +41,9 @@ def send_consent_request_email(
 
     resend.api_key = settings.resend_api_key
 
+    if not preparer_name or not preparer_name.strip():
+        preparer_name = "Your tax professional"
+
     sender_label = preparer_firm or preparer_name
     subject = f"Action Required: Tax Return Information Consent \u2014 {sender_label}"
 

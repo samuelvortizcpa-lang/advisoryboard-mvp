@@ -282,6 +282,8 @@ async def send_for_signature(
         user_id=user.clerk_id,
         db=db,
         to_email=body.taxpayer_email,
+        preparer_name=body.preparer_name,
+        preparer_firm=body.preparer_firm,
     )
 
     return SendForSignatureResponse(
