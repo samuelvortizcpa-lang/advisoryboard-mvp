@@ -66,12 +66,13 @@ export type ClientUpdateData = Partial<ClientCreateData>;
 
 // ─── Core fetch helper ────────────────────────────────────────────────────────
 
-type GetToken = () => Promise<string | null>;
+export type GetToken = () => Promise<string | null>;
 
 async function apiFetch<T>(
   getToken: GetToken,
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  orgId?: string,
 ): Promise<T> {
   const token = await getToken();
 
@@ -81,6 +82,7 @@ async function apiFetch<T>(
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(orgId ? { "X-Org-Id": orgId } : {}),
       ...(options.headers ?? {}),
     },
   });
@@ -99,6 +101,16 @@ async function apiFetch<T>(
   // 204 No Content — nothing to parse
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+/**
+ * Create a bound fetch function that always includes the given orgId.
+ * Factory functions use this so callers don't have to thread orgId through
+ * every individual method call.
+ */
+function boundFetch(getToken: GetToken, orgId?: string) {
+  return <T>(path: string, options: RequestInit = {}) =>
+    apiFetch<T>(getToken, path, options, orgId);
 }
 
 // ─── Document types ───────────────────────────────────────────────────────────
@@ -133,63 +145,62 @@ export interface DocumentListResponse {
 //   const { getToken } = useAuth();
 //   const api = createClientsApi(getToken);
 
-export function createClientsApi(getToken: GetToken) {
+export function createClientsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     list(skip = 0, limit = 50) {
-      return apiFetch<ClientListResponse>(
-        getToken,
-        `/clients?skip=${skip}&limit=${limit}`
-      );
+      return f<ClientListResponse>(`/clients?skip=${skip}&limit=${limit}`);
     },
 
     get(id: string) {
-      return apiFetch<Client>(getToken, `/clients/${id}`);
+      return f<Client>(`/clients/${id}`);
     },
 
     create(data: ClientCreateData) {
-      return apiFetch<Client>(getToken, "/clients", {
+      return f<Client>("/clients", {
         method: "POST",
         body: JSON.stringify(data),
       });
     },
 
     update(id: string, data: ClientUpdateData) {
-      return apiFetch<Client>(getToken, `/clients/${id}`, {
+      return f<Client>(`/clients/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
       });
     },
 
     delete(id: string) {
-      return apiFetch<void>(getToken, `/clients/${id}`, { method: "DELETE" });
+      return f<void>(`/clients/${id}`, { method: "DELETE" });
     },
   };
 }
 
 // ─── Client types API factory ─────────────────────────────────────────────────
 
-export function createClientTypesApi(getToken: GetToken) {
+export function createClientTypesApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     list() {
-      return apiFetch<ClientTypeListResponse>(getToken, "/client-types");
+      return f<ClientTypeListResponse>("/client-types");
     },
 
     create(data: ClientTypeCreateData) {
-      return apiFetch<ClientType>(getToken, "/client-types", {
+      return f<ClientType>("/client-types", {
         method: "POST",
         body: JSON.stringify(data),
       });
     },
 
     update(id: string, data: ClientTypeUpdateData) {
-      return apiFetch<ClientType>(getToken, `/client-types/${id}`, {
+      return f<ClientType>(`/client-types/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
       });
     },
 
     delete(id: string) {
-      return apiFetch<void>(getToken, `/client-types/${id}`, { method: "DELETE" });
+      return f<void>(`/client-types/${id}`, { method: "DELETE" });
     },
   };
 }
@@ -279,36 +290,35 @@ export interface ChatHistoryResponse {
 
 // ─── RAG API factory ──────────────────────────────────────────────────────────
 
-export function createRagApi(getToken: GetToken) {
+export function createRagApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     status(clientId: string) {
-      return apiFetch<RagStatus>(getToken, `/clients/${clientId}/rag/status`);
+      return f<RagStatus>(`/clients/${clientId}/rag/status`);
     },
 
     processAll(clientId: string) {
-      return apiFetch<ProcessResponse>(getToken, `/clients/${clientId}/rag/process`, {
+      return f<ProcessResponse>(`/clients/${clientId}/rag/process`, {
         method: "POST",
       });
     },
 
     processDocument(clientId: string, documentId: string) {
-      return apiFetch<ProcessResponse>(
-        getToken,
+      return f<ProcessResponse>(
         `/clients/${clientId}/documents/${documentId}/process`,
         { method: "POST" }
       );
     },
 
     chat(clientId: string, question: string, modelOverride?: string | null) {
-      return apiFetch<ChatApiResponse>(getToken, `/clients/${clientId}/rag/chat`, {
+      return f<ChatApiResponse>(`/clients/${clientId}/rag/chat`, {
         method: "POST",
         body: JSON.stringify({ question, model_override: modelOverride ?? null }),
       });
     },
 
     getChatHistory(clientId: string, limit = 100, skip = 0) {
-      return apiFetch<ChatHistoryResponse>(
-        getToken,
+      return f<ChatHistoryResponse>(
         `/clients/${clientId}/chat-history?limit=${limit}&skip=${skip}`
       );
     },
@@ -334,20 +344,20 @@ export function createRagApi(getToken: GetToken) {
     },
 
     clearChatHistory(clientId: string) {
-      return apiFetch<void>(getToken, `/clients/${clientId}/chat-history`, {
+      return f<void>(`/clients/${clientId}/chat-history`, {
         method: "DELETE",
       });
     },
 
     compare(clientId: string, documentIds: string[], comparisonType: ComparisonType) {
-      return apiFetch<CompareResponse>(getToken, `/clients/${clientId}/rag/compare`, {
+      return f<CompareResponse>(`/clients/${clientId}/rag/compare`, {
         method: "POST",
         body: JSON.stringify({ document_ids: documentIds, comparison_type: comparisonType }),
       });
     },
 
     backfillPages() {
-      return apiFetch<BackfillResponse>(getToken, `/documents/backfill-pages`, {
+      return f<BackfillResponse>(`/documents/backfill-pages`, {
         method: "POST",
       });
     },
@@ -434,14 +444,15 @@ export interface ClientUsageItem {
 
 // ─── Usage API factory ─────────────────────────────────────────────────────────
 
-export function createUsageApi(getToken: GetToken) {
+export function createUsageApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     summary(days = 30) {
-      return apiFetch<UsageSummary>(getToken, `/usage/summary?days=${days}`);
+      return f<UsageSummary>(`/usage/summary?days=${days}`);
     },
 
     subscription() {
-      return apiFetch<SubscriptionInfo>(getToken, `/usage/subscription`);
+      return f<SubscriptionInfo>(`/usage/subscription`);
     },
 
     history(params: {
@@ -462,15 +473,15 @@ export function createUsageApi(getToken: GetToken) {
       if (params.endpoint) q.set("endpoint", params.endpoint);
       if (params.client_id) q.set("client_id", params.client_id);
       const qs = q.toString();
-      return apiFetch<UsageHistoryResponse>(getToken, `/usage/history${qs ? `?${qs}` : ""}`);
+      return f<UsageHistoryResponse>(`/usage/history${qs ? `?${qs}` : ""}`);
     },
 
     daily(days = 30) {
-      return apiFetch<DailyUsageItem[]>(getToken, `/usage/daily?days=${days}`);
+      return f<DailyUsageItem[]>(`/usage/daily?days=${days}`);
     },
 
     byClient(days = 30) {
-      return apiFetch<ClientUsageItem[]>(getToken, `/usage/by-client?days=${days}`);
+      return f<ClientUsageItem[]>(`/usage/by-client?days=${days}`);
     },
 
     async exportCsv(startDate?: string, endDate?: string): Promise<void> {
@@ -552,33 +563,34 @@ export interface AdminOverview {
 
 // ─── Admin API factory ──────────────────────────────────────────────────────
 
-export function createAdminApi(getToken: GetToken) {
+export function createAdminApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     users() {
-      return apiFetch<AdminUser[]>(getToken, "/admin/users");
+      return f<AdminUser[]>("/admin/users");
     },
 
     overview() {
-      return apiFetch<AdminOverview>(getToken, "/admin/overview");
+      return f<AdminOverview>("/admin/overview");
     },
 
     listSubscriptions() {
-      return apiFetch<AdminSubscription[]>(getToken, "/admin/subscriptions");
+      return f<AdminSubscription[]>("/admin/subscriptions");
     },
 
     subscriptionSummary() {
-      return apiFetch<AdminSubscriptionSummary>(getToken, "/admin/subscriptions/summary");
+      return f<AdminSubscriptionSummary>("/admin/subscriptions/summary");
     },
 
     updateTier(userId: string, tier: string) {
-      return apiFetch<AdminSubscription>(getToken, `/admin/subscriptions/${userId}`, {
+      return f<AdminSubscription>(`/admin/subscriptions/${userId}`, {
         method: "PUT",
         body: JSON.stringify({ tier }),
       });
     },
 
     resetUsage(userId: string) {
-      return apiFetch<AdminSubscription>(getToken, `/admin/subscriptions/${userId}/reset-usage`, {
+      return f<AdminSubscription>(`/admin/subscriptions/${userId}/reset-usage`, {
         method: "POST",
       });
     },
@@ -595,23 +607,24 @@ export interface StripeStatus {
 
 // ─── Stripe API factory ─────────────────────────────────────────────────────
 
-export function createStripeApi(getToken: GetToken) {
+export function createStripeApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     createCheckout(tier: string, billingInterval: "monthly" | "annual" = "monthly") {
-      return apiFetch<{ url: string }>(getToken, "/stripe/create-checkout", {
+      return f<{ url: string }>("/stripe/create-checkout", {
         method: "POST",
         body: JSON.stringify({ tier, billing_interval: billingInterval }),
       });
     },
 
     createPortal() {
-      return apiFetch<{ url: string }>(getToken, "/stripe/create-portal", {
+      return f<{ url: string }>("/stripe/create-portal", {
         method: "POST",
       });
     },
 
     status() {
-      return apiFetch<StripeStatus>(getToken, "/stripe/status");
+      return f<StripeStatus>("/stripe/status");
     },
   };
 }
@@ -630,16 +643,17 @@ export interface ClientBrief {
 
 // ─── Briefs API factory ────────────────────────────────────────────────────────
 
-export function createBriefsApi(getToken: GetToken) {
+export function createBriefsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     generate(clientId: string) {
-      return apiFetch<ClientBrief>(getToken, `/clients/${clientId}/briefs/generate`, {
+      return f<ClientBrief>(`/clients/${clientId}/briefs/generate`, {
         method: "POST",
       });
     },
 
     getLatest(clientId: string) {
-      return apiFetch<ClientBrief | null>(getToken, `/clients/${clientId}/briefs/latest`);
+      return f<ClientBrief | null>(`/clients/${clientId}/briefs/latest`);
     },
   };
 }
@@ -692,14 +706,15 @@ export interface ConsentCreateRequest {
 
 // ─── Consent API factory ────────────────────────────────────────────────────
 
-export function createConsentApi(getToken: GetToken) {
+export function createConsentApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     getStatus(clientId: string) {
-      return apiFetch<ConsentStatus>(getToken, `/clients/${clientId}/consent`);
+      return f<ConsentStatus>(`/clients/${clientId}/consent`);
     },
 
     create(clientId: string, data: ConsentCreateRequest) {
-      return apiFetch<ConsentRecord>(getToken, `/clients/${clientId}/consent`, {
+      return f<ConsentRecord>(`/clients/${clientId}/consent`, {
         method: "POST",
         body: JSON.stringify(data),
       });
@@ -729,8 +744,7 @@ export function createConsentApi(getToken: GetToken) {
     },
 
     history(clientId: string) {
-      return apiFetch<ConsentRecord[]>(
-        getToken,
+      return f<ConsentRecord[]>(
         `/clients/${clientId}/consent/history`
       );
     },
@@ -739,8 +753,7 @@ export function createConsentApi(getToken: GetToken) {
       clientId: string,
       data: { taxpayer_email: string; taxpayer_name: string; preparer_name: string; preparer_firm?: string }
     ) {
-      return apiFetch<{ success: boolean; consent_id: string; message: string }>(
-        getToken,
+      return f<{ success: boolean; consent_id: string; message: string }>(
         `/clients/${clientId}/consent/send-for-signature`,
         {
           method: "POST",
@@ -781,18 +794,19 @@ export interface AlertsSummaryResponse {
 
 // ─── Alerts API factory ────────────────────────────────────────────────────────
 
-export function createAlertsApi(getToken: GetToken) {
+export function createAlertsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     list() {
-      return apiFetch<AlertsListResponse>(getToken, "/alerts");
+      return f<AlertsListResponse>("/alerts");
     },
 
     summary() {
-      return apiFetch<AlertsSummaryResponse>(getToken, "/alerts/summary");
+      return f<AlertsSummaryResponse>("/alerts/summary");
     },
 
     dismiss(alertType: string, relatedId: string) {
-      return apiFetch<{ dismissed: boolean }>(getToken, "/alerts/dismiss", {
+      return f<{ dismissed: boolean }>("/alerts/dismiss", {
         method: "POST",
         body: JSON.stringify({ alert_type: alertType, related_id: relatedId }),
       });
@@ -832,7 +846,8 @@ export interface ActionItemUpdate {
 
 // ─── Action items API factory ─────────────────────────────────────────────────
 
-export function createActionItemsApi(getToken: GetToken) {
+export function createActionItemsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     list(clientId: string, statusFilter?: string, skip = 0, limit = 50) {
       const params = new URLSearchParams({
@@ -840,35 +855,32 @@ export function createActionItemsApi(getToken: GetToken) {
         limit: String(limit),
       });
       if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
-      return apiFetch<ActionItemListResponse>(
-        getToken,
+      return f<ActionItemListResponse>(
         `/clients/${clientId}/action-items?${params}`
       );
     },
 
     listPending(clientId: string) {
-      return apiFetch<ActionItemListResponse>(
-        getToken,
+      return f<ActionItemListResponse>(
         `/clients/${clientId}/action-items/pending`
       );
     },
 
     update(itemId: string, data: ActionItemUpdate) {
-      return apiFetch<ActionItem>(getToken, `/action-items/${itemId}`, {
+      return f<ActionItem>(`/action-items/${itemId}`, {
         method: "PATCH",
         body: JSON.stringify(data),
       });
     },
 
     delete(itemId: string) {
-      return apiFetch<void>(getToken, `/action-items/${itemId}`, {
+      return f<void>(`/action-items/${itemId}`, {
         method: "DELETE",
       });
     },
 
     reextract(documentId: string) {
-      return apiFetch<{ message: string }>(
-        getToken,
+      return f<{ message: string }>(
         `/documents/${documentId}/reextract-action-items`,
         { method: "POST" }
       );
@@ -922,7 +934,8 @@ export interface TimelineParams {
 
 // ─── Timeline API factory ─────────────────────────────────────────────────────
 
-export function createTimelineApi(getToken: GetToken) {
+export function createTimelineApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     list(clientId: string, params?: TimelineParams) {
       const query = new URLSearchParams();
@@ -932,8 +945,7 @@ export function createTimelineApi(getToken: GetToken) {
       if (params?.limit != null) query.set("limit", String(params.limit));
       if (params?.skip != null) query.set("skip", String(params.skip));
       const qs = query.toString();
-      return apiFetch<TimelineResponse>(
-        getToken,
+      return f<TimelineResponse>(
         `/clients/${clientId}/timeline${qs ? `?${qs}` : ""}`
       );
     },
@@ -945,11 +957,11 @@ export function createTimelineApi(getToken: GetToken) {
 //   const { getToken } = useAuth();
 //   const api = createDocumentsApi(getToken);
 
-export function createDocumentsApi(getToken: GetToken) {
+export function createDocumentsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     list(clientId: string, skip = 0, limit = 50) {
-      return apiFetch<DocumentListResponse>(
-        getToken,
+      return f<DocumentListResponse>(
         `/clients/${clientId}/documents?skip=${skip}&limit=${limit}`
       );
     },
@@ -999,7 +1011,7 @@ export function createDocumentsApi(getToken: GetToken) {
     },
 
     delete(documentId: string) {
-      return apiFetch<void>(getToken, `/documents/${documentId}`, {
+      return f<void>(`/documents/${documentId}`, {
         method: "DELETE",
       });
     },
@@ -1077,40 +1089,36 @@ export interface UnmatchedRecording {
 
 // ─── Integrations API factory ──────────────────────────────────────────────
 
-export function createIntegrationsApi(getToken: GetToken) {
+export function createIntegrationsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     // ── OAuth ──
     getGoogleAuthUrl() {
-      return apiFetch<{ authorization_url: string }>(
-        getToken,
+      return f<{ authorization_url: string }>(
         "/integrations/google/authorize"
       );
     },
 
     getMicrosoftAuthUrl() {
-      return apiFetch<{ authorization_url: string }>(
-        getToken,
+      return f<{ authorization_url: string }>(
         "/integrations/microsoft/authorize"
       );
     },
 
     getZoomAuthUrl() {
-      return apiFetch<{ authorization_url: string }>(
-        getToken,
+      return f<{ authorization_url: string }>(
         "/integrations/zoom/authorize"
       );
     },
 
     getFrontAuthUrl() {
-      return apiFetch<{ authorization_url: string }>(
-        getToken,
+      return f<{ authorization_url: string }>(
         "/integrations/front/authorize"
       );
     },
 
     connectFrontToken(apiToken: string) {
-      return apiFetch<IntegrationConnection>(
-        getToken,
+      return f<IntegrationConnection>(
         "/integrations/front/connect-token",
         {
           method: "POST",
@@ -1120,8 +1128,7 @@ export function createIntegrationsApi(getToken: GetToken) {
     },
 
     connectFathom(apiKey: string) {
-      return apiFetch<IntegrationConnection>(
-        getToken,
+      return f<IntegrationConnection>(
         "/integrations/fathom/connect",
         {
           method: "POST",
@@ -1134,8 +1141,7 @@ export function createIntegrationsApi(getToken: GetToken) {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("client_id", clientId);
-      return apiFetch<{ status: string; document_id: string }>(
-        getToken,
+      return f<{ status: string; document_id: string }>(
         "/integrations/fathom/import",
         {
           method: "POST",
@@ -1146,15 +1152,13 @@ export function createIntegrationsApi(getToken: GetToken) {
 
     // ── Connections ──
     listConnections() {
-      return apiFetch<IntegrationConnection[]>(
-        getToken,
+      return f<IntegrationConnection[]>(
         "/integrations/connections"
       );
     },
 
     disconnect(connectionId: string) {
-      return apiFetch<void>(
-        getToken,
+      return f<void>(
         `/integrations/connections/${connectionId}`,
         { method: "DELETE" }
       );
@@ -1162,52 +1166,47 @@ export function createIntegrationsApi(getToken: GetToken) {
 
     // ── Sync ──
     triggerSync(connectionId: string, maxResults = 50, sinceHours = 24) {
-      return apiFetch<SyncLog>(
-        getToken,
+      return f<SyncLog>(
         `/integrations/connections/${connectionId}/sync?max_results=${maxResults}&since_hours=${sinceHours}`,
         { method: "POST" }
       );
     },
 
     triggerDeepSync(connectionId: string) {
-      return apiFetch<SyncLog>(
-        getToken,
+      return f<SyncLog>(
         `/integrations/connections/${connectionId}/sync-all`,
         { method: "POST" }
       );
     },
 
     getSyncHistory(connectionId: string, limit = 20) {
-      return apiFetch<SyncLog[]>(
-        getToken,
+      return f<SyncLog[]>(
         `/integrations/connections/${connectionId}/sync-history?limit=${limit}`
       );
     },
 
     // ── Routing rules ──
     listRoutingRules() {
-      return apiFetch<RoutingRule[]>(
-        getToken,
+      return f<RoutingRule[]>(
         "/integrations/routing-rules"
       );
     },
 
     createRoutingRule(data: RoutingRuleCreateData) {
-      return apiFetch<RoutingRule>(getToken, "/integrations/routing-rules", {
+      return f<RoutingRule>("/integrations/routing-rules", {
         method: "POST",
         body: JSON.stringify(data),
       });
     },
 
     deleteRoutingRule(ruleId: string) {
-      return apiFetch<void>(getToken, `/integrations/routing-rules/${ruleId}`, {
+      return f<void>(`/integrations/routing-rules/${ruleId}`, {
         method: "DELETE",
       });
     },
 
     autoGenerateRules() {
-      return apiFetch<RoutingRule[]>(
-        getToken,
+      return f<RoutingRule[]>(
         "/integrations/routing-rules/auto-generate",
         { method: "POST" }
       );
@@ -1215,25 +1214,24 @@ export function createIntegrationsApi(getToken: GetToken) {
 
     // ── Zoom rules ──
     listZoomRules() {
-      return apiFetch<ZoomRule[]>(getToken, "/integrations/zoom-rules");
+      return f<ZoomRule[]>("/integrations/zoom-rules");
     },
 
     createZoomRule(data: ZoomRuleCreateData) {
-      return apiFetch<ZoomRule>(getToken, "/integrations/zoom-rules", {
+      return f<ZoomRule>("/integrations/zoom-rules", {
         method: "POST",
         body: JSON.stringify(data),
       });
     },
 
     deleteZoomRule(ruleId: string) {
-      return apiFetch<void>(getToken, `/integrations/zoom-rules/${ruleId}`, {
+      return f<void>(`/integrations/zoom-rules/${ruleId}`, {
         method: "DELETE",
       });
     },
 
     autoGenerateZoomRules() {
-      return apiFetch<ZoomRule[]>(
-        getToken,
+      return f<ZoomRule[]>(
         "/integrations/zoom-rules/auto-generate",
         { method: "POST" }
       );
@@ -1241,14 +1239,13 @@ export function createIntegrationsApi(getToken: GetToken) {
 
     // ── Unmatched recordings ──
     listUnmatchedRecordings() {
-      return apiFetch<UnmatchedRecording[]>(
-        getToken,
+      return f<UnmatchedRecording[]>(
         "/integrations/zoom/unmatched"
       );
     },
 
     getAutoSyncStatus() {
-      return apiFetch<{
+      return f<{
         scheduler_running: boolean;
         last_run_at: string | null;
         next_run_at: string | null;
@@ -1259,12 +1256,11 @@ export function createIntegrationsApi(getToken: GetToken) {
           connections_skipped: number;
           connections_failed: number;
         } | null;
-      }>(getToken, "/integrations/admin/sync-status");
+      }>("/integrations/admin/sync-status");
     },
 
     assignRecording(documentId: string, clientId: string, createRule?: { match_field: string; match_value: string }) {
-      return apiFetch<{ status: string }>(
-        getToken,
+      return f<{ status: string }>(
         "/integrations/zoom/assign",
         {
           method: "POST",
@@ -1312,43 +1308,44 @@ export interface OrgDetail extends Organization {
 
 // ─── Organizations API factory ───────────────────────────────────────────────
 
-export function createOrganizationsApi(getToken: GetToken) {
+export function createOrganizationsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
   return {
     list() {
-      return apiFetch<Organization[]>(getToken, "/organizations");
+      return f<Organization[]>("/organizations");
     },
 
     get(orgId: string) {
-      return apiFetch<OrgDetail>(getToken, `/organizations/${orgId}`);
+      return f<OrgDetail>(`/organizations/${orgId}`);
     },
 
     update(orgId: string, data: { name?: string; settings?: Record<string, unknown> }) {
-      return apiFetch<OrgDetail>(getToken, `/organizations/${orgId}`, {
+      return f<OrgDetail>(`/organizations/${orgId}`, {
         method: "PATCH",
         body: JSON.stringify(data),
       });
     },
 
     listMembers(orgId: string) {
-      return apiFetch<OrgMember[]>(getToken, `/organizations/${orgId}/members`);
+      return f<OrgMember[]>(`/organizations/${orgId}/members`);
     },
 
     inviteMember(orgId: string, userEmail: string, role: string = "member") {
-      return apiFetch<OrgMember>(getToken, `/organizations/${orgId}/members`, {
+      return f<OrgMember>(`/organizations/${orgId}/members`, {
         method: "POST",
         body: JSON.stringify({ user_email: userEmail, role }),
       });
     },
 
     updateMemberRole(orgId: string, userId: string, role: string) {
-      return apiFetch<OrgMember>(getToken, `/organizations/${orgId}/members/${userId}`, {
+      return f<OrgMember>(`/organizations/${orgId}/members/${userId}`, {
         method: "PATCH",
         body: JSON.stringify({ role }),
       });
     },
 
     removeMember(orgId: string, userId: string) {
-      return apiFetch<void>(getToken, `/organizations/${orgId}/members/${userId}`, {
+      return f<void>(`/organizations/${orgId}/members/${userId}`, {
         method: "DELETE",
       });
     },
@@ -1356,15 +1353,13 @@ export function createOrganizationsApi(getToken: GetToken) {
     // ── Client access delegation ──
 
     fetchClientAccess(orgId: string, clientId: string) {
-      return apiFetch<ClientAccessSummary>(
-        getToken,
+      return f<ClientAccessSummary>(
         `/organizations/${orgId}/clients/${clientId}/access`
       );
     },
 
     grantClientAccess(orgId: string, clientId: string, userId: string, accessLevel: string = "full") {
-      return apiFetch<ClientAccess>(
-        getToken,
+      return f<ClientAccess>(
         `/organizations/${orgId}/clients/${clientId}/access`,
         {
           method: "POST",
@@ -1374,16 +1369,14 @@ export function createOrganizationsApi(getToken: GetToken) {
     },
 
     revokeClientAccess(orgId: string, clientId: string, userId: string) {
-      return apiFetch<void>(
-        getToken,
+      return f<void>(
         `/organizations/${orgId}/clients/${clientId}/access/${userId}`,
         { method: "DELETE" }
       );
     },
 
     restrictClient(orgId: string, clientId: string) {
-      return apiFetch<ClientAccessSummary>(
-        getToken,
+      return f<ClientAccessSummary>(
         `/organizations/${orgId}/clients/${clientId}/access/restrict`,
         { method: "POST" }
       );
@@ -1408,3 +1401,10 @@ export interface ClientAccessSummary {
   mode: "open" | "restricted";
   records: ClientAccess[];
 }
+
+// ─── useApi hook ─────────────────────────────────────────────────────────────
+// Reads orgId from OrgContext and returns pre-configured API instances so pages
+// don't have to manually pass orgId every time.
+//
+// NOTE: This hook must be imported as a standalone module to avoid circular
+// imports (OrgContext imports from api.ts).  It is declared in lib/useApi.ts.

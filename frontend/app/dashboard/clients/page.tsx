@@ -9,10 +9,10 @@ import {
   Client,
   ClientAccessSummary,
   ClientListResponse,
-  Organization,
   createClientsApi,
   createOrganizationsApi,
 } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
 
 // ─── Color map for client-type badges ─────────────────────────────────────────
 
@@ -39,8 +39,11 @@ export default function ClientsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Org / access state
-  const [firmOrg, setFirmOrg] = useState<Organization | null>(null);
+  // Org context
+  const { activeOrg } = useOrg();
+  const firmOrg = activeOrg?.org_type === "firm" ? activeOrg : null;
+
+  // Access state
   const [accessMap, setAccessMap] = useState<Record<string, ClientAccessSummary>>({});
   const [filterMode, setFilterMode] = useState<"all" | "mine">("all");
 
@@ -50,15 +53,6 @@ export default function ClientsPage() {
       .then(setResponse)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-
-    // Check for firm org
-    createOrganizationsApi(getToken)
-      .list()
-      .then((orgs) => {
-        const firm = orgs.find((o) => o.org_type === "firm");
-        if (firm) setFirmOrg(firm);
-      })
-      .catch(() => {/* non-fatal */});
   }, [getToken]);
 
   // Load access summaries for all clients when firm org is available

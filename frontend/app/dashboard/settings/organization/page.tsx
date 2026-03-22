@@ -5,10 +5,10 @@ import { useEffect, useState, useCallback } from "react";
 
 import {
   createOrganizationsApi,
-  Organization,
   OrgDetail,
   OrgMember,
 } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -31,11 +31,11 @@ function fmtDate(iso: string | null) {
 
 export default function OrganizationSettingsPage() {
   const { getToken } = useAuth();
+  const { orgs, activeOrg, setActiveOrg, isLoading: orgLoading } = useOrg();
 
   // Data state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [orgs, setOrgs] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [orgDetail, setOrgDetail] = useState<OrgDetail | null>(null);
   const [members, setMembers] = useState<OrgMember[]>([]);
@@ -73,24 +73,14 @@ export default function OrganizationSettingsPage() {
 
   const api = useCallback(() => createOrganizationsApi(getToken), [getToken]);
 
-  // Load orgs list
-  const loadOrgs = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const list = await api().list();
-      setOrgs(list);
-      if (list.length > 0 && !selectedOrgId) {
-        setSelectedOrgId(list[0].id);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load organizations"
-      );
-    } finally {
-      setLoading(false);
+  // Sync selectedOrgId from context
+  useEffect(() => {
+    if (orgLoading) return;
+    if (activeOrg && !selectedOrgId) {
+      setSelectedOrgId(activeOrg.id);
     }
-  }, [api, selectedOrgId]);
+    setLoading(false);
+  }, [orgLoading, activeOrg, selectedOrgId]);
 
   // Load org detail + members
   const loadOrgDetail = useCallback(async () => {
@@ -111,10 +101,6 @@ export default function OrganizationSettingsPage() {
       );
     }
   }, [api, selectedOrgId]);
-
-  useEffect(() => {
-    loadOrgs();
-  }, [loadOrgs]);
 
   useEffect(() => {
     if (selectedOrgId) loadOrgDetail();
@@ -220,7 +206,7 @@ export default function OrganizationSettingsPage() {
           <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
             <p className="text-sm text-red-600">{error}</p>
             <button
-              onClick={loadOrgs}
+              onClick={() => window.location.reload()}
               className="mt-3 text-sm font-medium text-red-700 hover:underline"
             >
               Retry

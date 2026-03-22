@@ -14,7 +14,6 @@ import {
   ComparisonType,
   Document,
   OrgMember,
-  Organization,
   createActionItemsApi,
   createBriefsApi,
   createClientTypesApi,
@@ -23,6 +22,7 @@ import {
   createOrganizationsApi,
   createRagApi,
 } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
 import ActionItemList from "@/components/action-items/ActionItemList";
 import DeadlineWidget from "@/components/action-items/DeadlineWidget";
 import BriefPanel from "@/components/briefs/BriefPanel";
@@ -142,7 +142,8 @@ function ClientDetailContent() {
   const [actionItemsRefreshKey, setActionItemsRefreshKey] = useState(0);
 
   // ── Organization / team access state ────────────────────────────────────────
-  const [org, setOrg] = useState<Organization | null>(null);
+  const { activeOrg, isAdmin: isOrgAdmin } = useOrg();
+  const org = activeOrg?.org_type === "firm" ? activeOrg : null;
   const [accessSummary, setAccessSummary] = useState<ClientAccessSummary | null>(null);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessActionLoading, setAccessActionLoading] = useState<string | null>(null);
@@ -151,7 +152,7 @@ function ClientDetailContent() {
   const [showAddAccess, setShowAddAccess] = useState(false);
   const [openConfirm, setOpenConfirm] = useState(false);
 
-  const isFirmAdmin = org?.org_type === "firm" && org?.role === "admin";
+  const isFirmAdmin = org !== null && isOrgAdmin;
 
   // ── Overview summary data ───────────────────────────────────────────────────
   const [pendingActionsCount, setPendingActionsCount] = useState<number | null>(null);
@@ -209,17 +210,6 @@ function ClientDetailContent() {
         }
       })
       .catch(() => setLastChatDate(null));
-
-    // Org check — load org info to determine if Team Access tab should show
-    createOrganizationsApi(getToken)
-      .list()
-      .then((orgs) => {
-        const firmOrg = orgs.find((o) => o.org_type === "firm" && o.role === "admin");
-        if (firmOrg) {
-          setOrg(firmOrg);
-        }
-      })
-      .catch(() => {/* non-fatal */});
   }, [id, getToken]);
 
   // Load team access data when org is available

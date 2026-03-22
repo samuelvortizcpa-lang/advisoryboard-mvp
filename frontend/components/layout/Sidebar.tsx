@@ -6,6 +6,8 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
 import { createAlertsApi } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
+import OrgSwitcher from "@/components/layout/OrgSwitcher";
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
@@ -26,6 +28,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const { getToken } = useAuth();
+  const { activeOrg, orgs, isPersonalOrg, isAdmin } = useOrg();
   const [alertCount, setAlertCount] = useState(0);
 
   useEffect(() => {
@@ -44,13 +47,24 @@ export default function Sidebar() {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-20 flex w-[200px] flex-col bg-white border-r border-gray-200">
-      {/* ── Logo ─────────────────────────────────────────────────────────── */}
+      {/* ── Logo / Org branding ───────────────────────────────────────────── */}
       <div className="flex h-[56px] shrink-0 items-center border-b border-gray-100 px-4">
         <Link href="/dashboard/clients" className="flex min-w-0 items-center gap-2">
-          <LogoIcon />
-          <span className="truncate text-sm font-semibold text-gray-900">
-            AdvisoryBoard
-          </span>
+          {!isPersonalOrg && activeOrg ? (
+            <>
+              <SidebarBuildingIcon />
+              <span className="truncate text-sm font-semibold text-gray-900">
+                {activeOrg.name}
+              </span>
+            </>
+          ) : (
+            <>
+              <LogoIcon />
+              <span className="truncate text-sm font-semibold text-gray-900">
+                AdvisoryBoard
+              </span>
+            </>
+          )}
           {alertCount > 0 && (
             <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
               {alertCount > 99 ? "99+" : alertCount}
@@ -94,15 +108,25 @@ export default function Sidebar() {
         })}
       </nav>
 
+      {/* ── Org switcher ──────────────────────────────────────────────── */}
+      <OrgSwitcher />
+
       {/* ── User ─────────────────────────────────────────────────────────── */}
       {user && (
         <div className="flex shrink-0 items-center gap-2.5 border-t border-gray-100 px-4 py-3">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[11px] font-semibold text-white">
             {getInitials(user.firstName, user.lastName)}
           </div>
-          <span className="min-w-0 truncate text-xs font-medium text-gray-700">
-            {displayName}
-          </span>
+          <div className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-medium text-gray-700">
+              {displayName}
+            </span>
+            {!isPersonalOrg && (
+              <span className="mt-0.5 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                {isAdmin ? "Admin" : "Member"}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </aside>
@@ -121,6 +145,24 @@ function getInitials(
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
+
+function SidebarBuildingIcon() {
+  return (
+    <svg
+      className="h-5 w-5 shrink-0 text-purple-600"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
+      />
+    </svg>
+  );
+}
 
 function LogoIcon() {
   return (
