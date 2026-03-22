@@ -1,6 +1,6 @@
 """add organization tables and columns for multi-tenant support
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: 51092342ecf4
 Revises: d348e822f38f
 Create Date: 2026-03-21
 
@@ -13,7 +13,7 @@ from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision: str = "a1b2c3d4e5f6"
+revision: str = "51092342ecf4"
 down_revision: Union[str, None] = "d348e822f38f"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

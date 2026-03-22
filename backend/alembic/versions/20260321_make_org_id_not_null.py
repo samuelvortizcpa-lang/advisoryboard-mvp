@@ -1,7 +1,7 @@
 """make clients.org_id NOT NULL after backfill
 
-Revision ID: b2c3d4e5f6a7
-Revises: a1b2c3d4e5f6
+Revision ID: e7fba09c0bc8
+Revises: 51092342ecf4
 Create Date: 2026-03-21
 
 Run the backfill script FIRST:
@@ -17,8 +17,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "b2c3d4e5f6a7"
-down_revision: Union[str, None] = "a1b2c3d4e5f6"
+revision: str = "e7fba09c0bc8"
+down_revision: Union[str, None] = "51092342ecf4"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
