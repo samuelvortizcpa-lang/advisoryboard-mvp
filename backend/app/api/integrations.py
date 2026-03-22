@@ -10,13 +10,14 @@ import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.integration_connection import IntegrationConnection
 from app.services import email_router, fathom_sync_service, front_auth_service, front_sync_service, gmail_sync_service, google_auth_service, microsoft_auth_service, outlook_sync_service, zoom_auth_service, zoom_sync_service
+from app.services.auth_context import AuthContext, check_client_access, get_auth
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,23 @@ class SyncLogResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _connection_filter(query, auth: AuthContext):
+    """
+    Scope integration connections to the org.  Includes backward-compat
+    fallback for records where org_id is NULL (pre-migration data).
+    """
+    return query.filter(
+        or_(
+            IntegrationConnection.org_id == auth.org_id,
+            IntegrationConnection.user_id == auth.user_id,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # Google OAuth endpoints
 # ---------------------------------------------------------------------------
 
@@ -134,14 +152,13 @@ class SyncLogResponse(BaseModel):
     summary="Get Google OAuth authorization URL",
 )
 async def google_authorize(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> AuthorizeResponse:
     """
     Return the Google OAuth2 authorization URL.  The frontend should
     redirect the user to this URL to begin the consent flow.
     """
-    user_id = current_user["user_id"]
-    url = google_auth_service.get_authorization_url(user_id)
+    url = google_auth_service.get_authorization_url(auth.user_id)
     return AuthorizeResponse(authorization_url=url)
 
 
@@ -192,14 +209,13 @@ async def google_callback(
     summary="Get Microsoft OAuth authorization URL",
 )
 async def microsoft_authorize(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> AuthorizeResponse:
     """
     Return the Microsoft OAuth2 authorization URL.  The frontend should
     redirect the user to this URL to begin the consent flow.
     """
-    user_id = current_user["user_id"]
-    url = microsoft_auth_service.get_authorization_url(user_id)
+    url = microsoft_auth_service.get_authorization_url(auth.user_id)
     return AuthorizeResponse(authorization_url=url)
 
 
@@ -248,14 +264,13 @@ async def microsoft_callback(
     summary="Get Zoom OAuth authorization URL",
 )
 async def zoom_authorize(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> AuthorizeResponse:
     """
     Return the Zoom OAuth2 authorization URL.  The frontend should
     redirect the user to this URL to begin the consent flow.
     """
-    user_id = current_user["user_id"]
-    url = zoom_auth_service.get_authorization_url(user_id)
+    url = zoom_auth_service.get_authorization_url(auth.user_id)
     return AuthorizeResponse(authorization_url=url)
 
 
@@ -304,14 +319,13 @@ async def zoom_callback(
     summary="Get Front OAuth authorization URL",
 )
 async def front_authorize(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> AuthorizeResponse:
     """
     Return the Front OAuth2 authorization URL.  The frontend should
     redirect the user to this URL to begin the consent flow.
     """
-    user_id = current_user["user_id"]
-    url = front_auth_service.get_authorization_url(user_id)
+    url = front_auth_service.get_authorization_url(auth.user_id)
     return AuthorizeResponse(authorization_url=url)
 
 
@@ -359,14 +373,12 @@ async def front_callback(
 async def front_connect_token(
     body: FrontTokenRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ConnectionResponse:
     """
     Validate a Front API token and store the connection.  This lets users
     paste their Front API token instead of going through OAuth.
     """
-    user_id = current_user["user_id"]
-
     if not body.api_token.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -375,7 +387,7 @@ async def front_connect_token(
 
     try:
         connection = await front_auth_service.handle_api_token_connection(
-            user_id=user_id,
+            user_id=auth.user_id,
             api_token=body.api_token.strip(),
             db=db,
         )
@@ -394,6 +406,11 @@ async def front_connect_token(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Could not reach Front API: {exc}",
         )
+
+    # Store org_id on the connection
+    if connection.org_id is None:
+        connection.org_id = auth.org_id
+        db.commit()
 
     return ConnectionResponse(
         id=connection.id,
@@ -420,7 +437,7 @@ async def front_connect_token(
 async def fathom_connect(
     body: FathomConnectRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> FathomConnectResponse:
     """
     Validate a Fathom API key and store the connection.
@@ -428,8 +445,6 @@ async def fathom_connect(
     If the Fathom API is reachable, auto-sync will be available.
     If not, the connection is still stored for manual import tracking.
     """
-    user_id = current_user["user_id"]
-
     if not body.api_key.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -438,7 +453,7 @@ async def fathom_connect(
 
     try:
         connection, api_available = await fathom_sync_service.handle_api_key_connection(
-            user_id=user_id,
+            user_id=auth.user_id,
             api_key=body.api_key.strip(),
             db=db,
         )
@@ -447,6 +462,11 @@ async def fathom_connect(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         )
+
+    # Store org_id on the connection
+    if connection.org_id is None:
+        connection.org_id = auth.org_id
+        db.commit()
 
     message = (
         "Fathom connected — auto-sync is available."
@@ -479,7 +499,7 @@ async def fathom_import(
     file: UploadFile = File(...),
     client_id: UUID = Query(..., description="Client to assign this transcript to"),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> Dict[str, Any]:
     """
     Import a manually uploaded Fathom JSON transcript file.
@@ -494,26 +514,14 @@ async def fathom_import(
     from app.models.document import Document
     from app.models.user import User
 
-    user_id = current_user["user_id"]
+    check_client_access(auth, client_id, db)
 
-    # Resolve user
-    owner = db.query(User).filter(User.clerk_id == user_id).first()
+    # Resolve user for uploaded_by FK
+    owner = db.query(User).filter(User.clerk_id == auth.user_id).first()
     if not owner:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
-        )
-
-    # Verify client ownership
-    client = (
-        db.query(Client)
-        .filter(Client.id == client_id, Client.owner_id == owner.id)
-        .first()
-    )
-    if not client:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Client not found or not owned by user",
         )
 
     # Read the uploaded file
@@ -624,18 +632,17 @@ async def fathom_import(
 )
 async def list_connections(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> List[ConnectionResponse]:
     """
-    Return all active integration connections for the current user.
+    Return all active integration connections for the current user's org.
     """
-    user_id = current_user["user_id"]
-    connections = (
+    query = (
         db.query(IntegrationConnection)
-        .filter(
-            IntegrationConnection.user_id == user_id,
-            IntegrationConnection.is_active == True,
-        )
+        .filter(IntegrationConnection.is_active == True)
+    )
+    connections = (
+        _connection_filter(query, auth)
         .order_by(IntegrationConnection.created_at.desc())
         .all()
     )
@@ -663,13 +670,12 @@ async def list_connections(
 async def disconnect_integration(
     connection_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> None:
     """
     Soft-delete an integration connection (sets is_active=False).
     """
-    user_id = current_user["user_id"]
-    deleted = google_auth_service.disconnect(connection_id, user_id, db)
+    deleted = google_auth_service.disconnect(connection_id, auth.user_id, db)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -726,19 +732,18 @@ async def trigger_sync(
     max_results: int = Query(50, ge=1, le=500, description="Max items to fetch"),
     since_hours: int = Query(24, ge=1, le=720, description="Fetch items from last N hours"),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> SyncLogResponse:
     """
     Trigger a manual sync for a connected account.  Automatically detects
     the provider (Google, Microsoft, Zoom, Front, or Fathom) and calls the right service.
     """
-    user_id = current_user["user_id"]
-    provider = _get_connection_provider(connection_id, user_id, db)
+    provider = _get_connection_provider(connection_id, auth.user_id, db)
 
     if provider == "fathom":
         sync_log = await fathom_sync_service.sync_calls(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             max_results=max_results,
@@ -747,7 +752,7 @@ async def trigger_sync(
     elif provider == "front":
         sync_log = await front_sync_service.sync_conversations(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             max_results=max_results,
@@ -757,7 +762,7 @@ async def trigger_sync(
         days_back = max(since_hours // 24, 1)
         sync_log = await zoom_sync_service.sync_recordings(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             days_back=days_back,
@@ -766,7 +771,7 @@ async def trigger_sync(
     elif provider == "microsoft":
         sync_log = await outlook_sync_service.sync_emails(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             max_results=max_results,
@@ -775,7 +780,7 @@ async def trigger_sync(
     else:
         sync_log = await gmail_sync_service.sync_emails(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             max_results=max_results,
@@ -794,34 +799,33 @@ async def get_sync_history(
     connection_id: UUID,
     limit: int = Query(20, ge=1, le=100, description="Max logs to return"),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> List[SyncLogResponse]:
     """
     Return recent sync logs for a connection, most recent first.
     Works for all providers (Google, Microsoft, Zoom, Front, Fathom).
     """
-    user_id = current_user["user_id"]
-    provider = _get_connection_provider(connection_id, user_id, db)
+    provider = _get_connection_provider(connection_id, auth.user_id, db)
 
     if provider == "fathom":
         logs = fathom_sync_service.get_sync_history(
-            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
+            user_id=auth.user_id, connection_id=connection_id, db=db, limit=limit,
         )
     elif provider == "front":
         logs = front_sync_service.get_sync_history(
-            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
+            user_id=auth.user_id, connection_id=connection_id, db=db, limit=limit,
         )
     elif provider == "zoom":
         logs = zoom_sync_service.get_sync_history(
-            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
+            user_id=auth.user_id, connection_id=connection_id, db=db, limit=limit,
         )
     elif provider == "microsoft":
         logs = outlook_sync_service.get_sync_history(
-            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
+            user_id=auth.user_id, connection_id=connection_id, db=db, limit=limit,
         )
     else:
         logs = gmail_sync_service.get_sync_history(
-            user_id=user_id, connection_id=connection_id, db=db, limit=limit,
+            user_id=auth.user_id, connection_id=connection_id, db=db, limit=limit,
         )
 
     return [_sync_log_response(log) for log in logs]
@@ -835,19 +839,18 @@ async def get_sync_history(
 async def trigger_deep_sync(
     connection_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> SyncLogResponse:
     """
     Perform a deep sync: fetches up to 200 items from the last 7 days.
     Automatically detects the provider and calls the right service.
     """
-    user_id = current_user["user_id"]
-    provider = _get_connection_provider(connection_id, user_id, db)
+    provider = _get_connection_provider(connection_id, auth.user_id, db)
 
     if provider == "fathom":
         sync_log = await fathom_sync_service.sync_calls(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             max_results=100,
@@ -856,7 +859,7 @@ async def trigger_deep_sync(
     elif provider == "front":
         sync_log = await front_sync_service.sync_conversations(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             max_results=200,
@@ -865,7 +868,7 @@ async def trigger_deep_sync(
     elif provider == "zoom":
         sync_log = await zoom_sync_service.sync_recordings(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             days_back=30,
@@ -874,7 +877,7 @@ async def trigger_deep_sync(
     elif provider == "microsoft":
         sync_log = await outlook_sync_service.sync_emails(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             max_results=200,
@@ -883,7 +886,7 @@ async def trigger_deep_sync(
     else:
         sync_log = await gmail_sync_service.sync_emails(
             connection_id=connection_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             db=db,
             sync_type="manual",
             max_results=200,
@@ -904,13 +907,12 @@ async def trigger_deep_sync(
 )
 async def list_routing_rules(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> List[RoutingRuleResponse]:
     """
     Return all email routing rules for the current user, with client names.
     """
-    user_id = current_user["user_id"]
-    rules = email_router.get_routing_rules(user_id, db)
+    rules = email_router.get_routing_rules(auth.user_id, db)
     return [RoutingRuleResponse(**r) for r in rules]
 
 
@@ -923,15 +925,17 @@ async def list_routing_rules(
 async def create_routing_rule(
     body: RoutingRuleCreateRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> RoutingRuleResponse:
     """
     Create a new email routing rule that maps an email address to a client.
     """
-    user_id = current_user["user_id"]
+    # Verify user has access to the target client
+    check_client_access(auth, body.client_id, db)
+
     try:
         rule = email_router.create_routing_rule(
-            user_id=user_id,
+            user_id=auth.user_id,
             email_address=body.email_address,
             client_id=body.client_id,
             match_type=body.match_type,
@@ -968,13 +972,12 @@ async def create_routing_rule(
 async def delete_routing_rule(
     rule_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> None:
     """
     Delete an email routing rule (ownership-scoped).
     """
-    user_id = current_user["user_id"]
-    deleted = email_router.delete_routing_rule(rule_id, user_id, db)
+    deleted = email_router.delete_routing_rule(rule_id, auth.user_id, db)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -989,15 +992,14 @@ async def delete_routing_rule(
 )
 async def auto_generate_routing_rules(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> List[RoutingRuleResponse]:
     """
     Scan all clients that have an email address and create 'from' routing
     rules for any that don't already have one.  Returns the newly created
     rules.
     """
-    user_id = current_user["user_id"]
-    created_rules = email_router.auto_create_routing_rules(user_id, db)
+    created_rules = email_router.auto_create_routing_rules(auth.user_id, db)
 
     # Re-query with client names for the response
     from app.models.client import Client
@@ -1031,7 +1033,7 @@ async def auto_generate_routing_rules(
 )
 async def list_zoom_rules(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> List[ZoomRuleResponse]:
     """
     Return all Zoom meeting routing rules for the current user, with client names.
@@ -1039,11 +1041,10 @@ async def list_zoom_rules(
     from app.models.client import Client
     from app.models.zoom_meeting_rule import ZoomMeetingRule
 
-    user_id = current_user["user_id"]
     rules = (
         db.query(ZoomMeetingRule, Client.name)
         .join(Client, ZoomMeetingRule.client_id == Client.id)
-        .filter(ZoomMeetingRule.user_id == user_id)
+        .filter(ZoomMeetingRule.user_id == auth.user_id)
         .order_by(ZoomMeetingRule.created_at.desc())
         .all()
     )
@@ -1072,16 +1073,13 @@ async def list_zoom_rules(
 async def create_zoom_rule(
     body: ZoomRuleCreateRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ZoomRuleResponse:
     """
     Create a new Zoom meeting routing rule that maps a meeting attribute to a client.
     """
     from app.models.client import Client
-    from app.models.user import User
     from app.models.zoom_meeting_rule import ZoomMeetingRule
-
-    user_id = current_user["user_id"]
 
     # Validate match_field
     valid_fields = ("topic_contains", "participant_email", "meeting_id_prefix")
@@ -1097,27 +1095,15 @@ async def create_zoom_rule(
             detail="match_value must not be empty",
         )
 
-    # Verify client ownership
-    owner = db.query(User).filter(User.clerk_id == user_id).first()
-    if not owner:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    client = (
-        db.query(Client)
-        .filter(Client.id == body.client_id, Client.owner_id == owner.id)
-        .first()
-    )
-    if not client:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Client not found or not owned by user",
-        )
+    # Verify client access
+    check_client_access(auth, body.client_id, db)
+    client = db.query(Client).filter(Client.id == body.client_id).first()
 
     # Check for duplicate
     existing = (
         db.query(ZoomMeetingRule)
         .filter(
-            ZoomMeetingRule.user_id == user_id,
+            ZoomMeetingRule.user_id == auth.user_id,
             ZoomMeetingRule.match_value == body.match_value.strip(),
             ZoomMeetingRule.match_field == body.match_field,
         )
@@ -1130,7 +1116,7 @@ async def create_zoom_rule(
         )
 
     rule = ZoomMeetingRule(
-        user_id=user_id,
+        user_id=auth.user_id,
         match_field=body.match_field,
         match_value=body.match_value.strip(),
         client_id=body.client_id,
@@ -1159,19 +1145,18 @@ async def create_zoom_rule(
 async def delete_zoom_rule(
     rule_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> None:
     """
     Delete a Zoom meeting routing rule (ownership-scoped).
     """
     from app.models.zoom_meeting_rule import ZoomMeetingRule
 
-    user_id = current_user["user_id"]
     rule = (
         db.query(ZoomMeetingRule)
         .filter(
             ZoomMeetingRule.id == rule_id,
-            ZoomMeetingRule.user_id == user_id,
+            ZoomMeetingRule.user_id == auth.user_id,
         )
         .first()
     )
@@ -1192,25 +1177,18 @@ async def delete_zoom_rule(
 )
 async def auto_generate_zoom_rules(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> List[ZoomRuleResponse]:
     """
-    For each client, create a topic_contains rule using the client's name
+    For each client in the org, create a topic_contains rule using the client's name
     (if one doesn't already exist).  Returns the newly created rules.
     """
     from app.models.client import Client
-    from app.models.user import User
     from app.models.zoom_meeting_rule import ZoomMeetingRule
-
-    user_id = current_user["user_id"]
-
-    owner = db.query(User).filter(User.clerk_id == user_id).first()
-    if not owner:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     clients = (
         db.query(Client)
-        .filter(Client.owner_id == owner.id)
+        .filter(Client.org_id == auth.org_id)
         .all()
     )
 
@@ -1218,7 +1196,7 @@ async def auto_generate_zoom_rules(
     existing_rules = (
         db.query(ZoomMeetingRule)
         .filter(
-            ZoomMeetingRule.user_id == user_id,
+            ZoomMeetingRule.user_id == auth.user_id,
             ZoomMeetingRule.match_field == "topic_contains",
         )
         .all()
@@ -1234,7 +1212,7 @@ async def auto_generate_zoom_rules(
             continue
 
         rule = ZoomMeetingRule(
-            user_id=user_id,
+            user_id=auth.user_id,
             match_field="topic_contains",
             match_value=client.name.strip(),
             client_id=client.id,
@@ -1276,7 +1254,7 @@ async def auto_generate_zoom_rules(
 )
 async def list_unmatched_recordings(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> List[UnmatchedRecordingResponse]:
     """
     Return Zoom documents that don't have a client assignment.
@@ -1290,22 +1268,15 @@ async def list_unmatched_recordings(
     may need re-assignment.  In practice this returns recently synced Zoom
     documents so the user can review and reassign if needed.
     """
-    from app.models.user import User
-
-    user_id = current_user["user_id"]
-    owner = db.query(User).filter(User.clerk_id == user_id).first()
-    if not owner:
-        return []
-
-    # Return Zoom documents uploaded by this user, most recent first
-    # The frontend can use this to review and reassign
     from app.models.document import Document
 
+    # Return Zoom documents for clients in this org, most recent first
     docs = (
         db.query(Document)
+        .join(Client, Document.client_id == Client.id)
         .filter(
             Document.source == "zoom",
-            Document.uploaded_by == owner.id,
+            Client.org_id == auth.org_id,
         )
         .order_by(Document.upload_date.desc())
         .limit(50)
@@ -1333,7 +1304,7 @@ async def list_unmatched_recordings(
 async def assign_recording(
     body: AssignRecordingRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ZoomRuleResponse:
     """
     Reassign a Zoom document to a different client.  Optionally creates a
@@ -1341,21 +1312,20 @@ async def assign_recording(
     """
     from app.models.client import Client
     from app.models.document import Document
-    from app.models.user import User
     from app.models.zoom_meeting_rule import ZoomMeetingRule
 
-    user_id = current_user["user_id"]
-    owner = db.query(User).filter(User.clerk_id == user_id).first()
-    if not owner:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # Verify target client access
+    check_client_access(auth, body.client_id, db)
+    client = db.query(Client).filter(Client.id == body.client_id).first()
 
-    # Verify document exists and is owned by user
+    # Verify document exists and belongs to the org
     doc = (
         db.query(Document)
+        .join(Client, Document.client_id == Client.id)
         .filter(
             Document.id == body.document_id,
-            Document.uploaded_by == owner.id,
             Document.source == "zoom",
+            Client.org_id == auth.org_id,
         )
         .first()
     )
@@ -1363,18 +1333,6 @@ async def assign_recording(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Zoom document not found",
-        )
-
-    # Verify client ownership
-    client = (
-        db.query(Client)
-        .filter(Client.id == body.client_id, Client.owner_id == owner.id)
-        .first()
-    )
-    if not client:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Client not found or not owned by user",
         )
 
     # Reassign the document to the new client
@@ -1402,7 +1360,7 @@ async def assign_recording(
             existing = (
                 db.query(ZoomMeetingRule)
                 .filter(
-                    ZoomMeetingRule.user_id == user_id,
+                    ZoomMeetingRule.user_id == auth.user_id,
                     ZoomMeetingRule.match_value == topic,
                     ZoomMeetingRule.match_field == body.rule_match_field,
                 )
@@ -1410,7 +1368,7 @@ async def assign_recording(
             )
             if not existing:
                 rule = ZoomMeetingRule(
-                    user_id=user_id,
+                    user_id=auth.user_id,
                     match_field=body.rule_match_field,
                     match_value=topic,
                     client_id=body.client_id,
@@ -1424,7 +1382,7 @@ async def assign_recording(
         # (either create_rule=False or rule already existed)
         return ZoomRuleResponse(
             id=doc.id,  # use document id as placeholder
-            user_id=user_id,
+            user_id=auth.user_id,
             match_field=body.rule_match_field,
             match_value="(document reassigned, no new rule)",
             client_id=body.client_id,

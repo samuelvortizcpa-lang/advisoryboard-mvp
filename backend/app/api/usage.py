@@ -17,15 +17,14 @@ import csv
 import io
 import math
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import cast, Date, func
+from sqlalchemy import cast, Date, func, or_
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.client import Client
 from app.models.token_usage import TokenUsage
@@ -36,7 +35,7 @@ from app.schemas.usage import (
     UsageHistoryResponse,
     UsageRecordResponse,
 )
-from app.services import user_service
+from app.services.auth_context import AuthContext, get_auth
 from app.services.subscription_service import (
     TIER_DEFAULTS,
     check_client_limit,
@@ -52,10 +51,20 @@ router = APIRouter()
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_clerk_id(db: Session, current_user: Dict[str, Any]) -> str:
-    """Resolve Clerk user ID from the JWT-authenticated user."""
-    user = user_service.get_or_create_user(db, current_user)
-    return user.clerk_id
+def _usage_filter(query, auth: AuthContext):
+    """
+    Scope token usage queries to the org.  Admins see all org usage;
+    non-admins see only their own.  Includes backward-compat fallback
+    for records where org_id is NULL (pre-migration data).
+    """
+    if auth.org_role == "admin":
+        return query.filter(
+            or_(
+                TokenUsage.org_id == auth.org_id,
+                TokenUsage.user_id == auth.user_id,
+            )
+        )
+    return query.filter(TokenUsage.user_id == auth.user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -70,10 +79,9 @@ def _get_clerk_id(db: Session, current_user: Dict[str, Any]) -> str:
 async def usage_summary(
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> dict:
-    user = user_service.get_or_create_user(db, current_user)
-    return get_usage_summary(db, user_id=user.clerk_id, days=days)
+    return get_usage_summary(db, user_id=auth.user_id, days=days)
 
 
 @router.get(
@@ -84,10 +92,9 @@ async def usage_by_client_endpoint(
     client_id: UUID,
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> dict:
-    user = user_service.get_or_create_user(db, current_user)
-    return get_usage_by_client(db, user_id=user.clerk_id, client_id=client_id, days=days)
+    return get_usage_by_client(db, user_id=auth.user_id, client_id=client_id, days=days)
 
 
 @router.get(
@@ -96,15 +103,14 @@ async def usage_by_client_endpoint(
 )
 async def subscription_info(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> dict:
-    user = user_service.get_or_create_user(db, current_user)
-    sub = get_or_create_subscription(db, user.clerk_id)
+    sub = get_or_create_subscription(db, auth.user_id)
     remaining = max(0, sub.strategic_queries_limit - sub.strategic_queries_used)
 
     tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
-    client_info = check_client_limit(db, user.clerk_id, user.id)
-    doc_info = check_document_limit(db, user.clerk_id, user.id)
+    client_info = check_client_limit(db, auth.user_id, org_id=auth.org_id)
+    doc_info = check_document_limit(db, auth.user_id, org_id=auth.org_id)
 
     return {
         "tier": sub.tier,
@@ -139,10 +145,8 @@ async def usage_history(
     endpoint: Optional[str] = Query(None),
     client_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> UsageHistoryResponse:
-    clerk_id = _get_clerk_id(db, current_user)
-
     query = (
         db.query(
             TokenUsage.id,
@@ -157,8 +161,8 @@ async def usage_history(
             Client.name.label("client_name"),
         )
         .outerjoin(Client, TokenUsage.client_id == Client.id)
-        .filter(TokenUsage.user_id == clerk_id)
     )
+    query = _usage_filter(query, auth)
 
     if start_date:
         query = query.filter(TokenUsage.created_at >= datetime.fromisoformat(start_date))
@@ -216,14 +220,12 @@ async def usage_history(
 async def usage_daily(
     days: int = Query(30, ge=1, le=90),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> list[DailyUsageResponse]:
-    clerk_id = _get_clerk_id(db, current_user)
-
     since = datetime.now(timezone.utc) - timedelta(days=days)
     day_col = cast(TokenUsage.created_at, Date).label("day")
 
-    rows = (
+    query = (
         db.query(
             day_col,
             TokenUsage.model,
@@ -231,10 +233,10 @@ async def usage_daily(
             func.coalesce(func.sum(TokenUsage.total_tokens), 0).label("tokens"),
             func.coalesce(func.sum(TokenUsage.estimated_cost_usd), 0).label("cost"),
         )
-        .filter(TokenUsage.user_id == clerk_id, TokenUsage.created_at >= since)
-        .group_by(day_col, TokenUsage.model)
-        .all()
+        .filter(TokenUsage.created_at >= since)
     )
+    query = _usage_filter(query, auth)
+    rows = query.group_by(day_col, TokenUsage.model).all()
 
     # Build lookup: date_str -> model -> stats
     daily: dict[str, dict[str, dict]] = {}
@@ -287,13 +289,11 @@ async def usage_daily(
 async def usage_by_client_breakdown(
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> list[ClientUsageResponse]:
-    clerk_id = _get_clerk_id(db, current_user)
-
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
-    rows = (
+    query = (
         db.query(
             TokenUsage.client_id,
             Client.name.label("client_name"),
@@ -304,10 +304,14 @@ async def usage_by_client_breakdown(
         )
         .join(Client, TokenUsage.client_id == Client.id)
         .filter(
-            TokenUsage.user_id == clerk_id,
             TokenUsage.created_at >= since,
             TokenUsage.client_id.isnot(None),
         )
+    )
+    query = _usage_filter(query, auth)
+
+    rows = (
+        query
         .group_by(TokenUsage.client_id, Client.name)
         .order_by(func.sum(TokenUsage.estimated_cost_usd).desc())
         .all()
@@ -334,10 +338,8 @@ async def usage_export(
     start_date: Optional[str] = Query(None, description="ISO date string (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="ISO date string (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> StreamingResponse:
-    clerk_id = _get_clerk_id(db, current_user)
-
     query = (
         db.query(
             TokenUsage.created_at,
@@ -350,8 +352,8 @@ async def usage_export(
             Client.name.label("client_name"),
         )
         .outerjoin(Client, TokenUsage.client_id == Client.id)
-        .filter(TokenUsage.user_id == clerk_id)
     )
+    query = _usage_filter(query, auth)
 
     if start_date:
         query = query.filter(TokenUsage.created_at >= datetime.fromisoformat(start_date))

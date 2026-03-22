@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -33,6 +33,7 @@ from app.models.document import Document
 from app.models.token_usage import TokenUsage
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
+from app.services.auth_context import AuthContext, get_auth, require_admin
 from app.services.subscription_service import TIER_DEFAULTS
 
 router = APIRouter()

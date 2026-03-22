@@ -1,7 +1,7 @@
 """
 IRC Section 7216 consent tracking API endpoints.
 
-Routes (all require Clerk JWT auth + client ownership):
+Routes (all require Clerk JWT auth + client access):
   GET  /api/clients/{client_id}/consent               — current consent status
   POST /api/clients/{client_id}/consent               — create/update consent
   POST /api/clients/{client_id}/consent/generate-form  — generate PDF form
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,10 +20,9 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.client import Client
-from app.services import user_service
+from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.consent_service import (
     create_or_update_consent,
     generate_consent_form_pdf,
@@ -86,24 +85,6 @@ class GenerateFormJsonResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _verify_client_ownership(db: Session, client_id: UUID, owner_id: UUID) -> Client:
-    client = (
-        db.query(Client)
-        .filter(Client.id == client_id, Client.owner_id == owner_id)
-        .first()
-    )
-    if client is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
-        )
-    return client
-
-
-# ---------------------------------------------------------------------------
 # GET /api/clients/{client_id}/consent
 # ---------------------------------------------------------------------------
 
@@ -116,12 +97,15 @@ def _verify_client_ownership(db: Session, client_id: UUID, owner_id: UUID) -> Cl
 async def get_client_consent(
     client_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ConsentStatusResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    client = _verify_client_ownership(db, client_id, user.id)
+    check_client_access(auth, client_id, db)
 
-    info = get_consent_status(client_id, user.clerk_id, db)
+    client = db.query(Client).filter(Client.id == client_id, Client.org_id == auth.org_id).first()
+    if client is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+
+    info = get_consent_status(client_id, auth.user_id, db)
 
     latest_consent = None
     if info["consent_record"]:
@@ -151,14 +135,13 @@ async def create_consent(
     client_id: UUID,
     body: ConsentCreateRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ConsentResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _verify_client_ownership(db, client_id, user.id)
+    check_client_access(auth, client_id, db)
 
     record = create_or_update_consent(
         client_id,
-        user.clerk_id,
+        auth.user_id,
         db,
         consent_type=body.consent_type,
         status=body.status,
@@ -187,13 +170,16 @@ async def generate_form(
     client_id: UUID,
     format: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ):
-    user = user_service.get_or_create_user(db, current_user)
-    client = _verify_client_ownership(db, client_id, user.id)
+    check_client_access(auth, client_id, db)
+
+    client = db.query(Client).filter(Client.id == client_id, Client.org_id == auth.org_id).first()
+    if client is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
 
     pdf_bytes, storage_url = generate_consent_form_pdf(
-        client_id, user.clerk_id, db,
+        client_id, auth.user_id, db,
     )
 
     if format == "json":
@@ -225,10 +211,9 @@ async def generate_form(
 async def consent_history(
     client_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> List[ConsentResponse]:
-    user = user_service.get_or_create_user(db, current_user)
-    _verify_client_ownership(db, client_id, user.id)
+    check_client_access(auth, client_id, db)
 
     from app.models.client_consent import ClientConsent
 
@@ -236,7 +221,7 @@ async def consent_history(
         db.query(ClientConsent)
         .filter(
             ClientConsent.client_id == client_id,
-            ClientConsent.user_id == user.clerk_id,
+            ClientConsent.user_id == auth.user_id,
         )
         .order_by(ClientConsent.created_at.desc())
         .all()
@@ -272,14 +257,13 @@ async def send_for_signature(
     client_id: UUID,
     body: SendForSignatureRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> SendForSignatureResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _verify_client_ownership(db, client_id, user.id)
+    check_client_access(auth, client_id, db)
 
     consent = send_consent_for_signature(
         client_id=client_id,
-        user_id=user.clerk_id,
+        user_id=auth.user_id,
         db=db,
         to_email=body.taxpayer_email,
         preparer_name=body.preparer_name,

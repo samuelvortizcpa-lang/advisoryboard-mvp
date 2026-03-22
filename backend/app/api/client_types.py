@@ -1,10 +1,8 @@
-from typing import Dict, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.client_type import ClientType
 from app.schemas.client_type import (
@@ -13,6 +11,7 @@ from app.schemas.client_type import (
     ClientTypeResponse,
     ClientTypeUpdate,
 )
+from app.services.auth_context import AuthContext, get_auth, require_admin
 
 router = APIRouter()
 
@@ -20,7 +19,7 @@ router = APIRouter()
 @router.get("/client-types", response_model=ClientTypeListResponse)
 async def list_client_types(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ClientTypeListResponse:
     types = db.query(ClientType).order_by(ClientType.name).all()
     return ClientTypeListResponse(types=types, total=len(types))
@@ -34,8 +33,9 @@ async def list_client_types(
 async def create_client_type(
     data: ClientTypeCreate,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ClientTypeResponse:
+    require_admin(auth)
     existing = db.query(ClientType).filter(ClientType.name == data.name).first()
     if existing:
         raise HTTPException(
@@ -54,8 +54,9 @@ async def update_client_type(
     client_type_id: UUID,
     data: ClientTypeUpdate,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ClientTypeResponse:
+    require_admin(auth)
     ct = db.query(ClientType).filter(ClientType.id == client_type_id).first()
     if ct is None:
         raise HTTPException(
@@ -74,8 +75,9 @@ async def update_client_type(
 async def delete_client_type(
     client_type_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> None:
+    require_admin(auth)
     ct = db.query(ClientType).filter(ClientType.id == client_type_id).first()
     if ct is None:
         raise HTTPException(
