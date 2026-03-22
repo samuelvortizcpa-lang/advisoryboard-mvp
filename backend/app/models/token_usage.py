@@ -28,6 +28,13 @@ class TokenUsage(Base):
     # Clerk user ID
     user_id: Mapped[str] = mapped_column(String(255), nullable=False)
 
+    # Organization context for aggregating usage at the org level
+    org_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Which client context (nullable — some calls like document classification
     # happen in background tasks without a clear user session)
     client_id: Mapped[Optional[uuid.UUID]] = mapped_column(

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.client_type import ClientType
     from app.models.document import Document
     from app.models.interaction import Interaction
+    from app.models.organization import Organization
     from app.models.user import User
 
 
@@ -40,6 +41,19 @@ class Client(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+
+    # Organization this client belongs to (nullable during migration)
+    org_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    # Clerk user ID of who created this client
+    created_by: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
     )
 
     # Contact / business info
@@ -98,6 +112,10 @@ class Client(Base):
         "User",
         back_populates="clients",
         foreign_keys=[owner_id],
+    )
+    organization: Mapped[Optional["Organization"]] = relationship(
+        "Organization",
+        foreign_keys=[org_id],
     )
     documents: Mapped[List["Document"]] = relationship(
         "Document",

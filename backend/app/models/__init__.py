@@ -20,6 +20,9 @@ from app.models.token_usage import TokenUsage
 from app.models.user_subscription import UserSubscription
 from app.models.zoom_meeting_rule import ZoomMeetingRule
 from app.models.client_consent import ClientConsent
+from app.models.organization import Organization
+from app.models.organization_member import OrganizationMember
+from app.models.client_access import ClientAccess
 
 __all__ = [
     "User",
@@ -43,4 +46,7 @@ __all__ = [
     "UserSubscription",
     "ZoomMeetingRule",
     "ClientConsent",
+    "Organization",
+    "OrganizationMember",
+    "ClientAccess",
 ]
