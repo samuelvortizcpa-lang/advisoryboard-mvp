@@ -10,7 +10,8 @@ Upload flow:
 Storage:
   Files are stored in Supabase Storage ("documents" bucket).
   Document.file_path holds the storage path:
-      {owner_id}/{client_id}/{uuid}_{filename}
+      {org_id}/{client_id}/{uuid}_{filename}
+  Legacy paths used {owner_id} instead of {org_id}.
 """
 
 import uuid
@@ -144,6 +145,7 @@ async def save_document(
         filename=original_name,
         file_bytes=content,
         content_type=content_type,
+        org_id=str(org_id) if org_id else None,
     )
 
     # --- insert DB record (roll back file on failure) ---

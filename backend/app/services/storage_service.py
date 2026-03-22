@@ -2,6 +2,9 @@
 Storage service: Supabase Storage backend for file uploads/downloads.
 
 All files are stored in the "documents" bucket with the key pattern:
+    {org_id}/{client_id}/{file_id}_{filename}
+
+Legacy files used:
     {user_id}/{client_id}/{file_id}_{filename}
 
 The value stored in Document.file_path is the storage path string
@@ -41,13 +44,19 @@ def upload_file(
     filename: str,
     file_bytes: bytes,
     content_type: str,
+    *,
+    org_id: str | None = None,
 ) -> str:
     """
     Upload file bytes to Supabase Storage.
 
+    When *org_id* is provided the path uses the org scope; otherwise falls
+    back to the legacy user_id-scoped path for backward compat.
+
     Returns the storage path string.
     """
-    storage_path = f"{user_id}/{client_id}/{file_id}_{filename}"
+    scope_id = org_id if org_id else user_id
+    storage_path = f"{scope_id}/{client_id}/{file_id}_{filename}"
     try:
         client = _get_client()
         client.storage.from_(BUCKET).upload(
@@ -62,9 +71,14 @@ def upload_file(
         raise
 
 
-def download_file(storage_path: str) -> bytes:
+def download_file(storage_path: str, *, legacy_path: str | None = None) -> bytes:
     """
     Download file bytes from Supabase Storage.
+
+    If *legacy_path* is provided and the primary *storage_path* is not found,
+    a second attempt is made against the legacy path.  This supports the
+    transition from user-scoped to org-scoped paths while existing files are
+    being migrated.
 
     Returns the raw file bytes.
     """
@@ -74,6 +88,17 @@ def download_file(storage_path: str) -> bytes:
         logger.info("Downloaded %d bytes from %s/%s", len(data), BUCKET, storage_path)
         return data
     except Exception:
+        if legacy_path and legacy_path != storage_path:
+            try:
+                client = _get_client()
+                data = client.storage.from_(BUCKET).download(legacy_path)
+                logger.info(
+                    "Downloaded %d bytes from legacy path %s/%s",
+                    len(data), BUCKET, legacy_path,
+                )
+                return data
+            except Exception:
+                pass
         logger.exception("Failed to download file from %s/%s", BUCKET, storage_path)
         raise
 
