@@ -88,9 +88,9 @@ def send_consent_signed_notification(
             f"signed the IRC Section 7216 consent form.</p>"
             f"<p>Signed by: {signer_name}</p>"
             f"<p>You can view the signed consent record and PDF in your "
-            f"<a href=\"{settings.frontend_url}/dashboard/clients\">AdvisoryBoard dashboard</a>.</p>"
+            f"<a href=\"{settings.frontend_url}/dashboard/clients\">Callwen dashboard</a>.</p>"
             f"<p style=\"color:#888;font-size:12px;\">This notification was sent by "
-            f"AdvisoryBoard (myadvisoryboard.space).</p>"
+            f"Callwen (callwen.com).</p>"
         ),
     })
 
@@ -133,7 +133,7 @@ def _build_consent_email_html(
   </p>
   <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
     As your tax professional, {preparer_name} uses a secure document management
-    platform called AdvisoryBoard to better serve you. Federal law (IRC Section
+    platform called Callwen to better serve you. Federal law (IRC Section
     7216) requires your written consent before your tax return information can be
     used within this platform for services such as document analysis and meeting
     preparation.
@@ -161,8 +161,8 @@ def _build_consent_email_html(
 <!-- Footer -->
 <tr><td style="padding:24px 40px;border-top:1px solid #e5e7eb;background:#f9fafb;">
   <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.5;">
-    This consent request was sent by {preparer_name} via AdvisoryBoard
-    (myadvisoryboard.space). If you did not expect this email, you may safely
+    This consent request was sent by {preparer_name} via Callwen
+    (callwen.com). If you did not expect this email, you may safely
     ignore it.
   </p>
 </td></tr>

@@ -47,7 +47,7 @@ _settings = get_settings()
 
 # Create FastAPI app
 app = FastAPI(
-    title="AdvisoryBoard API",
+    title="Callwen API",
     description="Client context management for CPA firms",
     version="1.0.0"
 )
@@ -100,7 +100,7 @@ async def _shutdown() -> None:
 
 @app.get("/")
 async def root():
-    return {"status": "AdvisoryBoard API is running"}
+    return {"status": "Callwen API is running"}
 
 
 @app.get("/health")

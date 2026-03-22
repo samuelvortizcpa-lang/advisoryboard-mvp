@@ -47,7 +47,7 @@ def export_chat_as_txt(client_id: UUID, client_name: str, db: Session) -> str:
 
     lines = [
         "==========================================",
-        "AdvisoryBoard Chat History",
+        "Callwen Chat History",
         f"Client: {client_name}",
         f"Export Date: {datetime.now(timezone.utc).strftime('%B %d, %Y')}",
         f"Total Messages: {len(messages)}",
@@ -155,7 +155,7 @@ def export_chat_as_pdf(client_id: UUID, client_name: str, db: Session) -> bytes:
     story = []
 
     # Header
-    story.append(Paragraph("AdvisoryBoard Chat History", title_style))
+    story.append(Paragraph("Callwen Chat History", title_style))
     story.append(Paragraph(f"Client: {client_name}", meta_style))
     story.append(
         Paragraph(

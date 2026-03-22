@@ -35,7 +35,7 @@ class SigningFormResponse(BaseModel):
     client_name: Optional[str] = None
     preparer_name: Optional[str] = None
     preparer_firm: Optional[str] = None
-    consent_purpose: str = "Use of tax return information within AdvisoryBoard platform"
+    consent_purpose: str = "Use of tax return information within Callwen platform"
     expired: bool = False
     already_signed: bool = False
 

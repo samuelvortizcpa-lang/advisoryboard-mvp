@@ -2,7 +2,7 @@
 IRC Section 7216 consent tracking service.
 
 Manages consent records for taxpayer authorization to disclose/use tax return
-information through the AdvisoryBoard platform.
+information through the Callwen platform.
 """
 
 from __future__ import annotations
@@ -386,7 +386,7 @@ def generate_consent_form_pdf(
     elements.append(Paragraph(
         "You are not required to complete this form to engage our tax return "
         "preparation services. If you do not sign this consent form, we will "
-        "not disclose your tax return information to AdvisoryBoard Platform "
+        "not disclose your tax return information to Callwen Platform"
         "for the purposes described below.",
         body_style,
     ))
@@ -418,7 +418,7 @@ def generate_consent_form_pdf(
     elements.append(Paragraph("PURPOSE OF DISCLOSURE AND USE", heading_style))
     elements.append(Paragraph(
         "To disclose and use your tax return information within the "
-        "AdvisoryBoard document intelligence platform for the purposes of: "
+        "Callwen document intelligence platform for the purposes of:"
         "AI-powered document analysis, automated action item extraction, "
         "client brief generation, and question-answering with source "
         "citations. Your tax return information will be processed by AI "
@@ -430,7 +430,7 @@ def generate_consent_form_pdf(
     # Recipient
     elements.append(Paragraph("RECIPIENT", heading_style))
     elements.append(Paragraph(
-        "AdvisoryBoard (myadvisoryboard.space), a cloud-based document "
+        "Callwen (callwen.com), a cloud-based document "
         "intelligence platform.",
         body_style,
     ))
@@ -820,7 +820,7 @@ def generate_signed_consent_pdf(
     elements.append(Paragraph(
         "You are not required to complete this form to engage our tax return "
         "preparation services. If you do not sign this consent form, we will "
-        "not disclose your tax return information to AdvisoryBoard Platform "
+        "not disclose your tax return information to Callwen Platform"
         "for the purposes described below.",
         body_style,
     ))
@@ -850,7 +850,7 @@ def generate_signed_consent_pdf(
     elements.append(Paragraph("PURPOSE OF DISCLOSURE AND USE", heading_style))
     elements.append(Paragraph(
         "To disclose and use your tax return information within the "
-        "AdvisoryBoard document intelligence platform for the purposes of: "
+        "Callwen document intelligence platform for the purposes of:"
         "AI-powered document analysis, automated action item extraction, "
         "client brief generation, and question-answering with source "
         "citations. Your tax return information will be processed by AI "
@@ -862,7 +862,7 @@ def generate_signed_consent_pdf(
     # Recipient
     elements.append(Paragraph("RECIPIENT", heading_style))
     elements.append(Paragraph(
-        "AdvisoryBoard (myadvisoryboard.space), a cloud-based document "
+        "Callwen (callwen.com), a cloud-based document "
         "intelligence platform.",
         body_style,
     ))
@@ -889,7 +889,7 @@ def generate_signed_consent_pdf(
     elements.append(Spacer(1, 12))
 
     elements.append(Paragraph(
-        "This document was electronically signed via AdvisoryBoard's secure "
+        "This document was electronically signed via Callwen's secure"
         "consent platform. Electronic signatures are valid for IRC Section "
         "7216 consent per Treasury Regulation 301.7216-3(a).",
         small_style,
