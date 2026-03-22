@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.models.client import Client
 from app.models.document import Document
 from app.models.organization import Organization
+from app.models.organization_member import OrganizationMember
 from app.models.token_usage import TokenUsage
 from app.models.user_subscription import UserSubscription
 
@@ -37,6 +38,7 @@ TIER_DEFAULTS: dict[str, dict] = {
         "max_clients": 5,
         "max_documents": 10,
         "max_members": 1,
+        "base_seats": 1,
     },
     "starter": {
         "strategic_queries_limit": 0,
@@ -45,6 +47,7 @@ TIER_DEFAULTS: dict[str, dict] = {
         "max_clients": 25,
         "max_documents": 500,
         "max_members": 1,
+        "base_seats": 1,
     },
     "professional": {
         "strategic_queries_limit": 100,
@@ -53,6 +56,7 @@ TIER_DEFAULTS: dict[str, dict] = {
         "max_clients": 100,
         "max_documents": 5000,
         "max_members": 3,
+        "base_seats": 1,
     },
     "firm": {
         "strategic_queries_limit": 500,
@@ -61,6 +65,9 @@ TIER_DEFAULTS: dict[str, dict] = {
         "max_clients": None,
         "max_documents": None,
         "max_members": 15,
+        "base_seats": 3,
+        "addon_seat_price_monthly": 79,
+        "addon_seat_price_annual": 63,
     },
 }
 
@@ -323,3 +330,109 @@ def increment_usage(db: Session, user_id: str, query_type: str, *, org_id: UUID 
             db.rollback()
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Seat management (hybrid Firm pricing)
+# ---------------------------------------------------------------------------
+
+
+def get_seat_info(org_id: UUID, db: Session) -> dict:
+    """
+    Return seat allocation details for an organization.
+
+    For the Firm tier, base_seats=3 are included in the $349/mo base price.
+    Additional seats are tracked in user_subscriptions.addon_seats and billed
+    at $79/mo each.  Starter/Professional have base_seats=1 with no add-on
+    seat mechanism.
+
+    Returns::
+
+        {
+            "included": int,        # seats included in tier base price
+            "addon_purchased": int,  # extra seats purchased (addon_seats column)
+            "total_allowed": int,    # included + addon_purchased
+            "current_used": int,     # active organization_members count
+            "can_add": bool,         # whether another member can be invited
+        }
+    """
+    # Find the org's subscription (via any member — the sub is per-org)
+    sub = (
+        db.query(UserSubscription)
+        .filter(UserSubscription.org_id == org_id)
+        .first()
+    )
+
+    if sub is None:
+        # No subscription → fall back to free tier defaults
+        tier_config = TIER_DEFAULTS["free"]
+        addon_purchased = 0
+    else:
+        tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+        addon_purchased = sub.addon_seats or 0
+
+    included = tier_config.get("base_seats", 1)
+    total_allowed = included + addon_purchased
+
+    current_used = (
+        db.query(func.count(OrganizationMember.id))
+        .filter(
+            OrganizationMember.org_id == org_id,
+            OrganizationMember.is_active == True,  # noqa: E712
+        )
+        .scalar()
+    ) or 0
+
+    return {
+        "included": included,
+        "addon_purchased": addon_purchased,
+        "total_allowed": total_allowed,
+        "current_used": current_used,
+        "can_add": current_used < total_allowed,
+    }
+
+
+def check_seat_limit(org_id: UUID, db: Session) -> dict:
+    """
+    Check whether another member can be added to the organization.
+
+    Used by the org member invite endpoint to block invites when at capacity.
+
+    Returns::
+
+        {
+            "allowed": bool,
+            "current": int,
+            "limit": int,
+            "message": str,
+        }
+    """
+    info = get_seat_info(org_id, db)
+
+    if info["can_add"]:
+        return {
+            "allowed": True,
+            "current": info["current_used"],
+            "limit": info["total_allowed"],
+            "message": "Seat available.",
+        }
+
+    # At capacity — build a helpful message
+    if info["addon_purchased"] > 0 or info["included"] > 1:
+        msg = (
+            f"All {info['total_allowed']} seats are in use "
+            f"({info['included']} included + {info['addon_purchased']} add-on). "
+            f"Purchase additional seats to invite more members."
+        )
+    else:
+        msg = (
+            f"Your plan includes {info['included']} seat. "
+            f"Upgrade your plan to invite team members."
+        )
+
+    return {
+        "allowed": False,
+        "current": info["current_used"],
+        "limit": info["total_allowed"],
+        "message": msg,
+    }

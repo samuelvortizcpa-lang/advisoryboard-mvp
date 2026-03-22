@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     stripe_price_professional_annual: str = ""
     stripe_price_firm_annual: str = ""
 
+    # Firm hybrid pricing (base + add-on seats)
+    stripe_price_firm_hybrid_monthly: str = ""
+    stripe_price_firm_hybrid_annual: str = ""
+    stripe_price_addon_seat_monthly: str = ""
+    stripe_price_addon_seat_annual: str = ""
+
     # ── Slack ──────────────────────────────────────────────────────────────
     slack_webhook_url: str | None = None
 
