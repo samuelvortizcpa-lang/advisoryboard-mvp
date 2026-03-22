@@ -369,7 +369,7 @@ def get_seat_info(org_id: UUID, db: Session) -> dict:
         addon_purchased = 0
     else:
         tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
-        addon_purchased = sub.addon_seats or 0
+        addon_purchased = getattr(sub, "addon_seats", 0) or 0
 
     included = tier_config.get("base_seats", 1)
     total_allowed = included + addon_purchased

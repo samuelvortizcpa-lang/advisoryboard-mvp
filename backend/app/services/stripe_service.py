@@ -71,21 +71,35 @@ def _addon_seat_price(billing_interval: str = "monthly") -> str:
     return settings.stripe_price_addon_seat_monthly
 
 
-def _tier_for_price(price_id: str) -> str:
-    """Map Stripe price ID back to tier name (monthly or annual).
+def is_legacy_firm_price(price_id: str) -> bool:
+    """Return True if *price_id* matches the old $249/seat Firm price IDs.
 
-    Price ID mappings
-    ─────────────────
-    Starter  Monthly  price_1TCW0d22KK3wqa2qjXU8JJMV  → "starter"
-    Starter  Annual   price_1TCW0c22KK3wqa2qZTTTJnFe  → "starter"
-    Prof.    Monthly  price_1TCW0a22KK3wqa2qEw188KwS  → "professional"
-    Prof.    Annual   price_1TCW0a22KK3wqa2qaAiHIjgw  → "professional"
-    Firm OLD Monthly  price_1TCW0b22KK3wqa2qQD2Z6TEn  → "firm"  (legacy)
-    Firm OLD Annual   price_1TCW0a22KK3wqa2q9KUYccUH  → "firm"  (legacy)
-    Firm NEW Monthly  STRIPE_PRICE_FIRM_HYBRID_MONTHLY → "firm"  (hybrid base)
-    Firm NEW Annual   STRIPE_PRICE_FIRM_HYBRID_ANNUAL  → "firm"  (hybrid base)
-    Add-On   Monthly  STRIPE_PRICE_ADDON_SEAT_MONTHLY  → "firm_addon_seat"
-    Add-On   Annual   STRIPE_PRICE_ADDON_SEAT_ANNUAL   → "firm_addon_seat"
+    Legacy prices are kept in ``settings.stripe_price_firm`` (monthly) and
+    ``settings.stripe_price_firm_annual`` (annual).  When these appear in
+    webhooks the subscriber should get 3 base seats with 0 add-ons until
+    they migrate to hybrid pricing via the Customer Portal.
+    """
+    settings = get_settings()
+    legacy = {settings.stripe_price_firm, settings.stripe_price_firm_annual}
+    legacy.discard("")  # ignore unconfigured env vars
+    return price_id in legacy
+
+
+def _tier_for_price(price_id: str) -> str:
+    """Maps Stripe Price IDs to internal tier names.
+
+    LEGACY PRICE IDS (old $249/seat Firm — keep until all legacy subs churn/migrate):
+      price_1TCW0b22KK3wqa2qQD2Z6TEn → "firm" (old monthly)
+      price_1TCW0a22KK3wqa2q9KUYccUH → "firm" (old annual)
+
+    CURRENT PRICE IDS:
+      Starter: from settings (monthly + annual) → "starter"
+      Professional: from settings (monthly + annual) → "professional"
+      Firm Hybrid Base: from settings (monthly + annual) → "firm"
+      Add-On Seat: from settings (monthly + annual) → "firm_addon_seat"
+
+    Safe to remove legacy mappings after: all old Firm subscriptions have been
+    canceled or migrated to hybrid pricing via Customer Portal.
     """
     settings = get_settings()
     mapping: dict[str, str] = {
@@ -362,6 +376,21 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
     except (ValueError, TypeError):
         sub.addon_seats = 0
 
+    # Legacy firm price → no add-on seats (they get 3 base seats for free).
+    # New checkouts always use hybrid prices, but guard against edge cases
+    # where a legacy checkout session webhook fires.
+    if tier == "firm" and stripe_sub_id:
+        try:
+            s_sub = stripe_sub if "stripe_sub" in dir() else _stripe().Subscription.retrieve(stripe_sub_id)
+            for si in s_sub.get("items", {}).get("data", []):
+                si_price = si.get("price", {}).get("id", "")
+                if is_legacy_firm_price(si_price):
+                    sub.addon_seats = 0
+                    logger.info("Legacy firm price detected in checkout — addon_seats=0")
+                    break
+        except Exception:
+            pass
+
     db.commit()
 
     # Sync org seat limit
@@ -396,6 +425,7 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
     # Iterate all items to identify the base tier and addon seat count
     new_tier = sub.tier
     addon_seats = 0
+    has_legacy_firm = False
     items = subscription.get("items", {}).get("data", [])
     for item in items:
         price_id = item.get("price", {}).get("id", "")
@@ -405,6 +435,13 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
         elif mapped != "free":
             # This is a base tier item
             new_tier = mapped
+            if is_legacy_firm_price(price_id):
+                has_legacy_firm = True
+
+    # Legacy firm subscribers get 3 base seats, no add-ons
+    if has_legacy_firm:
+        addon_seats = 0
+        logger.info("Legacy firm price detected in subscription update — addon_seats=0")
 
     tier_config = TIER_DEFAULTS.get(new_tier, TIER_DEFAULTS["free"])
     sub.tier = new_tier
