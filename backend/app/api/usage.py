@@ -41,6 +41,7 @@ from app.services.subscription_service import (
     check_client_limit,
     check_document_limit,
     get_or_create_subscription,
+    get_seat_info,
 )
 from app.services.token_tracking_service import get_usage_by_client, get_usage_summary
 
@@ -112,6 +113,12 @@ async def subscription_info(
     client_info = check_client_limit(db, auth.user_id, org_id=auth.org_id)
     doc_info = check_document_limit(db, auth.user_id, org_id=auth.org_id)
 
+    # Seat info (org-aware)
+    if auth.org_id:
+        seat_data = get_seat_info(auth.org_id, db)
+    else:
+        seat_data = None
+
     return {
         "tier": sub.tier,
         "strategic_queries_limit": sub.strategic_queries_limit,
@@ -123,6 +130,10 @@ async def subscription_info(
         "current_clients": client_info["current"],
         "max_documents": tier_config["max_documents"],
         "current_documents": doc_info["current"],
+        "seats_included": seat_data["included"] if seat_data else 0,
+        "seats_addon": seat_data["addon_purchased"] if seat_data else 0,
+        "seats_total": seat_data["total_allowed"] if seat_data else 0,
+        "seats_used": seat_data["current_used"] if seat_data else 0,
     }
 
 

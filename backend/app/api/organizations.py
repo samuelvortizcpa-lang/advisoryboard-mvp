@@ -44,7 +44,7 @@ from app.schemas.organization import (
 )
 from app.services import organization_service
 from app.services.auth_context import AuthContext, get_auth, require_admin
-from app.services.subscription_service import TIER_DEFAULTS, get_or_create_subscription
+from app.services.subscription_service import TIER_DEFAULTS, check_seat_limit, get_or_create_subscription
 
 logger = logging.getLogger(__name__)
 
@@ -436,6 +436,20 @@ async def add_member(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Role must be 'admin', 'member', or 'readonly'.",
+        )
+
+    # Enforce seat limit before adding
+    seat_check = check_seat_limit(org_id, db)
+    if not seat_check["allowed"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "detail": "Seat limit reached. Purchase additional seats to invite more members.",
+                "seat_info": {
+                    "current": seat_check["current"],
+                    "limit": seat_check["limit"],
+                },
+            },
         )
 
     # Look up user by email

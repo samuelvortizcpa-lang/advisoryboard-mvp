@@ -25,6 +25,7 @@ from app.models.processed_webhook_event import ProcessedWebhookEvent
 from app.models.user_subscription import UserSubscription
 from app.services import stripe_service
 from app.services.auth_context import AuthContext, get_auth, require_admin
+from app.services.subscription_service import get_or_create_subscription, get_seat_info
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,19 @@ class StripeStatusResponse(BaseModel):
     stripe_customer_id: str | None = None
     tier: str
     payment_status: str | None = None
+
+
+class UpdateSeatsRequest(BaseModel):
+    addon_seats: int
+
+
+class SeatInfoResponse(BaseModel):
+    included: int
+    addon_purchased: int
+    total_allowed: int
+    current_used: int
+    can_add: bool
+    per_seat_price: int
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -272,3 +286,96 @@ async def stripe_sync(
         tier=updated.tier,
         payment_status=updated.payment_status,
     )
+
+
+@router.post(
+    "/update-seats",
+    response_model=SeatInfoResponse,
+    summary="Update add-on seat count for the current org",
+)
+async def update_seats(
+    body: UpdateSeatsRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> SeatInfoResponse:
+    _require_stripe()
+    require_admin(auth)
+
+    if body.addon_seats < 0:
+        raise HTTPException(status_code=400, detail="addon_seats must be >= 0")
+
+    # Verify org is on firm tier
+    sub = get_or_create_subscription(db, auth.user_id, org_id=auth.org_id)
+    if sub.tier != "firm":
+        raise HTTPException(
+            status_code=400,
+            detail="Add-on seats are only available for Firm tier",
+        )
+
+    try:
+        seat_info = stripe_service.create_addon_seat_update(
+            auth.org_id, body.addon_seats, db,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Determine per-seat price from billing interval
+    per_seat_price = _per_seat_price(sub, db)
+
+    return SeatInfoResponse(
+        included=seat_info["included"],
+        addon_purchased=seat_info["addon_purchased"],
+        total_allowed=seat_info["total_allowed"],
+        current_used=seat_info["current_used"],
+        can_add=seat_info["can_add"],
+        per_seat_price=per_seat_price,
+    )
+
+
+@router.get(
+    "/seats",
+    response_model=SeatInfoResponse,
+    summary="Get seat allocation info for the current org",
+)
+async def get_seats(
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> SeatInfoResponse:
+    seat_info = get_seat_info(auth.org_id, db)
+
+    sub = (
+        db.query(UserSubscription)
+        .filter(UserSubscription.org_id == auth.org_id)
+        .first()
+    )
+    per_seat_price = _per_seat_price(sub, db) if sub else 79
+
+    return SeatInfoResponse(
+        included=seat_info["included"],
+        addon_purchased=seat_info["addon_purchased"],
+        total_allowed=seat_info["total_allowed"],
+        current_used=seat_info["current_used"],
+        can_add=seat_info["can_add"],
+        per_seat_price=per_seat_price,
+    )
+
+
+def _per_seat_price(sub: UserSubscription | None, db: Session) -> int:
+    """Determine the per-seat add-on price based on billing interval."""
+    if sub is None or not sub.stripe_subscription_id:
+        return 79  # default monthly
+
+    settings = get_settings()
+    # Check if the subscription uses annual pricing by looking at the Stripe
+    # price IDs on the local record (avoids an API call).
+    # We consider it annual if the sub's tier maps to an annual price.
+    # Quick heuristic: try to fetch the Stripe sub and check the price interval.
+    try:
+        stripe_mod = stripe_service._stripe()
+        stripe_sub = stripe_mod.Subscription.retrieve(sub.stripe_subscription_id)
+        for item in stripe_sub["items"]["data"]:
+            if item.get("price", {}).get("recurring", {}).get("interval") == "year":
+                return 63
+        return 79
+    except Exception:
+        return 79
