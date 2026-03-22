@@ -1,8 +1,8 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse, NextFetchEvent } from "next/server";
 
-const CLERK_FAPI = "https://clerk.callwen.com";
-const PROXY_URL = "https://callwen.com/__clerk";
+const CLERK_FAPI = "https://clerk.myadvisoryboard.space";
+const PROXY_URL = "https://myadvisoryboard.space/__clerk";
 
 const clerkHandler = clerkMiddleware();
 
