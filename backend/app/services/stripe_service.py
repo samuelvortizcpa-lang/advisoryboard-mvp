@@ -19,7 +19,7 @@ from app.core.config import get_settings
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
 from app.services.notification_service import notify
-from app.services.subscription_service import TIER_DEFAULTS, update_org_seat_limit
+from app.services.subscription_service import TIER_DEFAULTS, get_seat_info, update_org_seat_limit
 
 logger = logging.getLogger(__name__)
 
@@ -38,19 +38,24 @@ def _stripe():
 
 
 def _price_for_tier(tier: str, billing_interval: str = "monthly") -> str:
-    """Map tier name + billing interval to Stripe price ID."""
+    """Map tier name + billing interval to the *base* Stripe price ID.
+
+    For the Firm tier this returns the hybrid base price ($349/mo or
+    $3,348/yr).  Add-on seat prices are handled separately in
+    ``create_checkout_session`` and ``create_addon_seat_update``.
+    """
     settings = get_settings()
     if billing_interval == "annual":
         mapping = {
             "starter": settings.stripe_price_starter_annual,
             "professional": settings.stripe_price_professional_annual,
-            "firm": settings.stripe_price_firm_annual,
+            "firm": settings.stripe_price_firm_hybrid_annual,
         }
     else:
         mapping = {
             "starter": settings.stripe_price_starter,
             "professional": settings.stripe_price_professional,
-            "firm": settings.stripe_price_firm,
+            "firm": settings.stripe_price_firm_hybrid_monthly,
         }
     price_id = mapping.get(tier)
     if not price_id:
@@ -58,17 +63,50 @@ def _price_for_tier(tier: str, billing_interval: str = "monthly") -> str:
     return price_id
 
 
-def _tier_for_price(price_id: str) -> str:
-    """Map Stripe price ID back to tier name (monthly or annual)."""
+def _addon_seat_price(billing_interval: str = "monthly") -> str:
+    """Return the add-on seat Stripe price ID for the given interval."""
     settings = get_settings()
-    mapping = {
+    if billing_interval == "annual":
+        return settings.stripe_price_addon_seat_annual
+    return settings.stripe_price_addon_seat_monthly
+
+
+def _tier_for_price(price_id: str) -> str:
+    """Map Stripe price ID back to tier name (monthly or annual).
+
+    Price ID mappings
+    ─────────────────
+    Starter  Monthly  price_1TCW0d22KK3wqa2qjXU8JJMV  → "starter"
+    Starter  Annual   price_1TCW0c22KK3wqa2qZTTTJnFe  → "starter"
+    Prof.    Monthly  price_1TCW0a22KK3wqa2qEw188KwS  → "professional"
+    Prof.    Annual   price_1TCW0a22KK3wqa2qaAiHIjgw  → "professional"
+    Firm OLD Monthly  price_1TCW0b22KK3wqa2qQD2Z6TEn  → "firm"  (legacy)
+    Firm OLD Annual   price_1TCW0a22KK3wqa2q9KUYccUH  → "firm"  (legacy)
+    Firm NEW Monthly  STRIPE_PRICE_FIRM_HYBRID_MONTHLY → "firm"  (hybrid base)
+    Firm NEW Annual   STRIPE_PRICE_FIRM_HYBRID_ANNUAL  → "firm"  (hybrid base)
+    Add-On   Monthly  STRIPE_PRICE_ADDON_SEAT_MONTHLY  → "firm_addon_seat"
+    Add-On   Annual   STRIPE_PRICE_ADDON_SEAT_ANNUAL   → "firm_addon_seat"
+    """
+    settings = get_settings()
+    mapping: dict[str, str] = {
+        # Starter
         settings.stripe_price_starter: "starter",
-        settings.stripe_price_professional: "professional",
-        settings.stripe_price_firm: "firm",
         settings.stripe_price_starter_annual: "starter",
+        # Professional
+        settings.stripe_price_professional: "professional",
         settings.stripe_price_professional_annual: "professional",
+        # Firm — legacy per-seat prices
+        settings.stripe_price_firm: "firm",
         settings.stripe_price_firm_annual: "firm",
+        # Firm — new hybrid base prices
+        settings.stripe_price_firm_hybrid_monthly: "firm",
+        settings.stripe_price_firm_hybrid_annual: "firm",
+        # Add-on seat prices
+        settings.stripe_price_addon_seat_monthly: "firm_addon_seat",
+        settings.stripe_price_addon_seat_annual: "firm_addon_seat",
     }
+    # Remove empty-string keys so unconfigured env vars don't clobber lookups
+    mapping.pop("", None)
     return mapping.get(price_id, "free")
 
 
@@ -104,10 +142,15 @@ def create_checkout_session(
     tier: str,
     billing_interval: str = "monthly",
     *,
+    addon_seats: int = 0,
     org_id: UUID | None = None,
     db: Session | None = None,
 ) -> str:
-    """Create a Stripe Checkout session and return the URL."""
+    """Create a Stripe Checkout session and return the URL.
+
+    For the Firm tier, the checkout includes a base price (qty=1) and,
+    when *addon_seats* > 0, a second line item for add-on seats.
+    """
     stripe = _stripe()
     price_id = _price_for_tier(tier, billing_interval)
     settings = get_settings()
@@ -120,10 +163,18 @@ def create_checkout_session(
     }
     if org_id is not None:
         metadata["org_id"] = str(org_id)
+    if addon_seats > 0:
+        metadata["addon_seats"] = str(addon_seats)
+
+    # Build line items — firm tier may include add-on seats
+    line_items: list[dict] = [{"price": price_id, "quantity": 1}]
+    if tier == "firm" and addon_seats > 0:
+        addon_price_id = _addon_seat_price(billing_interval)
+        line_items.append({"price": addon_price_id, "quantity": addon_seats})
 
     params: dict = {
         "mode": "subscription",
-        "line_items": [{"price": price_id, "quantity": 1}],
+        "line_items": line_items,
         "success_url": f"{base_url}/dashboard/settings/subscriptions?success=true",
         "cancel_url": f"{base_url}/dashboard/settings/subscriptions?canceled=true",
         "metadata": metadata,
@@ -304,6 +355,13 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
     # Reset usage counter on upgrade
     sub.strategic_queries_used = 0
 
+    # Persist add-on seats from checkout metadata
+    addon_seats_str = metadata.get("addon_seats", "0")
+    try:
+        sub.addon_seats = int(addon_seats_str)
+    except (ValueError, TypeError):
+        sub.addon_seats = 0
+
     db.commit()
 
     # Sync org seat limit
@@ -314,13 +372,17 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
     notify("upgrade", "User upgraded subscription", {"email": user_email, "tier": tier, "mrr_impact": "+$99"})
 
     logger.info(
-        "Checkout completed: user=%s org=%s tier=%s stripe_sub=%s",
-        user_id, sub.org_id, tier, session.get("subscription"),
+        "Checkout completed: user=%s org=%s tier=%s addon_seats=%s stripe_sub=%s",
+        user_id, sub.org_id, tier, sub.addon_seats, session.get("subscription"),
     )
 
 
 def handle_subscription_updated(db: Session, subscription: dict) -> None:
-    """Sync tier and billing period when subscription changes in Stripe."""
+    """Sync tier, billing period, and addon seats when subscription changes in Stripe.
+
+    Iterates all subscription items to distinguish the base price from
+    add-on seat items so both ``tier`` and ``addon_seats`` stay in sync.
+    """
     stripe_sub_id = subscription.get("id")
     sub = (
         db.query(UserSubscription)
@@ -331,16 +393,23 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
         logger.warning("Subscription updated for unknown stripe_subscription_id: %s", stripe_sub_id)
         return
 
-    # Get the current price from the subscription items
+    # Iterate all items to identify the base tier and addon seat count
     new_tier = sub.tier
+    addon_seats = 0
     items = subscription.get("items", {}).get("data", [])
-    if items:
-        price_id = items[0].get("price", {}).get("id", "")
-        new_tier = _tier_for_price(price_id)
-        tier_config = TIER_DEFAULTS.get(new_tier, TIER_DEFAULTS["free"])
-        sub.tier = new_tier
-        sub.strategic_queries_limit = tier_config["strategic_queries_limit"]
+    for item in items:
+        price_id = item.get("price", {}).get("id", "")
+        mapped = _tier_for_price(price_id)
+        if mapped == "firm_addon_seat":
+            addon_seats = item.get("quantity", 0)
+        elif mapped != "free":
+            # This is a base tier item
+            new_tier = mapped
 
+    tier_config = TIER_DEFAULTS.get(new_tier, TIER_DEFAULTS["free"])
+    sub.tier = new_tier
+    sub.strategic_queries_limit = tier_config["strategic_queries_limit"]
+    sub.addon_seats = addon_seats
     sub.stripe_status = subscription.get("status", "active")
 
     # Sync billing period from Stripe
@@ -360,8 +429,8 @@ def handle_subscription_updated(db: Session, subscription: dict) -> None:
         update_org_seat_limit(sub.org_id, new_tier, db)
 
     logger.info(
-        "Subscription updated: user=%s org=%s tier=%s status=%s",
-        sub.user_id, sub.org_id, sub.tier, sub.stripe_status,
+        "Subscription updated: user=%s org=%s tier=%s addon_seats=%d status=%s",
+        sub.user_id, sub.org_id, sub.tier, sub.addon_seats, sub.stripe_status,
     )
 
 
@@ -425,3 +494,84 @@ def handle_payment_failed(db: Session, invoice: dict) -> None:
     notify("payment_failed", "Payment failed", {"email": user_email, "tier": sub.tier})
 
     logger.warning("Payment failed for user=%s org=%s subscription=%s", sub.user_id, sub.org_id, stripe_sub_id)
+
+
+# ---------------------------------------------------------------------------
+# Addon seat management
+# ---------------------------------------------------------------------------
+
+
+def create_addon_seat_update(org_id: UUID, new_addon_count: int, db: Session) -> dict:
+    """Modify the add-on seat quantity on an existing Firm subscription.
+
+    If the subscription already has an add-on seat line item, its quantity is
+    updated (or the item is removed when *new_addon_count* is 0).  If no
+    add-on seat item exists yet, one is added.
+
+    Proration is applied so the customer is charged or credited immediately
+    for the mid-cycle change.
+
+    Returns a summary dict with the updated seat info.
+    """
+    sub = (
+        db.query(UserSubscription)
+        .filter(UserSubscription.org_id == org_id)
+        .first()
+    )
+    if sub is None or not sub.stripe_subscription_id:
+        raise ValueError("No active Stripe subscription found for this organization")
+
+    stripe = _stripe()
+
+    # Determine billing interval from the current subscription
+    stripe_sub = stripe.Subscription.retrieve(sub.stripe_subscription_id)
+    billing_interval = "annual"
+    for item in stripe_sub["items"]["data"]:
+        price = item.get("price", {})
+        if price.get("recurring", {}).get("interval") == "month":
+            billing_interval = "monthly"
+            break
+
+    addon_price_id = _addon_seat_price(billing_interval)
+
+    # Find existing add-on seat item
+    addon_item = None
+    for item in stripe_sub["items"]["data"]:
+        if item.get("price", {}).get("id") == addon_price_id:
+            addon_item = item
+            break
+
+    if addon_item:
+        if new_addon_count <= 0:
+            # Remove the add-on seat line item entirely
+            stripe.SubscriptionItem.delete(addon_item["id"], proration_behavior="create_prorations")
+        else:
+            # Update quantity on the existing item
+            stripe.SubscriptionItem.modify(
+                addon_item["id"],
+                quantity=new_addon_count,
+                proration_behavior="create_prorations",
+            )
+    elif new_addon_count > 0:
+        # Add a new add-on seat line item to the subscription
+        stripe.SubscriptionItem.create(
+            subscription=sub.stripe_subscription_id,
+            price=addon_price_id,
+            quantity=new_addon_count,
+            proration_behavior="create_prorations",
+        )
+
+    # Update local record
+    sub.addon_seats = max(new_addon_count, 0)
+    sub.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Sync org seat limit
+    update_org_seat_limit(org_id, sub.tier, db)
+
+    seat_info = get_seat_info(org_id, db)
+    logger.info(
+        "Addon seats updated: org=%s addon_seats=%d total_allowed=%d",
+        org_id, sub.addon_seats, seat_info["total_allowed"],
+    )
+    return seat_info
