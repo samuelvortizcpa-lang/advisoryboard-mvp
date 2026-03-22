@@ -15,7 +15,7 @@ Routes (all require Clerk JWT auth):
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -23,7 +23,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.chat_message import ChatMessage
 from app.models.client import Client
@@ -31,7 +30,8 @@ from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page_image import DocumentPageImage
 from app.schemas.chat_message import ChatHistoryResponse, ChatMessageResponse
-from app.services import rag_service, storage_service, user_service
+from app.services import rag_service, storage_service
+from app.services.auth_context import AuthContext, check_client_access, get_auth
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +43,12 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 
-def _require_client(db: Session, client_id: UUID, owner_id: UUID) -> Client:
+def _require_client(db: Session, client_id: UUID, auth: AuthContext) -> Client:
+    """Verify client belongs to the user's org and user has access."""
+    check_client_access(auth, client_id, db)
     client = (
         db.query(Client)
-        .filter(Client.id == client_id, Client.owner_id == owner_id)
+        .filter(Client.id == client_id, Client.org_id == auth.org_id)
         .first()
     )
     if client is None:
@@ -146,10 +148,9 @@ class CompareResponse(BaseModel):
 async def get_rag_status(
     client_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> RagStatusResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    _require_client(db, client_id, auth)
 
     documents = db.query(Document).filter(Document.client_id == client_id).all()
 
@@ -188,10 +189,9 @@ async def process_client_documents(
     client_id: UUID,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ProcessResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    _require_client(db, client_id, auth)
 
     unprocessed = (
         db.query(Document)
@@ -231,10 +231,9 @@ async def process_single_document(
     document_id: UUID,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ProcessResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    _require_client(db, client_id, auth)
 
     document = (
         db.query(Document)
@@ -247,87 +246,6 @@ async def process_single_document(
     background_tasks.add_task(rag_service.process_document_task, document.id)
 
     return ProcessResponse(queued=1, message="Document queued for processing.")
-
-
-# ---------------------------------------------------------------------------
-# Backfill page images for legacy PDFs
-# ---------------------------------------------------------------------------
-
-
-class BackfillResponse(BaseModel):
-    processed: int
-    skipped: int
-    total_pages: int
-    message: str
-
-
-@router.post(
-    "/documents/backfill-pages",
-    response_model=BackfillResponse,
-    summary="Backfill page images for PDFs missing them",
-)
-async def backfill_page_images(
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> BackfillResponse:
-    """
-    Find all PDF documents that have no rows in document_page_images
-    and run page image processing on them.
-    """
-    from app.services.page_image_service import process_page_images
-
-    user = user_service.get_or_create_user(db, current_user)
-
-    # Find all PDF documents owned by this user
-    pdf_docs = (
-        db.query(Document)
-        .join(Client, Document.client_id == Client.id)
-        .filter(
-            Client.owner_id == user.id,
-            Document.file_type == "pdf",
-            Document.processed == True,  # noqa: E712
-        )
-        .all()
-    )
-
-    processed = 0
-    skipped = 0
-    total_pages = 0
-
-    for doc in pdf_docs:
-        # Delete existing page images from Supabase Storage and DB
-        existing_pages = (
-            db.query(DocumentPageImage)
-            .filter(DocumentPageImage.document_id == doc.id)
-            .all()
-        )
-        if existing_pages:
-            for page_img in existing_pages:
-                if page_img.image_path:
-                    storage_service.delete_file(page_img.image_path)
-            db.query(DocumentPageImage).filter(
-                DocumentPageImage.document_id == doc.id
-            ).delete()
-            db.commit()
-
-        try:
-            await process_page_images(db, doc)
-            page_count = (
-                db.query(DocumentPageImage)
-                .filter(DocumentPageImage.document_id == doc.id)
-                .count()
-            )
-            total_pages += page_count
-            processed += 1
-        except Exception:
-            pass  # logged inside process_page_images
-
-    return BackfillResponse(
-        processed=processed,
-        skipped=skipped,
-        total_pages=total_pages,
-        message=f"Reprocessed {processed} PDF(s), generated {total_pages} page images.",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -344,10 +262,9 @@ async def semantic_search(
     client_id: UUID,
     request: SearchRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> SearchResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    _require_client(db, client_id, auth)
 
     if not request.query.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Query cannot be empty.")
@@ -383,10 +300,9 @@ async def chat(
     client_id: UUID,
     request: ChatRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ChatResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    _require_client(db, client_id, auth)
 
     if not request.question.strip():
         raise HTTPException(
@@ -395,13 +311,13 @@ async def chat(
 
     result = await rag_service.answer_question(
         db, client_id=client_id, question=request.question,
-        user_id=user.clerk_id, model_override=request.model_override,
+        user_id=auth.user_id, model_override=request.model_override,
     )
 
     # Persist user question
     db.add(ChatMessage(
         client_id=client_id,
-        user_id=user.clerk_id,
+        user_id=auth.user_id,
         role="user",
         content=request.question,
         sources=None,
@@ -450,7 +366,7 @@ async def chat(
 
     db.add(ChatMessage(
         client_id=client_id,
-        user_id=user.clerk_id,
+        user_id=auth.user_id,
         role="assistant",
         content=result["answer"],
         sources=sources_data or None,
@@ -484,10 +400,9 @@ async def compare_documents(
     client_id: UUID,
     request: CompareRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> CompareResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    _require_client(db, client_id, auth)
 
     if len(request.document_ids) < 2:
         raise HTTPException(
@@ -532,10 +447,9 @@ async def get_chat_history(
     limit: int = 100,
     skip: int = 0,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ChatHistoryResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    _require_client(db, client_id, auth)
 
     total = (
         db.query(ChatMessage)
@@ -590,10 +504,9 @@ async def get_chat_history(
 async def clear_chat_history(
     client_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> None:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    _require_client(db, client_id, auth)
 
     db.query(ChatMessage).filter(ChatMessage.client_id == client_id).delete()
     db.commit()
@@ -612,10 +525,9 @@ async def export_chat_history(
     client_id: UUID,
     format: str = Query(..., description="Export format: 'txt' or 'pdf'"),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> StreamingResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    client = _require_client(db, client_id, user.id)
+    client = _require_client(db, client_id, auth)
 
     if format not in ("txt", "pdf"):
         raise HTTPException(

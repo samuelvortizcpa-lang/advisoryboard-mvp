@@ -36,6 +36,7 @@ def log_token_usage(
     *,
     user_id: str,
     client_id: Optional[UUID] = None,
+    org_id: Optional[UUID] = None,
     query_type: str,
     model: str,
     prompt_tokens: int,
@@ -62,6 +63,7 @@ def log_token_usage(
         row = TokenUsage(
             user_id=user_id,
             client_id=client_id,
+            org_id=org_id,
             query_type=query_type,
             model=model,
             prompt_tokens=prompt_tokens,

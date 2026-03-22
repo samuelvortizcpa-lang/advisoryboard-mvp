@@ -6,13 +6,12 @@ Endpoints:
 """
 
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.action_item import ActionItem
 from app.models.client import Client
@@ -23,7 +22,7 @@ from app.schemas.timeline import (
     TimelineItem,
     TimelineResponse,
 )
-from app.services import user_service
+from app.services.auth_context import AuthContext, check_client_access, get_auth
 
 router = APIRouter()
 
@@ -41,20 +40,9 @@ async def get_client_timeline(
     limit: int = 50,
     skip: int = 0,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> TimelineResponse:
-    user = user_service.get_or_create_user(db, current_user)
-
-    # Verify client ownership
-    client = (
-        db.query(Client)
-        .filter(Client.id == client_id, Client.owner_id == user.id)
-        .first()
-    )
-    if client is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
-        )
+    check_client_access(auth, client_id, db)
 
     include_documents = not types or "document" in types
     include_action_items = not types or "action_item" in types

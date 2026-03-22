@@ -25,13 +25,20 @@ from app.schemas.action_item import ActionItemListResponse, ActionItemResponse
 
 
 def _verify_client_ownership(
-    db: Session, client_id: UUID, owner_id: UUID
+    db: Session, client_id: UUID, owner_id: UUID | None = None, org_id: UUID | None = None,
 ) -> Client:
-    client = (
-        db.query(Client)
-        .filter(Client.id == client_id, Client.owner_id == owner_id)
-        .first()
-    )
+    if org_id is not None:
+        client = (
+            db.query(Client)
+            .filter(Client.id == client_id, Client.org_id == org_id)
+            .first()
+        )
+    else:
+        client = (
+            db.query(Client)
+            .filter(Client.id == client_id, Client.owner_id == owner_id)
+            .first()
+        )
     if client is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
@@ -65,13 +72,14 @@ def _to_response(item: ActionItem) -> ActionItemResponse:
 def get_action_items(
     db: Session,
     client_id: UUID,
-    owner_id: UUID,
+    owner_id: UUID | None = None,
+    org_id: UUID | None = None,
     status_filter: Optional[str] = None,   # 'pending' | 'completed' | 'cancelled' | None
     skip: int = 0,
     limit: int = 50,
 ) -> Tuple[list[ActionItemResponse], int]:
-    """Return paginated action items for a client (ownership-scoped)."""
-    _verify_client_ownership(db, client_id, owner_id)
+    """Return paginated action items for a client (org or owner scoped)."""
+    _verify_client_ownership(db, client_id, owner_id=owner_id, org_id=org_id)
 
     base = (
         db.query(ActionItem)
@@ -96,23 +104,28 @@ def get_action_items(
 def get_action_item_by_id(
     db: Session,
     item_id: UUID,
-    owner_id: UUID,
+    owner_id: UUID | None = None,
+    org_id: UUID | None = None,
 ) -> Optional[ActionItem]:
-    """Fetch a single action item, verifying the client is owned by owner_id."""
-    return (
+    """Fetch a single action item, verifying the client belongs to the org (or owner)."""
+    query = (
         db.query(ActionItem)
         .join(Client, ActionItem.client_id == Client.id)
         .options(joinedload(ActionItem.document))
-        .filter(ActionItem.id == item_id, Client.owner_id == owner_id)
-        .first()
     )
+    if org_id is not None:
+        query = query.filter(ActionItem.id == item_id, Client.org_id == org_id)
+    else:
+        query = query.filter(ActionItem.id == item_id, Client.owner_id == owner_id)
+    return query.first()
 
 
 def update_action_item(
     db: Session,
     item_id: UUID,
-    owner_id: UUID,
-    updates: dict,
+    owner_id: UUID | None = None,
+    org_id: UUID | None = None,
+    updates: dict | None = None,
 ) -> ActionItemResponse:
     """
     Apply *updates* (only provided keys) to an action item.
@@ -120,7 +133,8 @@ def update_action_item(
     Setting status → 'completed' records completed_at.
     Setting status → anything else clears completed_at.
     """
-    item = get_action_item_by_id(db, item_id, owner_id)
+    updates = updates or {}
+    item = get_action_item_by_id(db, item_id, owner_id=owner_id, org_id=org_id)
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Action item not found"
@@ -159,10 +173,11 @@ def update_action_item(
 def delete_action_item(
     db: Session,
     item_id: UUID,
-    owner_id: UUID,
+    owner_id: UUID | None = None,
+    org_id: UUID | None = None,
 ) -> bool:
     """Delete an action item. Returns False if not found."""
-    item = get_action_item_by_id(db, item_id, owner_id)
+    item = get_action_item_by_id(db, item_id, owner_id=owner_id, org_id=org_id)
     if item is None:
         return False
     db.delete(item)

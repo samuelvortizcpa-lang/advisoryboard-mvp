@@ -3,7 +3,7 @@ Document service: file storage + database operations.
 
 Upload flow:
   1. Validate file extension and size.
-  2. Verify the target client belongs to the requesting user.
+  2. Verify the target client belongs to the requesting user's org.
   3. Upload bytes via storage_service (Supabase Storage).
   4. Insert a Document row.  If the DB insert fails, delete the file.
 
@@ -50,13 +50,21 @@ def _extension(filename: str) -> str:
 
 
 def _verify_client_ownership(
-    db: Session, client_id: UUID, owner_id: UUID
+    db: Session, client_id: UUID, owner_id: UUID | None = None, org_id: UUID | None = None,
 ) -> Client:
-    client = (
-        db.query(Client)
-        .filter(Client.id == client_id, Client.owner_id == owner_id)
-        .first()
-    )
+    """Verify the client belongs to the given org (or owner for legacy)."""
+    if org_id is not None:
+        client = (
+            db.query(Client)
+            .filter(Client.id == client_id, Client.org_id == org_id)
+            .first()
+        )
+    else:
+        client = (
+            db.query(Client)
+            .filter(Client.id == client_id, Client.owner_id == owner_id)
+            .first()
+        )
     if client is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
@@ -75,6 +83,7 @@ async def save_document(
     client_id: UUID,
     owner_id: UUID,
     uploaded_by: UUID,
+    org_id: UUID | None = None,
 ) -> Document:
     """Validate, upload to Supabase Storage, and create a Document record."""
     original_name = file.filename or "untitled"
@@ -107,7 +116,7 @@ async def save_document(
         )
 
     # --- ownership check ---
-    _verify_client_ownership(db, client_id, owner_id)
+    _verify_client_ownership(db, client_id, owner_id=owner_id, org_id=org_id)
 
     # --- duplicate check ---
     existing = (
@@ -164,12 +173,13 @@ async def save_document(
 def get_documents(
     db: Session,
     client_id: UUID,
-    owner_id: UUID,
+    owner_id: UUID | None = None,
+    org_id: UUID | None = None,
     skip: int = 0,
     limit: int = 50,
 ) -> Tuple[list[Document], int]:
-    """Return a paginated list of documents for a client (ownership-scoped)."""
-    _verify_client_ownership(db, client_id, owner_id)
+    """Return a paginated list of documents for a client (org or owner scoped)."""
+    _verify_client_ownership(db, client_id, owner_id=owner_id, org_id=org_id)
 
     base = (
         db.query(Document)
@@ -184,24 +194,26 @@ def get_documents(
 def get_document(
     db: Session,
     document_id: UUID,
-    owner_id: UUID,
+    owner_id: UUID | None = None,
+    org_id: UUID | None = None,
 ) -> Optional[Document]:
-    """Return a single document, verifying it belongs to a client owned by owner_id."""
-    return (
-        db.query(Document)
-        .join(Client, Document.client_id == Client.id)
-        .filter(Document.id == document_id, Client.owner_id == owner_id)
-        .first()
-    )
+    """Return a single document, verifying it belongs to a client in the org (or owned by owner_id)."""
+    query = db.query(Document).join(Client, Document.client_id == Client.id)
+    if org_id is not None:
+        query = query.filter(Document.id == document_id, Client.org_id == org_id)
+    else:
+        query = query.filter(Document.id == document_id, Client.owner_id == owner_id)
+    return query.first()
 
 
 def delete_document(
     db: Session,
     document_id: UUID,
-    owner_id: UUID,
+    owner_id: UUID | None = None,
+    org_id: UUID | None = None,
 ) -> bool:
     """Delete the DB record and the stored file. Returns False if not found."""
-    document = get_document(db, document_id, owner_id)
+    document = get_document(db, document_id, owner_id=owner_id, org_id=org_id)
     if document is None:
         return False
 

@@ -204,13 +204,14 @@ def check_client_limit(db: Session, user_id: str, owner_id=None, org_id=None) ->
     return result
 
 
-def check_document_limit(db: Session, user_id: str, owner_id) -> dict:
+def check_document_limit(db: Session, user_id: str, owner_id=None, org_id=None) -> dict:
     """
-    Check whether the user can upload another document.
+    Check whether the user/org can upload another document.
 
     Args:
         user_id: Clerk ID (for subscription lookup)
-        owner_id: User UUID (for document ownership count via clients)
+        owner_id: User UUID — legacy path, counts via clients.owner_id
+        org_id: Organization UUID — new path, counts via clients.org_id
 
     Returns {allowed, current, limit}.
     """
@@ -221,13 +222,21 @@ def check_document_limit(db: Session, user_id: str, owner_id) -> dict:
     if limit is None:
         return {"allowed": True, "current": 0, "limit": None}
 
-    # Count documents across all of the user's clients
-    current = (
-        db.query(func.count(Document.id))
-        .join(Client, Document.client_id == Client.id)
-        .filter(Client.owner_id == owner_id)
-        .scalar()
-    ) or 0
+    if org_id is not None:
+        current = (
+            db.query(func.count(Document.id))
+            .join(Client, Document.client_id == Client.id)
+            .filter(Client.org_id == org_id)
+            .scalar()
+        ) or 0
+    else:
+        # Legacy fallback
+        current = (
+            db.query(func.count(Document.id))
+            .join(Client, Document.client_id == Client.id)
+            .filter(Client.owner_id == owner_id)
+            .scalar()
+        ) or 0
 
     return {"allowed": current < limit, "current": current, "limit": limit}
 

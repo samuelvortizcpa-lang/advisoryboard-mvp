@@ -9,20 +9,22 @@ Endpoints:
   POST /documents/{document_id}/reextract-action-items  re-run extraction
 """
 
-from typing import Any, Dict, Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.models.action_item import ActionItem
+from app.models.client import Client
 from app.schemas.action_item import (
     ActionItemListResponse,
     ActionItemResponse,
     ActionItemUpdate,
 )
-from app.services import action_item_service, user_service
+from app.services import action_item_service
+from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.document_service import get_document
 
 router = APIRouter()
@@ -44,13 +46,13 @@ async def list_action_items(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ActionItemListResponse:
-    user = user_service.get_or_create_user(db, current_user)
+    check_client_access(auth, client_id, db)
     items, total = action_item_service.get_action_items(
         db=db,
         client_id=client_id,
-        owner_id=user.id,
+        org_id=auth.org_id,
         status_filter=status,
         skip=skip,
         limit=limit,
@@ -68,13 +70,13 @@ async def list_pending_action_items(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ActionItemListResponse:
-    user = user_service.get_or_create_user(db, current_user)
+    check_client_access(auth, client_id, db)
     items, total = action_item_service.get_action_items(
         db=db,
         client_id=client_id,
-        owner_id=user.id,
+        org_id=auth.org_id,
         status_filter="pending",
         skip=skip,
         limit=limit,
@@ -96,15 +98,25 @@ async def update_action_item(
     item_id: UUID,
     body: ActionItemUpdate,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> ActionItemResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    # Only pass fields that were actually provided in the request body
+    # Look up the action item's client to verify org access
+    item = (
+        db.query(ActionItem)
+        .filter(ActionItem.id == item_id)
+        .first()
+    )
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Action item not found"
+        )
+    check_client_access(auth, item.client_id, db)
+
     updates = body.model_dump(exclude_unset=True)
     return action_item_service.update_action_item(
         db=db,
         item_id=item_id,
-        owner_id=user.id,
+        org_id=auth.org_id,
         updates=updates,
     )
 
@@ -117,13 +129,24 @@ async def update_action_item(
 async def delete_action_item(
     item_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> None:
-    user = user_service.get_or_create_user(db, current_user)
+    # Look up the action item's client to verify org access
+    item = (
+        db.query(ActionItem)
+        .filter(ActionItem.id == item_id)
+        .first()
+    )
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Action item not found"
+        )
+    check_client_access(auth, item.client_id, db)
+
     deleted = action_item_service.delete_action_item(
         db=db,
         item_id=item_id,
-        owner_id=user.id,
+        org_id=auth.org_id,
     )
     if not deleted:
         raise HTTPException(
@@ -144,16 +167,16 @@ async def reextract_action_items(
     document_id: UUID,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> dict:
-    user = user_service.get_or_create_user(db, current_user)
-
-    # Verify the document belongs to a client owned by this user
-    document = get_document(db, document_id=document_id, owner_id=user.id)
+    # Verify the document belongs to a client in this org
+    document = get_document(db, document_id=document_id, org_id=auth.org_id)
     if document is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
+    check_client_access(auth, document.client_id, db)
+
     if not document.processed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
