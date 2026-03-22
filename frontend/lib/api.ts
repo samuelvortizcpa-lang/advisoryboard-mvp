@@ -1278,3 +1278,79 @@ export function createIntegrationsApi(getToken: GetToken) {
     },
   };
 }
+
+// ─── Organization types ──────────────────────────────────────────────────────
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  org_type: string;
+  max_members: number;
+  member_count: number;
+  role: string | null;
+}
+
+export interface OrgMember {
+  id: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  role: string;
+  joined_at: string;
+  is_active: boolean;
+}
+
+export interface OrgDetail extends Organization {
+  owner_user_id: string;
+  settings: Record<string, unknown>;
+  subscription_tier: string | null;
+  client_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Organizations API factory ───────────────────────────────────────────────
+
+export function createOrganizationsApi(getToken: GetToken) {
+  return {
+    list() {
+      return apiFetch<Organization[]>(getToken, "/organizations");
+    },
+
+    get(orgId: string) {
+      return apiFetch<OrgDetail>(getToken, `/organizations/${orgId}`);
+    },
+
+    update(orgId: string, data: { name?: string; settings?: Record<string, unknown> }) {
+      return apiFetch<OrgDetail>(getToken, `/organizations/${orgId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+
+    listMembers(orgId: string) {
+      return apiFetch<OrgMember[]>(getToken, `/organizations/${orgId}/members`);
+    },
+
+    inviteMember(orgId: string, userEmail: string, role: string = "member") {
+      return apiFetch<OrgMember>(getToken, `/organizations/${orgId}/members`, {
+        method: "POST",
+        body: JSON.stringify({ user_email: userEmail, role }),
+      });
+    },
+
+    updateMemberRole(orgId: string, userId: string, role: string) {
+      return apiFetch<OrgMember>(getToken, `/organizations/${orgId}/members/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      });
+    },
+
+    removeMember(orgId: string, userId: string) {
+      return apiFetch<void>(getToken, `/organizations/${orgId}/members/${userId}`, {
+        method: "DELETE",
+      });
+    },
+  };
+}
