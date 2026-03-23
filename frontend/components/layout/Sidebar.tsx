@@ -17,11 +17,11 @@ const PRIMARY_NAV = [
 ] as const;
 
 const SETTINGS_NAV = [
-  { href: "/dashboard/settings/integrations", label: "Email Sync", Icon: EmailSyncIcon },
-  { href: "/dashboard/settings/usage", label: "Usage Analytics", Icon: ChartBarIcon },
-  { href: "/dashboard/settings/organization", label: "Organization", Icon: BuildingIcon },
-  { href: "/dashboard/settings/subscriptions", label: "Subscriptions", Icon: UsersIcon },
-  { href: "/dashboard/settings", label: "Settings", Icon: GearIcon, exact: true },
+  { href: "/dashboard/settings/integrations", label: "Email Sync", Icon: EmailSyncIcon, adminOnly: false },
+  { href: "/dashboard/settings/usage", label: "Usage Analytics", Icon: ChartBarIcon, adminOnly: true },
+  { href: "/dashboard/settings/organization", label: "Organization", Icon: BuildingIcon, adminOnly: true },
+  { href: "/dashboard/settings/subscriptions", label: "Subscriptions", Icon: UsersIcon, adminOnly: true },
+  { href: "/dashboard/settings", label: "Settings", Icon: GearIcon, exact: true, adminOnly: false },
 ] as const;
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ export default function Sidebar() {
         <p className="mt-4 mb-1 px-2.5 text-[11px] font-medium uppercase tracking-wider text-gray-400">
           Settings
         </p>
-        {SETTINGS_NAV.map((item) => (
+        {SETTINGS_NAV.filter((item) => !item.adminOnly || isPersonalOrg || isAdmin).map((item) => (
           <NavItem key={item.href} item={item} pathname={pathname} />
         ))}
       </nav>

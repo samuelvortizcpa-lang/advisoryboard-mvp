@@ -12,7 +12,7 @@ import MemberDashboard from "@/components/dashboard/MemberDashboard";
 export default function DashboardPage() {
   const { getToken } = useAuth();
   const { user } = useUser();
-  const { activeOrg, isAdmin } = useOrg();
+  const { activeOrg, isAdmin, isPersonalOrg } = useOrg();
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
 
@@ -41,7 +41,10 @@ export default function DashboardPage() {
     return <DashboardSkeleton />;
   }
 
-  const Dashboard = isAdmin ? AdminDashboard : MemberDashboard;
+  // Solo practitioners (personal org) and org admins see admin dashboard;
+  // org members (non-admin) see member dashboard
+  const showAdminView = isPersonalOrg || isAdmin;
+  const Dashboard = showAdminView ? AdminDashboard : MemberDashboard;
 
   return (
     <Dashboard
