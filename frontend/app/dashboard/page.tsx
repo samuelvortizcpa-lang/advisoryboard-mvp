@@ -46,16 +46,25 @@ export default function DashboardPage() {
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "there";
   const email = user?.emailAddresses[0]?.emailAddress ?? "";
 
+  const initials =
+    ((user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "")).toUpperCase() ||
+    "U";
+
   if (!stats) {
     return (
-      <div className="px-8 py-8">
-        <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm animate-pulse">
-          <div className="h-3 w-20 rounded bg-gray-200" />
-          <div className="mt-3 h-6 w-64 rounded bg-gray-200" />
-          <div className="mt-2 h-4 w-40 rounded bg-gray-100" />
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div>
+        {/* Top bar */}
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-gray-900">Overview</h1>
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-28 animate-pulse rounded-lg bg-gray-200" />
+            <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
+          </div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-8 animate-pulse">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="rounded-lg border border-gray-100 bg-gray-50 px-5 py-4">
+              <div key={i} className="rounded-lg bg-gray-50 px-5 py-4">
                 <div className="h-7 w-10 rounded bg-gray-200" />
                 <div className="mt-2 h-4 w-20 rounded bg-gray-100" />
               </div>
@@ -67,26 +76,26 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="px-8 py-8">
-      {/* Welcome card */}
-      <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-          Dashboard
-        </p>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900">
-          Welcome back, {displayName}
-        </h1>
-        {email && (
-          <p className="mt-1 text-sm text-gray-500">{email}</p>
-        )}
+    <div>
+      {/* Top bar */}
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-gray-900">Overview</h1>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/clients/new"
+            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            + New client
+          </Link>
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-700">
+            {initials}
+          </div>
+        </div>
+      </div>
 
-        <p className="mt-5 leading-relaxed text-gray-600 text-sm">
-          Manage your CPA client relationships, log interactions, and organise
-          documents — all in one place.
-        </p>
-
-        {/* Stats */}
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* Stats */}
+      <div className="rounded-xl border border-gray-200 bg-white p-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {/* Clients */}
           <Link
             href="/dashboard/clients"
