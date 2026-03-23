@@ -102,7 +102,7 @@ export default function TopBar() {
   const crumbs = getBreadcrumbs(pathname, clientName);
 
   return (
-    <header className="fixed left-[200px] right-0 top-0 z-20 flex h-[56px] items-center justify-between border-b border-gray-200 bg-white px-6">
+    <header className="fixed left-56 right-0 top-0 z-20 flex h-[56px] items-center justify-between border-b border-gray-200 bg-white px-6">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm" aria-label="breadcrumb">
         {crumbs.map((crumb, i) => (

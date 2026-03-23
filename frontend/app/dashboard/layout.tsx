@@ -14,7 +14,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <TopBar />
 
         {/* Page content — offset for sidebar width and topbar height */}
-        <div className="ml-[200px] pt-[56px] min-h-screen bg-[#f5f7f9] flex flex-col">
+        <div className="ml-56 pt-[56px] min-h-screen bg-[#f5f7f9] flex flex-col">
           <div className="flex-1">{children}</div>
           <footer className="py-4 text-center text-xs text-gray-400">
             <Link href="/privacy" className="hover:text-gray-600">Privacy Policy</Link>
