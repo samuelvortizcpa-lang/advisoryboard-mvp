@@ -12,6 +12,7 @@ from app.models.document import Document
 from app.models.user import User
 from app.schemas.client import ClientCreate, ClientUpdate
 from app.services import storage_service
+from app.services.assignment_service import get_accessible_client_ids
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,14 @@ def get_clients(
 
     query = db.query(Client).filter(_client_in_org_filter(org_id))
 
-    if assigned_to_me:
+    # ── Assignment-based access control (opt-in) ──────────────────────
+    # When the org has made at least one client assignment, non-admin
+    # members only see their assigned clients.  If no assignments exist
+    # yet, all org clients remain visible (backward compat).
+    accessible_ids = get_accessible_client_ids(user_id, org_id, org_role == "admin", db)
+    if accessible_ids is not None:
+        query = query.filter(Client.id.in_(accessible_ids))
+    elif assigned_to_me:
         # Only clients the user has an explicit client_access record for
         query = query.join(
             ClientAccess,
@@ -83,14 +91,10 @@ def get_clients(
             & (ClientAccess.access_level != "none"),
         )
     elif org_role != "admin":
-        # Non-admins: filter to clients they can access
+        # Non-admins: filter to clients they can access via client_access
         # A client is accessible if:
         #   - it has NO client_access records at all (open), OR
         #   - the user has a client_access entry with access_level != 'none'
-        accessible_client_ids = (
-            db.query(ClientAccess.client_id)
-            .filter(ClientAccess.client_id == Client.id)
-        )
         user_access = (
             db.query(ClientAccess.client_id)
             .filter(

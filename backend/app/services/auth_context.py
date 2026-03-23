@@ -135,13 +135,17 @@ def check_client_access(
     Rules:
       1. The client must belong to the user's active org.
       2. Admins always have access to any client in their org.
-      3. If the client has no client_access records, access is open (default allow).
-      4. If client_access records exist, the user must have an entry
-         with access_level != 'none'.
+      3. Assignment-based access (opt-in): if the org has any client
+         assignments, non-admin members can only access assigned clients.
+      4. If no assignments exist, fall back to client_access records:
+         - No client_access records → open access (default allow).
+         - client_access records exist → user must have access_level != 'none'.
 
     Raises HTTPException 403 if access is denied.
     Returns True otherwise.
     """
+    from app.services.assignment_service import get_accessible_client_ids
+
     client = (
         db.query(Client)
         .filter(Client.id == client_id, Client.org_id == auth.org_id)
@@ -157,7 +161,20 @@ def check_client_access(
     if auth.org_role == "admin":
         return True
 
-    # Check if any client_access records exist for this client
+    # Assignment-based access: if the org has assignments, check them first
+    accessible_ids = get_accessible_client_ids(
+        auth.user_id, auth.org_id, False, db
+    )
+    if accessible_ids is not None:
+        # Org uses assignments — only allow assigned clients
+        if client_id not in accessible_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this client",
+            )
+        return True
+
+    # No assignments in org — fall back to client_access records
     has_any_access_records = (
         db.query(ClientAccess.id)
         .filter(ClientAccess.client_id == client_id)

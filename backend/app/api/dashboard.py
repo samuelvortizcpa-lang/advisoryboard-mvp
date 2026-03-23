@@ -22,6 +22,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.token_usage import TokenUsage
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
+from app.services.assignment_service import get_accessible_client_ids
 from app.services.auth_context import AuthContext, get_auth
 from app.services.subscription_service import (
     TIER_DEFAULTS,
@@ -210,27 +211,38 @@ async def dashboard_summary(
     sub = get_or_create_subscription(db, auth.user_id, org_id=auth.org_id)
     tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
 
-    client_count = (
-        db.query(func.count(Client.id))
-        .filter(Client.org_id == auth.org_id)
-        .scalar()
-    ) or 0
+    # ── Assignment-based scoping (opt-in) ──────────────────────────────
+    # When the org has client assignments, non-admin members only see
+    # data for their assigned clients.  None = no filtering (admin or
+    # no assignments yet).
+    accessible_ids = get_accessible_client_ids(
+        auth.user_id, auth.org_id, auth.org_role == "admin", db
+    )
 
-    doc_count = (
+    client_q = db.query(func.count(Client.id)).filter(Client.org_id == auth.org_id)
+    if accessible_ids is not None:
+        client_q = client_q.filter(Client.id.in_(accessible_ids))
+    client_count = client_q.scalar() or 0
+
+    doc_q = (
         db.query(func.count(Document.id))
         .join(Client, Document.client_id == Client.id)
         .filter(Client.org_id == auth.org_id)
-        .scalar()
-    ) or 0
+    )
+    if accessible_ids is not None:
+        doc_q = doc_q.filter(Client.id.in_(accessible_ids))
+    doc_count = doc_q.scalar() or 0
 
-    pending_count = (
+    pending_q = (
         db.query(func.count(ActionItem.id))
         .join(Client, ActionItem.client_id == Client.id)
         .filter(Client.org_id == auth.org_id, ActionItem.status == "pending")
-        .scalar()
-    ) or 0
+    )
+    if accessible_ids is not None:
+        pending_q = pending_q.filter(Client.id.in_(accessible_ids))
+    pending_count = pending_q.scalar() or 0
 
-    overdue_count = (
+    overdue_q = (
         db.query(func.count(ActionItem.id))
         .join(Client, ActionItem.client_id == Client.id)
         .filter(
@@ -238,8 +250,10 @@ async def dashboard_summary(
             ActionItem.status == "pending",
             ActionItem.due_date < today,
         )
-        .scalar()
-    ) or 0
+    )
+    if accessible_ids is not None:
+        overdue_q = overdue_q.filter(Client.id.in_(accessible_ids))
+    overdue_count = overdue_q.scalar() or 0
 
     stats = StatsBlock(
         clients=CountWithLimit(count=client_count, limit=tier_config.get("max_clients")),
@@ -294,13 +308,18 @@ async def dashboard_summary(
 
     # ── Attention items (pending action items, prioritized) ───────────────
 
-    attention_rows = (
+    attention_q = (
         db.query(ActionItem, Client.name)
         .join(Client, ActionItem.client_id == Client.id)
         .filter(
             Client.org_id == auth.org_id,
             ActionItem.status == "pending",
         )
+    )
+    if accessible_ids is not None:
+        attention_q = attention_q.filter(Client.id.in_(accessible_ids))
+    attention_rows = (
+        attention_q
         .order_by(
             ActionItem.due_date.asc().nullslast(),
             ActionItem.created_at.desc(),
@@ -350,7 +369,7 @@ async def dashboard_summary(
         .subquery()
     )
 
-    recent_rows = (
+    recent_q = (
         db.query(
             Client,
             func.coalesce(doc_sub.c.doc_cnt, 0).label("doc_count"),
@@ -359,6 +378,11 @@ async def dashboard_summary(
         .outerjoin(doc_sub, Client.id == doc_sub.c.client_id)
         .outerjoin(ai_sub, Client.id == ai_sub.c.client_id)
         .filter(Client.org_id == auth.org_id)
+    )
+    if accessible_ids is not None:
+        recent_q = recent_q.filter(Client.id.in_(accessible_ids))
+    recent_rows = (
+        recent_q
         .order_by(Client.updated_at.desc())
         .limit(5)
         .all()
