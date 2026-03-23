@@ -12,6 +12,7 @@ import DonutChartCard from "@/components/ui/DonutChartCard";
 import SectionCard from "@/components/ui/SectionCard";
 import PriorityDot from "@/components/ui/PriorityDot";
 import MemberRow from "@/components/ui/MemberRow";
+import ThinProgress from "@/components/ui/ThinProgress";
 
 type TimeRange = "7d" | "30d" | "90d";
 
@@ -78,7 +79,7 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+        <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-5">
           <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 lg:col-span-3">
             <div className="h-4 w-24 rounded bg-gray-200" />
             <div className="mt-4 h-[240px] rounded bg-gray-50" />
@@ -87,6 +88,30 @@ export default function DashboardPage() {
             <div className="h-4 w-32 rounded bg-gray-200" />
             <div className="mt-4 h-[240px] rounded bg-gray-50" />
           </div>
+        </div>
+        <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {[1, 2].map((i) => (
+            <div key={i} className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
+              <div className="h-4 w-28 rounded bg-gray-200" />
+              <div className="mt-4 space-y-3">
+                {[1, 2, 3].map((j) => (
+                  <div key={j} className="h-10 rounded bg-gray-50" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {[1, 2].map((i) => (
+            <div key={i} className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
+              <div className="h-4 w-20 rounded bg-gray-200" />
+              <div className="mt-4 space-y-3">
+                {[1, 2].map((j) => (
+                  <div key={j} className="h-6 rounded bg-gray-50" />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -314,6 +339,144 @@ export default function DashboardPage() {
             </Link>
           </SectionCard>
         )}
+      </div>
+
+      {/* Row 4: Utility cards */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Left card: Recent clients (if team view) or Quick actions (if solo) */}
+        {data.team_members ? (
+          <SectionCard
+            title="Recent clients"
+            action={{ label: "View all", href: "/dashboard/clients" }}
+          >
+            {data.recent_clients.slice(0, 5).map((c) => (
+              <Link
+                key={c.id}
+                href={`/dashboard/clients/${c.id}`}
+                className="flex items-center gap-3 border-b border-gray-100 py-2.5 last:border-b-0 hover:bg-gray-50 -mx-1 px-1 rounded"
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[11px] font-medium text-blue-700">
+                  {c.name
+                    .split(/\s+/)
+                    .map((w) => w[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-900">{c.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {c.document_count} document{c.document_count !== 1 ? "s" : ""}
+                    {" · "}
+                    {c.action_item_count} action item{c.action_item_count !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs text-gray-400">
+                  {new Date(c.last_activity).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+              </Link>
+            ))}
+          </SectionCard>
+        ) : (
+          <SectionCard title="Quick actions">
+            <div className="grid grid-cols-2 gap-2">
+              <Link
+                href={
+                  data.recent_clients[0]
+                    ? `/dashboard/clients/${data.recent_clients[0].id}`
+                    : "/dashboard/clients/new"
+                }
+                className="rounded-lg border border-gray-200 px-3 py-2.5 text-center text-sm text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              >
+                Upload document
+              </Link>
+              <Link
+                href={
+                  data.recent_clients[0]
+                    ? `/dashboard/clients/${data.recent_clients[0].id}`
+                    : "/dashboard/clients/new"
+                }
+                className="rounded-lg border border-gray-200 px-3 py-2.5 text-center text-sm text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              >
+                Ask AI
+              </Link>
+              <Link
+                href={
+                  data.recent_clients[0]
+                    ? `/dashboard/clients/${data.recent_clients[0].id}`
+                    : "/dashboard/clients/new"
+                }
+                className="rounded-lg border border-gray-200 px-3 py-2.5 text-center text-sm text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              >
+                Generate brief
+              </Link>
+              <Link
+                href="/dashboard/settings/integrations"
+                className="rounded-lg border border-gray-200 px-3 py-2.5 text-center text-sm text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              >
+                Sync email
+              </Link>
+            </div>
+          </SectionCard>
+        )}
+
+        {/* Right card: Usage & plan */}
+        <SectionCard title="Usage">
+          <div className="space-y-3">
+            {stats.clients.limit != null && (
+              <ThinProgress
+                label="Clients"
+                current={stats.clients.count}
+                max={stats.clients.limit}
+              />
+            )}
+            {stats.documents.limit != null && (
+              <ThinProgress
+                label="Documents"
+                current={stats.documents.count}
+                max={stats.documents.limit}
+              />
+            )}
+            <ThinProgress
+              label="AI Queries"
+              current={stats.ai_queries.used}
+              max={stats.ai_queries.limit}
+            />
+          </div>
+          <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
+            <div className="flex items-center gap-2">
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  data.plan.tier === "firm"
+                    ? "bg-indigo-100 text-indigo-700"
+                    : data.plan.tier === "professional"
+                    ? "bg-purple-100 text-purple-700"
+                    : data.plan.tier === "starter"
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                {data.plan.tier.charAt(0).toUpperCase() + data.plan.tier.slice(1)}
+              </span>
+              {data.plan.seats_used != null && data.plan.seats_total != null && (
+                <span className="text-xs text-gray-500">
+                  {data.plan.seats_used} of {data.plan.seats_total} seats
+                </span>
+              )}
+            </div>
+            {(data.plan.tier === "free" || data.plan.tier === "starter") && (
+              <Link
+                href="/dashboard/settings/subscriptions"
+                className="text-xs text-blue-600 hover:text-blue-800"
+              >
+                Upgrade
+              </Link>
+            )}
+          </div>
+        </SectionCard>
       </div>
     </div>
   );
