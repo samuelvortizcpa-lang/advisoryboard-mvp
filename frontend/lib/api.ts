@@ -1430,6 +1430,56 @@ export interface ClientAccessSummary {
   records: ClientAccess[];
 }
 
+// ─── Dashboard Summary ──────────────────────────────────────────────────────
+
+export interface DashboardSummary {
+  stats: {
+    clients: { count: number; limit: number | null };
+    action_items: { pending: number; overdue: number };
+    documents: { count: number; limit: number | null };
+    ai_queries: { used: number; limit: number };
+  };
+  activity_chart: Array<{ date: string; queries: number }>;
+  query_distribution: Array<{ type: string; count: number }>;
+  attention_items: Array<{
+    id: string;
+    description: string;
+    client_name: string;
+    client_id: string;
+    due_date: string | null;
+    priority: "critical" | "warning" | "info";
+    overdue_days: number | null;
+  }>;
+  recent_clients: Array<{
+    id: string;
+    name: string;
+    document_count: number;
+    action_item_count: number;
+    last_activity: string;
+  }>;
+  team_members: Array<{
+    user_id: string;
+    name: string;
+    email: string;
+    role: string;
+    queries_used: number;
+    last_active: string | null;
+  }> | null;
+  plan: {
+    tier: string;
+    billing_interval: string | null;
+    seats_used: number | null;
+    seats_total: number | null;
+  };
+}
+
+export function createDashboardApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    summary: (days = 30) => f<DashboardSummary>(`/dashboard/summary?days=${days}`),
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.

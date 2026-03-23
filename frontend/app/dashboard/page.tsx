@@ -2,58 +2,63 @@
 
 import Link from "next/link";
 import { useAuth, useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import AlertsList from "@/components/alerts/AlertsList";
-import UsageStats from "@/components/dashboard/UsageStats";
+import { createDashboardApi, type DashboardSummary } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
+import StatCard from "@/components/ui/StatCard";
+import AreaChartCard from "@/components/ui/AreaChartCard";
+import DonutChartCard from "@/components/ui/DonutChartCard";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+type TimeRange = "7d" | "30d" | "90d";
 
-interface DashboardStats {
-  clients: number;
-  documents: number;
-  interactions: number;
-}
+const RANGE_DAYS: Record<TimeRange, number> = { "7d": 7, "30d": 30, "90d": 90 };
+
+const DIST_COLORS: Record<string, string> = {
+  "Quick Lookup": "#3B82F6",
+  "Deep Analysis": "#8B5CF6",
+  Brief: "#14B8A6",
+  "Action Items": "#F59E0B",
+  Other: "#D1D5DB",
+};
 
 export default function DashboardPage() {
-  const { getToken, userId } = useAuth();
+  const { getToken } = useAuth();
   const { user } = useUser();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const { activeOrg } = useOrg();
+  const [data, setData] = useState<DashboardSummary | null>(null);
+  const [timeRange, setTimeRange] = useState<TimeRange>("30d");
+
+  const load = useCallback(
+    async (range: TimeRange) => {
+      try {
+        const api = createDashboardApi(getToken, activeOrg?.id);
+        const result = await api.summary(RANGE_DAYS[range]);
+        setData(result);
+      } catch {
+        // non-fatal — keep stale data or null
+      }
+    },
+    [getToken, activeOrg?.id],
+  );
 
   useEffect(() => {
-    let cancelled = false;
+    load(timeRange);
+  }, [load, timeRange]);
 
-    async function load() {
-      const token = await getToken();
-      if (!token || cancelled) return;
-      try {
-        const res = await fetch(`${API_BASE}/api/dashboard/stats`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("stats fetch failed");
-        const data: DashboardStats = await res.json();
-        if (!cancelled) setStats(data);
-      } catch {
-        if (!cancelled) setStats({ clients: 0, documents: 0, interactions: 0 });
-      }
-    }
-
-    load();
-    return () => { cancelled = true; };
-  }, [getToken]);
-
-  const displayName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "there";
-  const email = user?.emailAddresses[0]?.emailAddress ?? "";
+  const handleTimeRangeChange = (range: TimeRange) => {
+    setTimeRange(range);
+  };
 
   const initials =
     ((user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "")).toUpperCase() ||
     "U";
 
-  if (!stats) {
+  // ── Loading skeleton ───────────────────────────────────────────────────
+
+  if (!data) {
     return (
       <div>
-        {/* Top bar */}
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-900">Overview</h1>
           <div className="flex items-center gap-3">
@@ -61,19 +66,54 @@ export default function DashboardPage() {
             <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
           </div>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-8 animate-pulse">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="rounded-lg bg-gray-50 px-5 py-4">
-                <div className="h-7 w-10 rounded bg-gray-200" />
-                <div className="mt-2 h-4 w-20 rounded bg-gray-100" />
-              </div>
-            ))}
+        <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="animate-pulse rounded-lg bg-gray-50 p-4">
+              <div className="h-3 w-16 rounded bg-gray-200" />
+              <div className="mt-2 h-7 w-12 rounded bg-gray-200" />
+              <div className="mt-2 h-3 w-20 rounded bg-gray-100" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+          <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 lg:col-span-3">
+            <div className="h-4 w-24 rounded bg-gray-200" />
+            <div className="mt-4 h-[240px] rounded bg-gray-50" />
+          </div>
+          <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 lg:col-span-2">
+            <div className="h-4 w-32 rounded bg-gray-200" />
+            <div className="mt-4 h-[240px] rounded bg-gray-50" />
           </div>
         </div>
       </div>
     );
   }
+
+  // ── Computed values ────────────────────────────────────────────────────
+
+  const { stats } = data;
+  const queryPct =
+    stats.ai_queries.limit > 0
+      ? (stats.ai_queries.used / stats.ai_queries.limit) * 100
+      : 0;
+
+  const chartData = data.activity_chart.map((p) => ({
+    date: p.date,
+    value: p.queries,
+  }));
+
+  const donutData = data.query_distribution.map((d) => ({
+    name: d.type,
+    value: d.count,
+    color: DIST_COLORS[d.type] ?? DIST_COLORS.Other,
+  }));
+
+  const totalQueries = data.query_distribution.reduce(
+    (sum, d) => sum + d.count,
+    0,
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────
 
   return (
     <div>
@@ -93,111 +133,67 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {/* Clients */}
-          <Link
-            href="/dashboard/clients"
-            className="group rounded-lg border border-gray-100 bg-gray-50 px-5 py-4 transition-colors hover:border-blue-200 hover:bg-blue-50"
-          >
-            <p className="text-2xl font-bold text-gray-900 transition-colors group-hover:text-blue-700">
-              {stats.clients}
-            </p>
-            <p className="mt-0.5 text-sm text-gray-500 transition-colors group-hover:text-blue-600">
-              Clients →
-            </p>
-          </Link>
+      {/* Row 1: Stat cards */}
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Active clients"
+          value={stats.clients.count}
+          context={
+            stats.clients.limit != null
+              ? `of ${stats.clients.limit}`
+              : undefined
+          }
+          contextType="muted"
+        />
+        <StatCard
+          label="Action items"
+          value={stats.action_items.pending}
+          context={
+            stats.action_items.overdue > 0
+              ? `${stats.action_items.overdue} overdue`
+              : "All on track"
+          }
+          contextType={stats.action_items.overdue > 0 ? "warning" : "success"}
+        />
+        <StatCard
+          label="Documents"
+          value={stats.documents.count}
+          context={
+            stats.documents.limit != null
+              ? `of ${stats.documents.limit}`
+              : undefined
+          }
+          contextType="muted"
+        />
+        <StatCard
+          label="AI queries"
+          value={stats.ai_queries.used}
+          context={`of ${stats.ai_queries.limit}`}
+          contextType={
+            queryPct > 80 ? "warning" : "muted"
+          }
+        />
+      </div>
 
-          {/* Interactions (action items) */}
-          <Link
-            href="/dashboard/actions"
-            className="group rounded-lg border border-gray-100 bg-gray-50 px-5 py-4 transition-colors hover:border-blue-200 hover:bg-blue-50"
-          >
-            <p className="text-2xl font-bold text-gray-900 transition-colors group-hover:text-blue-700">
-              {stats.interactions}
-            </p>
-            <p className="mt-0.5 text-sm text-gray-500 transition-colors group-hover:text-blue-600">
-              Action Items →
-            </p>
-          </Link>
-
-          {/* Documents */}
-          <Link
-            href="/dashboard/clients"
-            className="group rounded-lg border border-gray-100 bg-gray-50 px-5 py-4 transition-colors hover:border-blue-200 hover:bg-blue-50"
-          >
-            <p className="text-2xl font-bold text-gray-900 transition-colors group-hover:text-blue-700">
-              {stats.documents}
-            </p>
-            <p className="mt-0.5 text-sm text-gray-500 transition-colors group-hover:text-blue-600">
-              Documents →
-            </p>
-          </Link>
+      {/* Row 2: Charts */}
+      <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <AreaChartCard
+            title="Activity"
+            data={chartData}
+            timeRange={timeRange}
+            onTimeRangeChange={handleTimeRangeChange}
+          />
+        </div>
+        <div className="lg:col-span-2">
+          <DonutChartCard
+            title="Query distribution"
+            data={donutData}
+            centerValue={totalQueries}
+            centerLabel="queries"
+          />
         </div>
       </div>
-
-      {/* Smart Alerts */}
-      <div className="mt-6">
-        <AlertsList />
-      </div>
-
-      {/* AI Usage */}
-      <div className="mt-6">
-        <UsageStats />
-      </div>
-
-      {/* Quick actions */}
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Quick Actions
-        </h2>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Link
-            href="/dashboard/clients/new"
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          >
-            + Add Client
-          </Link>
-          <Link
-            href="/dashboard/clients"
-            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-          >
-            View All Clients
-          </Link>
-        </div>
-      </div>
-
-      {/* Account details */}
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Account
-        </h2>
-        <dl className="mt-4 space-y-3">
-          <Row label="Name" value={displayName} />
-          <Row label="Email" value={email || "—"} />
-          <Row label="User ID" value={userId || "—"} mono />
-        </dl>
-      </div>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline gap-4 text-sm">
-      <dt className="w-20 shrink-0 font-medium text-gray-500">{label}</dt>
-      <dd className={`text-gray-900 ${mono ? "font-mono text-xs break-all" : ""}`}>
-        {value}
-      </dd>
     </div>
   );
 }
