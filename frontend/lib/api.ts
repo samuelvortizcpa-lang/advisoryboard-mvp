@@ -1430,6 +1430,45 @@ export interface ClientAccessSummary {
   records: ClientAccess[];
 }
 
+// ─── Client assignment types ────────────────────────────────────────────────
+
+export interface ClientAssignment {
+  id: string;
+  client_id: string;
+  client_name: string | null;
+  user_id: string;
+  user_name: string | null;
+  user_email: string | null;
+  org_id: string;
+  assigned_by: string;
+  assigned_at: string;
+  role: string;
+}
+
+// ─── Client assignments API factory ─────────────────────────────────────────
+
+export function createClientAssignmentsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    list(clientId: string) {
+      return f<ClientAssignment[]>(`/clients/${clientId}/assignments`);
+    },
+
+    assign(clientId: string, userId: string) {
+      return f<ClientAssignment>(`/clients/${clientId}/assignments`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId }),
+      });
+    },
+
+    remove(clientId: string, userId: string) {
+      return f<void>(`/clients/${clientId}/assignments/${userId}`, {
+        method: "DELETE",
+      });
+    },
+  };
+}
+
 // ─── Dashboard Summary ──────────────────────────────────────────────────────
 
 export interface DashboardSummary {

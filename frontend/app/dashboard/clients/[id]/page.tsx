@@ -31,6 +31,7 @@ import DocumentComparisonReport from "@/components/documents/DocumentComparisonR
 import DocumentUpload from "@/components/documents/DocumentUpload";
 import ClientChat from "@/components/rag/ClientChat";
 import CalendarView from "@/components/timeline/CalendarView";
+import AssignedTeam from "@/components/clients/AssignedTeam";
 import ConsentBanner from "@/components/consent/ConsentBanner";
 import Timeline from "@/components/timeline/Timeline";
 
@@ -664,6 +665,9 @@ function ClientDetailContent() {
               </div>
             </div>
           </div>
+
+          {/* ── Assigned team (org admins only) ──────────────────────────── */}
+          <AssignedTeam clientId={id} />
 
           {/* ── 7216 consent banner ────────────────────────────────────────── */}
           <ConsentBanner
