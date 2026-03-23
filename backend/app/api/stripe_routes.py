@@ -44,6 +44,7 @@ def _require_stripe():
 class CheckoutRequest(BaseModel):
     tier: str
     billing_interval: str = "monthly"
+    addon_seats: int = 0
 
 
 class CheckoutResponse(BaseModel):
@@ -106,6 +107,7 @@ async def create_checkout(
             user_email=user_email,
             tier=body.tier,
             billing_interval=body.billing_interval,
+            addon_seats=body.addon_seats,
             org_id=auth.org_id,
             db=db,
         )
