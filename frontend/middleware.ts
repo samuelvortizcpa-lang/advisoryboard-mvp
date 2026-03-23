@@ -7,8 +7,12 @@ const PROXY_URL = "https://myadvisoryboard.space/__clerk";
 const clerkHandler = clerkMiddleware();
 
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
-  // Public consent signing pages — skip Clerk auth entirely
-  if (req.nextUrl.pathname.startsWith("/consent/sign")) {
+  // Public pages — skip Clerk auth entirely
+  if (
+    req.nextUrl.pathname.startsWith("/consent/sign") ||
+    req.nextUrl.pathname === "/privacy" ||
+    req.nextUrl.pathname === "/terms"
+  ) {
     return NextResponse.next();
   }
 
