@@ -59,7 +59,7 @@ const PRICING: {
     annualTotal: "$0",
     features: [
       "5 clients",
-      "10 documents",
+      "Unlimited documents",
       "50 AI queries/month",
       "All document types",
       "RAG Q&A",
@@ -72,7 +72,7 @@ const PRICING: {
     annualTotal: "$948",
     features: [
       "25 clients",
-      "500 documents",
+      "Unlimited documents",
       "GPT-4o-mini only",
       "500MB storage",
     ],
@@ -84,7 +84,7 @@ const PRICING: {
     annualTotal: "$1,428",
     features: [
       "100 clients",
-      "5,000 documents",
+      "Unlimited documents",
       "100 strategic queries/mo",
       "10 Opus queries/mo",
       "5GB storage",
@@ -271,7 +271,6 @@ export default function SubscriptionManagementPage() {
   // Determine if any limit is > 80% for upgrade prompt
   const showUpgradePrompt = isFreeTier && subInfo && (
     (subInfo.max_clients !== null && subInfo.current_clients / subInfo.max_clients > 0.8) ||
-    (subInfo.max_documents !== null && subInfo.current_documents / subInfo.max_documents > 0.8) ||
     (subInfo.strategic_queries_limit > 0 && subInfo.strategic_queries_used / subInfo.strategic_queries_limit > 0.8)
   );
 
