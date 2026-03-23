@@ -9,6 +9,9 @@ import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
+import SectionCard from "@/components/ui/SectionCard";
+import PriorityDot from "@/components/ui/PriorityDot";
+import MemberRow from "@/components/ui/MemberRow";
 
 type TimeRange = "7d" | "30d" | "90d";
 
@@ -193,6 +196,124 @@ export default function DashboardPage() {
             centerLabel="queries"
           />
         </div>
+      </div>
+
+      {/* Row 3: Content cards */}
+      <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Needs attention */}
+        <SectionCard
+          title="Needs attention"
+          action={{ label: "View all", href: "/dashboard/actions" }}
+        >
+          {data.attention_items.length === 0 ? (
+            <div className="flex items-center gap-2 py-2">
+              <svg className="h-4 w-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm text-gray-500">All caught up</span>
+            </div>
+          ) : (
+            <div>
+              {data.attention_items.slice(0, 5).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-start gap-2.5 border-b border-gray-100 py-2.5 last:border-b-0"
+                >
+                  <div className="mt-1.5">
+                    <PriorityDot priority={item.priority === "critical" ? "critical" : item.priority === "warning" ? "warning" : "info"} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-gray-900 line-clamp-1">{item.description}</p>
+                    <p className="text-xs text-gray-500">
+                      {item.client_name}
+                      {item.overdue_days != null && item.overdue_days > 0
+                        ? ` — Overdue by ${item.overdue_days} day${item.overdue_days !== 1 ? "s" : ""}`
+                        : item.due_date
+                        ? (() => {
+                            const diff = Math.ceil(
+                              (new Date(item.due_date).getTime() - Date.now()) /
+                                86400000,
+                            );
+                            if (diff === 0) return " — Due today";
+                            if (diff === 1) return " — Due tomorrow";
+                            return ` — Due in ${diff} days`;
+                          })()
+                        : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+
+        {/* Team members or Recent clients */}
+        {data.team_members ? (
+          <SectionCard
+            title="Team"
+            action={{ label: "Manage", href: "/dashboard/settings/organization" }}
+          >
+            {data.team_members.slice(0, 5).map((m) => (
+              <MemberRow
+                key={m.user_id}
+                name={m.name}
+                email={m.email}
+                role={m.role}
+                stats={{ clients: 0, queries: m.queries_used }}
+                lastActive={
+                  m.last_active
+                    ? new Date(m.last_active).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : undefined
+                }
+              />
+            ))}
+          </SectionCard>
+        ) : (
+          <SectionCard
+            title="Recent clients"
+            action={{ label: "View all", href: "/dashboard/clients" }}
+          >
+            {data.recent_clients.slice(0, 5).map((c) => (
+              <Link
+                key={c.id}
+                href={`/dashboard/clients/${c.id}`}
+                className="flex items-center gap-3 border-b border-gray-100 py-2.5 last:border-b-0 hover:bg-gray-50 -mx-1 px-1 rounded"
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[11px] font-medium text-blue-700">
+                  {c.name
+                    .split(/\s+/)
+                    .map((w) => w[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-900">{c.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {c.document_count} document{c.document_count !== 1 ? "s" : ""}
+                    {" · "}
+                    {c.action_item_count} action item{c.action_item_count !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs text-gray-400">
+                  {new Date(c.last_activity).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+              </Link>
+            ))}
+            <Link
+              href="/dashboard/clients/new"
+              className="mt-3 flex w-full items-center justify-center rounded-lg border border-dashed border-gray-200 py-2 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700"
+            >
+              + Add new client
+            </Link>
+          </SectionCard>
+        )}
       </div>
     </div>
   );
