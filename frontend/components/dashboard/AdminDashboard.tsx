@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
+import { useCallback, useEffect, useState } from "react";
 
-import type { DashboardSummary } from "@/lib/api";
+import type { DashboardSummary, MemberAssignments } from "@/lib/api";
+import { createClientAssignmentsApi } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
@@ -26,6 +30,31 @@ interface Props {
 }
 
 export default function AdminDashboard({ data, initials, timeRange, onTimeRangeChange }: Props) {
+  const { getToken } = useAuth();
+  const { activeOrg } = useOrg();
+  const [assignmentMap, setAssignmentMap] = useState<Record<string, MemberAssignments>>({});
+
+  const loadAssignments = useCallback(async () => {
+    if (!activeOrg || activeOrg.org_type === "personal") return;
+    try {
+      const api = createClientAssignmentsApi(getToken, activeOrg.id);
+      const result = await api.listOrgAssignments(activeOrg.id);
+      const map: Record<string, MemberAssignments> = {};
+      for (const m of result) {
+        map[m.user_id] = m;
+      }
+      setAssignmentMap(map);
+    } catch {
+      // non-fatal
+    }
+  }, [getToken, activeOrg]);
+
+  useEffect(() => {
+    if (data.team_members) {
+      loadAssignments();
+    }
+  }, [data.team_members, loadAssignments]);
+
   const { stats } = data;
   const queryPct =
     stats.ai_queries.limit > 0
@@ -103,20 +132,26 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
         <AttentionCard data={data} />
         {data.team_members ? (
           <SectionCard title="Team" action={{ label: "Manage", href: "/dashboard/settings/organization" }}>
-            {data.team_members.slice(0, 5).map((m) => (
-              <MemberRow
-                key={m.user_id}
-                name={m.name}
-                email={m.email}
-                role={m.role}
-                stats={{ clients: 0, queries: m.queries_used }}
-                lastActive={
-                  m.last_active
-                    ? new Date(m.last_active).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                    : undefined
-                }
-              />
-            ))}
+            {data.team_members.slice(0, 5).map((m) => {
+              const memberAssign = assignmentMap[m.user_id];
+              const clientCount = memberAssign?.assigned_clients.length ?? 0;
+              const clientNames = memberAssign?.assigned_clients.map((c) => c.client_name) ?? [];
+              return (
+                <MemberRow
+                  key={m.user_id}
+                  name={m.name}
+                  email={m.email}
+                  role={m.role}
+                  stats={{ clients: clientCount, queries: m.queries_used }}
+                  clientNames={clientNames}
+                  lastActive={
+                    m.last_active
+                      ? new Date(m.last_active).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                      : undefined
+                  }
+                />
+              );
+            })}
           </SectionCard>
         ) : (
           <RecentClientsCard data={data} />

@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
+import { useCallback, useEffect, useState } from "react";
 
+import { createClientAssignmentsApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import OrgSwitcher from "@/components/layout/OrgSwitcher";
 
@@ -28,9 +30,29 @@ const SETTINGS_NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { getToken } = useAuth();
   const { user } = useUser();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { activeOrg, orgs, isPersonalOrg, isAdmin } = useOrg();
+  const [myClientCount, setMyClientCount] = useState<number | null>(null);
+
+  const loadMyClientCount = useCallback(async () => {
+    if (!activeOrg || isPersonalOrg || isAdmin) {
+      setMyClientCount(null);
+      return;
+    }
+    try {
+      const api = createClientAssignmentsApi(getToken, activeOrg.id);
+      const result = await api.myClients();
+      setMyClientCount(result.length);
+    } catch {
+      // non-fatal
+    }
+  }, [getToken, activeOrg, isPersonalOrg, isAdmin]);
+
+  useEffect(() => {
+    loadMyClientCount();
+  }, [loadMyClientCount]);
 
   const displayName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -67,7 +89,12 @@ export default function Sidebar() {
       {/* ── Primary navigation ──────────────────────────────────────────── */}
       <nav className="mt-4 flex-1 space-y-0.5 overflow-y-auto">
         {PRIMARY_NAV.map((item) => (
-          <NavItem key={item.href} item={item} pathname={pathname} />
+          <NavItem
+            key={item.href}
+            item={item}
+            pathname={pathname}
+            badge={item.label === "Clients" && myClientCount != null ? myClientCount : undefined}
+          />
         ))}
 
         {/* ── Settings section ─────────────────────────────────────────── */}
@@ -102,9 +129,11 @@ export default function Sidebar() {
 function NavItem({
   item,
   pathname,
+  badge,
 }: {
   item: { href: string; label: string; Icon: () => JSX.Element; exact?: boolean };
   pathname: string;
+  badge?: number;
 }) {
   const { href, label, Icon } = item;
   const isActive = item.exact
@@ -125,6 +154,11 @@ function NavItem({
     >
       <Icon />
       {label}
+      {badge != null && (
+        <span className="ml-auto rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-blue-700">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }

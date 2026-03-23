@@ -1,8 +1,13 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+
 export interface MemberRowProps {
   name: string;
   email?: string;
   role?: string;
   stats?: { clients: number; queries: number };
+  clientNames?: string[];
   lastActive?: string;
   avatarColor?: string;
 }
@@ -19,7 +24,21 @@ const roleBadge: Record<string, string> = {
   member: "bg-gray-100 text-gray-700",
 };
 
-export default function MemberRow({ name, email, role, stats, lastActive }: MemberRowProps) {
+export default function MemberRow({ name, email, role, stats, clientNames, lastActive }: MemberRowProps) {
+  const [showPopover, setShowPopover] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showPopover) return;
+    function handleClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setShowPopover(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showPopover]);
+
   return (
     <div className="flex items-center gap-3 border-b border-gray-100 py-3 last:border-b-0">
       {/* Avatar */}
@@ -45,7 +64,22 @@ export default function MemberRow({ name, email, role, stats, lastActive }: Memb
       {/* Stats */}
       {stats && (
         <div className="hidden gap-4 text-xs text-gray-500 sm:flex">
-          <span>{stats.clients} clients</span>
+          <div className="relative" ref={popoverRef}>
+            <button
+              onClick={() => clientNames && clientNames.length > 0 && setShowPopover(!showPopover)}
+              className={`${clientNames && clientNames.length > 0 ? "cursor-pointer hover:text-gray-700" : "cursor-default"}`}
+            >
+              {stats.clients} clients
+            </button>
+            {showPopover && clientNames && clientNames.length > 0 && (
+              <div className="absolute left-1/2 top-full z-20 mt-1 -translate-x-1/2 w-48 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
+                <p className="px-3 py-1 text-[11px] font-medium text-gray-400 uppercase tracking-wide">Assigned clients</p>
+                {clientNames.map((cn) => (
+                  <p key={cn} className="truncate px-3 py-1 text-xs text-gray-700">{cn}</p>
+                ))}
+              </div>
+            )}
+          </div>
           <span>{stats.queries} queries</span>
         </div>
       )}

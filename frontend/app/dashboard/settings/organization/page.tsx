@@ -6,9 +6,11 @@ import { useEffect, useState, useCallback } from "react";
 import {
   createOrganizationsApi,
   createStripeApi,
+  createClientAssignmentsApi,
   OrgDetail,
   OrgMember,
   SeatInfo,
+  MemberAssignments,
 } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import Link from "next/link";
@@ -70,6 +72,10 @@ export default function OrganizationSettingsPage() {
   // Remove confirmation
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
 
+  // Assignment overview state
+  const [assignmentData, setAssignmentData] = useState<MemberAssignments[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+
   // Seat management state
   const [seatInfo, setSeatInfo] = useState<SeatInfo | null>(null);
   const [showManageSeats, setShowManageSeats] = useState(false);
@@ -82,6 +88,19 @@ export default function OrganizationSettingsPage() {
   };
 
   const api = useCallback(() => createOrganizationsApi(getToken), [getToken]);
+
+  const loadAssignments = useCallback(async (orgId: string) => {
+    setAssignmentsLoading(true);
+    try {
+      const assignApi = createClientAssignmentsApi(getToken, orgId);
+      const result = await assignApi.listOrgAssignments(orgId);
+      setAssignmentData(result);
+    } catch {
+      // non-fatal
+    } finally {
+      setAssignmentsLoading(false);
+    }
+  }, [getToken]);
 
   // Sync selectedOrgId from context
   useEffect(() => {
@@ -106,6 +125,9 @@ export default function OrganizationSettingsPage() {
       setMembers(memberList);
       setNameValue(detail.name);
 
+      // Load assignment overview
+      loadAssignments(selectedOrgId);
+
       // Load seat info for firm tier
       if (detail.subscription_tier === "firm") {
         try {
@@ -124,7 +146,7 @@ export default function OrganizationSettingsPage() {
           : "Failed to load organization details"
       );
     }
-  }, [api, stripeApi, selectedOrgId]);
+  }, [api, stripeApi, selectedOrgId, loadAssignments]);
 
   useEffect(() => {
     if (selectedOrgId) loadOrgDetail();
@@ -664,7 +686,70 @@ export default function OrganizationSettingsPage() {
           )}
         </div>
 
-        {/* ── Section 3: Seats & Billing (Firm only) ─────────────────── */}
+        {/* ── Section 3: Client Assignments ────────────────────────── */}
+        {isAdmin && members.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h2 className="text-sm font-semibold text-gray-900">Client Assignments</h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                See which clients are assigned to each team member
+              </p>
+            </div>
+            {assignmentsLoading ? (
+              <div className="p-10 text-center">
+                <p className="text-sm text-gray-400 animate-pulse">Loading assignments…</p>
+              </div>
+            ) : assignmentData.length === 0 ? (
+              <div className="p-10 text-center">
+                <p className="text-sm text-gray-500">
+                  No client assignments yet. Assign team members to clients from each client&apos;s detail page.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-xs font-medium uppercase tracking-wide text-gray-400">
+                      <th className="px-5 py-3">Member</th>
+                      <th className="px-5 py-3">Assigned Clients</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignmentData.map((ma) => (
+                      <tr key={ma.user_id} className="border-b border-gray-50">
+                        <td className="px-5 py-3">
+                          <p className="font-medium text-gray-900">{ma.user_name || ma.user_id}</p>
+                          {ma.user_email && (
+                            <p className="text-xs text-gray-400">{ma.user_email}</p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          {ma.assigned_clients.length === 0 ? (
+                            <span className="text-xs text-gray-400">None</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {ma.assigned_clients.map((c) => (
+                                <Link
+                                  key={c.client_id}
+                                  href={`/dashboard/clients/${c.client_id}`}
+                                  className="inline-block rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+                                >
+                                  {c.client_name}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Section 4: Seats & Billing (Firm only) ─────────────────── */}
         {orgDetail && tierLabel === "firm" && seatInfo && (
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">

@@ -1445,6 +1445,25 @@ export interface ClientAssignment {
   role: string;
 }
 
+export interface AssignedClientInfo {
+  client_id: string;
+  client_name: string;
+}
+
+export interface MemberAssignments {
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  assigned_clients: AssignedClientInfo[];
+}
+
+export interface MyClientResponse {
+  id: string;
+  name: string;
+  document_count: number;
+  action_item_count: number;
+}
+
 // ─── Client assignments API factory ─────────────────────────────────────────
 
 export function createClientAssignmentsApi(getToken: GetToken, orgId?: string) {
@@ -1465,6 +1484,16 @@ export function createClientAssignmentsApi(getToken: GetToken, orgId?: string) {
       return f<void>(`/clients/${clientId}/assignments/${userId}`, {
         method: "DELETE",
       });
+    },
+
+    /** All assignments across an org, grouped by member (admin only) */
+    listOrgAssignments(orgId: string) {
+      return f<MemberAssignments[]>(`/organizations/${orgId}/assignments`);
+    },
+
+    /** Clients assigned to the current user */
+    myClients() {
+      return f<MyClientResponse[]>(`/users/me/clients`);
     },
   };
 }

@@ -25,6 +25,33 @@ interface Props {
 
 export default function MemberDashboard({ data, initials, timeRange, onTimeRangeChange }: Props) {
   const { stats } = data;
+
+  // Empty state: org member with no assigned clients
+  const isOrgMember = data.team_members != null;
+  if (isOrgMember && stats.clients.count === 0) {
+    return (
+      <div>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-gray-900">My Overview</h1>
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-700">
+            {initials}
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white py-20 px-6 text-center shadow-sm">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 mb-4">
+            <svg className="h-7 w-7 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <h2 className="text-base font-semibold text-gray-900">No clients assigned yet</h2>
+          <p className="mt-1.5 max-w-sm text-sm text-gray-500">
+            Your admin hasn&apos;t assigned any clients to you yet. Once they do, your
+            clients and their data will appear here.
+          </p>
+        </div>
+      </div>
+    );
+  }
   const queryPct =
     stats.ai_queries.limit > 0
       ? (stats.ai_queries.used / stats.ai_queries.limit) * 100
