@@ -1711,6 +1711,65 @@ export function createStrategiesApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Strategy Dashboard ──────────────────────────────────────────────────────
+
+export interface StrategyOverview {
+  total_clients: number;
+  clients_reviewed: number;
+  clients_unreviewed: number;
+  total_implemented: number;
+  total_estimated_impact: number;
+}
+
+export interface ClientStrategySummary {
+  client_id: string;
+  client_name: string;
+  client_type: string | null;
+  active_flags: string[];
+  total_applicable: number;
+  total_reviewed: number;
+  total_implemented: number;
+  total_estimated_impact: number;
+  coverage_pct: number;
+  last_reviewed_at: string | null;
+}
+
+export interface StrategyAdoption {
+  strategy_id: string;
+  strategy_name: string;
+  category: string;
+  total_applicable: number;
+  total_implemented: number;
+  total_recommended: number;
+  total_declined: number;
+  adoption_rate: number;
+}
+
+export interface UnreviewedAlert {
+  client_id: string;
+  client_name: string;
+  strategy_id: string;
+  strategy_name: string;
+  category: string;
+}
+
+export function createStrategyDashboardApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    fetchOverview: (year: number) =>
+      f<StrategyOverview>(`/strategy-dashboard/overview?year=${year}`),
+
+    fetchClients: (year: number) =>
+      f<ClientStrategySummary[]>(`/strategy-dashboard/clients?year=${year}`),
+
+    fetchAdoption: (year: number) =>
+      f<StrategyAdoption[]>(`/strategy-dashboard/adoption?year=${year}`),
+
+    fetchAlerts: (year: number) =>
+      f<UnreviewedAlert[]>(`/strategy-dashboard/alerts?year=${year}`),
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.
