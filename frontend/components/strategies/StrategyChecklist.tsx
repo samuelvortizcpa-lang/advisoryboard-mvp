@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ProfileFlags, StrategyChecklist as ChecklistType, StrategyWithStatus } from "@/lib/api";
 import { createStrategiesApi } from "@/lib/api";
+import StrategyComparison from "./StrategyComparison";
 
 interface Props {
   clientId: string;
@@ -38,6 +39,7 @@ function fmtMoney(n: number): string {
 
 export default function StrategyChecklist({ clientId, profileFlags }: Props) {
   const { getToken } = useAuth();
+  const [view, setView] = useState<"current" | "compare">("current");
   const [year, setYear] = useState(CURRENT_YEAR);
   const [data, setData] = useState<ChecklistType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,22 +87,65 @@ export default function StrategyChecklist({ clientId, profileFlags }: Props) {
 
   return (
     <div className="mt-4 space-y-4">
-      {/* ── Top bar: year selector + summary ─────────────────────────────── */}
+      {/* ── Top bar: view toggle + year selector + AI Suggest + summary ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-500">Tax Year</label>
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm"
+        <div className="flex items-center gap-3">
+          {/* View toggle */}
+          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+            <button
+              onClick={() => setView("current")}
+              className={[
+                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                view === "current"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700",
+              ].join(" ")}
+            >
+              Current Year
+            </button>
+            <button
+              onClick={() => setView("compare")}
+              className={[
+                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                view === "compare"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700",
+              ].join(" ")}
+            >
+              Compare Years
+            </button>
+          </div>
+
+          {/* Year selector (current view only) */}
+          {view === "current" && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-500">Tax Year</label>
+              <select
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm"
+              >
+                {YEARS.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* AI Suggest placeholder */}
+          <button
+            disabled
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-400 shadow-sm cursor-not-allowed"
+            title="Coming soon — AI-powered strategy suggestions"
           >
-            {YEARS.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+            </svg>
+            AI Suggest
+          </button>
         </div>
 
-        {summary && summary.total_applicable > 0 && (
+        {view === "current" && summary && summary.total_applicable > 0 && (
           <div className="flex items-center gap-4 text-xs text-gray-500">
             <span>
               <span className="font-medium text-gray-700">{summary.total_reviewed}</span> of{" "}
@@ -121,63 +166,71 @@ export default function StrategyChecklist({ clientId, profileFlags }: Props) {
         )}
       </div>
 
-      {/* ── Hint when only universal strategies ────────────────────────── */}
-      {!hasNonUniversal && categories.length > 0 && (
-        <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
-          Toggle profile flags above to see more tax strategies relevant to this client.
-        </div>
-      )}
+      {/* ── Compare Years view ──────────────────────────────────────── */}
+      {view === "compare" && <StrategyComparison clientId={clientId} />}
 
-      {/* ── Categories (accordion) ────────────────────────────────────── */}
-      {categories.map((cat) => {
-        const collapsed = collapsedCategories.has(cat.category_name);
-        const label = CATEGORY_LABELS[cat.category_name] ?? cat.category_name;
-        return (
-          <div key={cat.category_name} className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <button
-              onClick={() => toggleCategory(cat.category_name)}
-              className="flex w-full items-center justify-between px-5 py-3.5 text-left"
-            >
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-gray-900">{label}</h3>
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                  {cat.strategies.length}
-                </span>
-              </div>
-              <svg
-                className={`h-4 w-4 text-gray-400 transition-transform ${collapsed ? "" : "rotate-180"}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              </svg>
-            </button>
-            {!collapsed && (
-              <div className="border-t border-gray-100">
-                {cat.strategies.map((sw) => (
-                  <StrategyRow
-                    key={sw.strategy.id}
-                    clientId={clientId}
-                    item={sw}
-                    getToken={getToken}
-                    onSaved={load}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {/* ── Current Year view ─────────────────────────────────────── */}
+      {view === "current" && (
+        <>
+          {/* Hint when only universal strategies */}
+          {!hasNonUniversal && categories.length > 0 && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+              Toggle profile flags above to see more tax strategies relevant to this client.
+            </div>
+          )}
 
-      {categories.length === 0 && !loading && (
-        <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center shadow-sm">
-          <p className="text-sm text-gray-500">No applicable strategies for this client profile.</p>
-          <p className="mt-1 text-xs text-gray-400">
-            Toggle profile flags above to see tax strategies.
-          </p>
-        </div>
+          {/* Categories (accordion) */}
+          {categories.map((cat) => {
+            const collapsed = collapsedCategories.has(cat.category_name);
+            const label = CATEGORY_LABELS[cat.category_name] ?? cat.category_name;
+            return (
+              <div key={cat.category_name} className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <button
+                  onClick={() => toggleCategory(cat.category_name)}
+                  className="flex w-full items-center justify-between px-5 py-3.5 text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-gray-900">{label}</h3>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                      {cat.strategies.length}
+                    </span>
+                  </div>
+                  <svg
+                    className={`h-4 w-4 text-gray-400 transition-transform ${collapsed ? "" : "rotate-180"}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+                {!collapsed && (
+                  <div className="border-t border-gray-100">
+                    {cat.strategies.map((sw) => (
+                      <StrategyRow
+                        key={sw.strategy.id}
+                        clientId={clientId}
+                        item={sw}
+                        getToken={getToken}
+                        onSaved={load}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {categories.length === 0 && !loading && (
+            <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center shadow-sm">
+              <p className="text-sm text-gray-500">No applicable strategies for this client profile.</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Toggle profile flags above to see tax strategies.
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

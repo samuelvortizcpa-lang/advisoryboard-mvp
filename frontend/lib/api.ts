@@ -1663,6 +1663,14 @@ export function createStrategiesApi(getToken: GetToken, orgId?: string) {
         method: "PATCH",
         body: JSON.stringify(flags),
       }),
+
+    /** AI-powered strategy suggestions (placeholder — backend not yet implemented) */
+    // TODO: implement POST /api/clients/{id}/strategies/ai-suggest endpoint
+    aiSuggestStrategies: (clientId: string) =>
+      f<{ suggestions: Array<{ strategy_id: string; reason: string }> }>(
+        `/clients/${clientId}/strategies/ai-suggest`,
+        { method: "POST" },
+      ),
   };
 }
 
