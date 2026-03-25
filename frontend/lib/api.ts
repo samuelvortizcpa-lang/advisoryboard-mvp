@@ -104,6 +104,41 @@ async function apiFetch<T>(
 }
 
 /**
+ * Like apiFetch but returns a raw Blob instead of parsing JSON.
+ * Used for PDF downloads and other binary responses.
+ */
+async function apiFetchBlob(
+  getToken: GetToken,
+  path: string,
+  options: RequestInit = {},
+  orgId?: string,
+): Promise<Blob> {
+  const token = await getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(orgId ? { "X-Org-Id": orgId } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (typeof body.detail === "string") message = body.detail;
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(message);
+  }
+
+  return res.blob();
+}
+
+/**
  * Create a bound fetch function that always includes the given orgId.
  * Factory functions use this so callers don't have to thread orgId through
  * every individual method call.
@@ -111,6 +146,11 @@ async function apiFetch<T>(
 function boundFetch(getToken: GetToken, orgId?: string) {
   return <T>(path: string, options: RequestInit = {}) =>
     apiFetch<T>(getToken, path, options, orgId);
+}
+
+function boundFetchBlob(getToken: GetToken, orgId?: string) {
+  return (path: string, options: RequestInit = {}) =>
+    apiFetchBlob(getToken, path, options, orgId);
 }
 
 // ─── Document types ───────────────────────────────────────────────────────────
@@ -1649,6 +1689,7 @@ export interface ApplySuggestionsResponse {
 
 export function createStrategiesApi(getToken: GetToken, orgId?: string) {
   const f = boundFetch(getToken, orgId);
+  const fb = boundFetchBlob(getToken, orgId);
   return {
     /** All active strategies (reference list) */
     listAll: () => f<TaxStrategy[]>("/tax-strategies"),
@@ -1708,6 +1749,13 @@ export function createStrategiesApi(getToken: GetToken, orgId?: string) {
         `/clients/${clientId}/strategies/ai-suggest/apply`,
         { method: "POST", body: JSON.stringify(data) },
       ),
+
+    /** Generate strategy impact report PDF */
+    generateReport: (clientId: string, year: number, includePriorYears: boolean) =>
+      fb(`/clients/${clientId}/strategies/report`, {
+        method: "POST",
+        body: JSON.stringify({ year, include_prior_years: includePriorYears }),
+      }),
   };
 }
 
