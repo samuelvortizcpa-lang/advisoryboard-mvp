@@ -224,3 +224,11 @@ class UnreviewedAlert(BaseModel):
     strategy_id: UUID
     strategy_name: str
     category: str
+
+
+# ─── Strategy report ─────────────────────────────────────────────────────────
+
+
+class ReportRequest(BaseModel):
+    year: Optional[int] = None
+    include_prior_years: bool = True

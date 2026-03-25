@@ -8,6 +8,7 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,6 +21,7 @@ from app.schemas.strategy import (
     BulkStatusUpdate,
     ProfileFlagsResponse,
     ProfileFlagsUpdate,
+    ReportRequest,
     StrategyChecklistResponse,
     StrategyHistoryResponse,
     StrategyStatusUpdate,
@@ -28,6 +30,7 @@ from app.schemas.strategy import (
 from app.services import strategy_service
 from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.strategy_ai_service import apply_suggestions, generate_strategy_suggestions
+from app.services.strategy_report_service import generate_strategy_report
 
 router = APIRouter()
 
@@ -156,6 +159,40 @@ async def ai_suggest_apply(
         tax_year=body.tax_year,
     )
     return ApplySuggestionsResponse(**result)
+
+
+# ─── Report PDF (must be before {strategy_id} to avoid path conflict) ────────
+
+
+@router.post("/clients/{client_id}/strategies/report", response_model=None)
+async def strategy_report(
+    client_id: UUID,
+    body: ReportRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> Response:
+    """Generate a PDF strategy impact report for a client."""
+    check_client_access(auth, client_id, db)
+    pdf_bytes = generate_strategy_report(
+        db,
+        client_id=client_id,
+        user_id=auth.user_id,
+        tax_year=body.year,
+        include_prior_years=body.include_prior_years,
+    )
+    # Build a safe filename from the client name
+    from app.services.strategy_service import _get_client_or_404
+
+    client = _get_client_or_404(db, client_id)
+    safe_name = (client.name or "client").replace(" ", "_")
+    year = body.year or date.today().year
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="strategy_report_{safe_name}_{year}.pdf"'
+        },
+    )
 
 
 # ─── Single status update ────────────────────────────────────────────────────
