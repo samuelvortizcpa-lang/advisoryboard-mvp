@@ -1548,6 +1548,124 @@ export function createDashboardApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Tax Strategy Matrix ─────────────────────────────────────────────────────
+
+export interface TaxStrategy {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  required_flags: string[];
+  display_order: number;
+}
+
+export interface StrategyWithStatus {
+  strategy: TaxStrategy;
+  status: string;
+  notes: string | null;
+  estimated_impact: number | null;
+  tax_year: number;
+}
+
+export interface StrategyChecklist {
+  tax_year: number;
+  client_id: string;
+  categories: Array<{
+    category_name: string;
+    strategies: StrategyWithStatus[];
+  }>;
+  summary: {
+    total_applicable: number;
+    total_reviewed: number;
+    total_implemented: number;
+    total_estimated_impact: number;
+  };
+}
+
+export interface StrategyHistory {
+  strategies: Array<{
+    strategy_id: string;
+    name: string;
+    category: string;
+    statuses: Array<{
+      tax_year: number;
+      status: string;
+      notes: string | null;
+      estimated_impact: number | null;
+    }>;
+  }>;
+  year_summaries: Array<{
+    tax_year: number;
+    total_applicable: number;
+    total_reviewed: number;
+    total_implemented: number;
+    total_estimated_impact: number;
+  }>;
+  available_years: number[];
+}
+
+export interface ProfileFlags {
+  has_business_entity: boolean;
+  has_real_estate: boolean;
+  is_real_estate_professional: boolean;
+  has_high_income: boolean;
+  has_estate_planning: boolean;
+  is_medical_professional: boolean;
+  has_retirement_plans: boolean;
+  has_investments: boolean;
+  has_employees: boolean;
+}
+
+export function createStrategiesApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    /** All active strategies (reference list) */
+    listAll: () => f<TaxStrategy[]>("/tax-strategies"),
+
+    /** Strategies applicable to a client for a given year */
+    fetchChecklist: (clientId: string, year: number) =>
+      f<StrategyChecklist>(`/clients/${clientId}/strategies?year=${year}`),
+
+    /** Upsert a single strategy status */
+    updateStatus: (
+      clientId: string,
+      strategyId: string,
+      data: { tax_year: number; status: string; notes?: string | null; estimated_impact?: number | null },
+    ) =>
+      f<unknown>(`/clients/${clientId}/strategies/${strategyId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+
+    /** Bulk upsert strategy statuses */
+    bulkUpdate: (
+      clientId: string,
+      updates: Array<{
+        strategy_id: string;
+        tax_year: number;
+        status: string;
+        notes?: string | null;
+        estimated_impact?: number | null;
+      }>,
+    ) =>
+      f<{ updated: number }>(`/clients/${clientId}/strategies/bulk`, {
+        method: "PUT",
+        body: JSON.stringify({ updates }),
+      }),
+
+    /** Year-over-year strategy history */
+    fetchHistory: (clientId: string) =>
+      f<StrategyHistory>(`/clients/${clientId}/strategies/history`),
+
+    /** Partial update of client profile flags */
+    updateFlags: (clientId: string, flags: Partial<ProfileFlags>) =>
+      f<ProfileFlags>(`/clients/${clientId}/profile-flags`, {
+        method: "PATCH",
+        body: JSON.stringify(flags),
+      }),
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.

@@ -14,6 +14,7 @@ import {
   ComparisonType,
   Document,
   OrgMember,
+  ProfileFlags,
   createActionItemsApi,
   createBriefsApi,
   createClientTypesApi,
@@ -21,6 +22,7 @@ import {
   createDocumentsApi,
   createOrganizationsApi,
   createRagApi,
+  createStrategiesApi,
 } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import ActionItemList from "@/components/action-items/ActionItemList";
@@ -33,6 +35,8 @@ import ClientChat from "@/components/rag/ClientChat";
 import CalendarView from "@/components/timeline/CalendarView";
 import AssignedTeam from "@/components/clients/AssignedTeam";
 import ConsentBanner from "@/components/consent/ConsentBanner";
+import ProfileFlagsRow from "@/components/strategies/ProfileFlags";
+import StrategyChecklist from "@/components/strategies/StrategyChecklist";
 import Timeline from "@/components/timeline/Timeline";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -49,12 +53,13 @@ const ENTITY_TYPES = [
   "Other",
 ];
 
-type TabId = "overview" | "documents" | "actions" | "chat" | "timeline" | "access";
+type TabId = "overview" | "documents" | "actions" | "chat" | "timeline" | "strategies" | "access";
 
 const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "documents", label: "Documents" },
   { id: "actions", label: "Actions" },
+  { id: "strategies", label: "Tax Strategies" },
   { id: "chat", label: "Chat" },
   { id: "timeline", label: "Timeline" },
 ];
@@ -155,6 +160,20 @@ function ClientDetailContent() {
 
   const isFirmAdmin = org !== null && isOrgAdmin;
 
+  // ── Strategy state ─────────────────────────────────────────────────────────
+  const [implementedCount, setImplementedCount] = useState<number | null>(null);
+  const [profileFlags, setProfileFlags] = useState<ProfileFlags>({
+    has_business_entity: false,
+    has_real_estate: false,
+    is_real_estate_professional: false,
+    has_high_income: false,
+    has_estate_planning: false,
+    is_medical_professional: false,
+    has_retirement_plans: false,
+    has_investments: false,
+    has_employees: false,
+  });
+
   // ── Overview summary data ───────────────────────────────────────────────────
   const [pendingActionsCount, setPendingActionsCount] = useState<number | null>(null);
   const [nextDeadline, setNextDeadline] = useState<string | null | undefined>(undefined);
@@ -167,9 +186,28 @@ function ClientDetailContent() {
       .then((c) => {
         setClient(c);
         setEditForm(clientToForm(c));
+        // Extract profile flags from client data
+        const clientAny = c as unknown as Record<string, unknown>;
+        setProfileFlags({
+          has_business_entity: clientAny.has_business_entity === true,
+          has_real_estate: clientAny.has_real_estate === true,
+          is_real_estate_professional: clientAny.is_real_estate_professional === true,
+          has_high_income: clientAny.has_high_income === true,
+          has_estate_planning: clientAny.has_estate_planning === true,
+          is_medical_professional: clientAny.is_medical_professional === true,
+          has_retirement_plans: clientAny.has_retirement_plans === true,
+          has_investments: clientAny.has_investments === true,
+          has_employees: clientAny.has_employees === true,
+        });
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
+
+    // Load strategy implemented count for tab badge
+    createStrategiesApi(getToken)
+      .fetchChecklist(id, new Date().getFullYear())
+      .then((res) => setImplementedCount(res.summary.total_implemented))
+      .catch(() => {/* non-fatal */});
 
     createDocumentsApi(getToken)
       .list(id)
@@ -688,6 +726,8 @@ function ClientDetailContent() {
                       ? documents.length
                       : tab.id === "actions" && pendingActionsCount !== null && pendingActionsCount > 0
                       ? pendingActionsCount
+                      : tab.id === "strategies" && implementedCount !== null && implementedCount > 0
+                      ? implementedCount
                       : null;
 
                   return (
@@ -977,6 +1017,18 @@ function ClientDetailContent() {
                 documentCount={documents.length}
                 refreshKey={actionItemsRefreshKey}
               />
+            )}
+
+            {/* ── Tax Strategies ──────────────────────────────────────── */}
+            {activeTab === "strategies" && (
+              <div className="space-y-4">
+                <ProfileFlagsRow
+                  clientId={id}
+                  initialFlags={profileFlags}
+                  onFlagsChange={setProfileFlags}
+                />
+                <StrategyChecklist clientId={id} profileFlags={profileFlags} />
+              </div>
             )}
 
             {/* ── Chat ──────────────────────────────────────────────────── */}
