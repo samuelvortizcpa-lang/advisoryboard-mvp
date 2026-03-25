@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.tax_strategy import TaxStrategy
 from app.schemas.strategy import (
+    AISuggestResponse,
+    ApplySuggestionsRequest,
+    ApplySuggestionsResponse,
     BulkStatusResponse,
     BulkStatusUpdate,
     ProfileFlagsResponse,
@@ -24,6 +27,7 @@ from app.schemas.strategy import (
 )
 from app.services import strategy_service
 from app.services.auth_context import AuthContext, check_client_access, get_auth
+from app.services.strategy_ai_service import apply_suggestions, generate_strategy_suggestions
 
 router = APIRouter()
 
@@ -111,6 +115,47 @@ async def get_history(
     check_client_access(auth, client_id, db)
     result = strategy_service.get_strategy_history(db, client_id)
     return StrategyHistoryResponse(**result)
+
+
+# ─── AI suggestions (must be before {strategy_id} to avoid path conflict) ────
+
+
+@router.post(
+    "/clients/{client_id}/strategies/ai-suggest",
+    response_model=AISuggestResponse,
+)
+async def ai_suggest(
+    client_id: UUID,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> AISuggestResponse:
+    """Analyze client documents and generate AI-powered strategy suggestions."""
+    check_client_access(auth, client_id, db)
+    result = await generate_strategy_suggestions(db, client_id, user_id=auth.user_id)
+    return AISuggestResponse(**result)
+
+
+@router.post(
+    "/clients/{client_id}/strategies/ai-suggest/apply",
+    response_model=ApplySuggestionsResponse,
+)
+async def ai_suggest_apply(
+    client_id: UUID,
+    body: ApplySuggestionsRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> ApplySuggestionsResponse:
+    """Apply user-accepted AI strategy suggestions."""
+    check_client_access(auth, client_id, db)
+    result = await apply_suggestions(
+        db,
+        client_id,
+        user_id=auth.user_id,
+        accepted_flags=[f.model_dump() for f in body.accepted_flags],
+        accepted_strategies=[s.model_dump() for s in body.accepted_strategies],
+        tax_year=body.tax_year,
+    )
+    return ApplySuggestionsResponse(**result)
 
 
 # ─── Single status update ────────────────────────────────────────────────────

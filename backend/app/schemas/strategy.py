@@ -136,3 +136,48 @@ class ProfileFlagsResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ─── AI suggestions ─────────────────────────────────────────────────────────
+
+
+class FlagSuggestion(BaseModel):
+    flag: str
+    suggested_value: bool
+    reason: str
+
+
+class StrategySuggestion(BaseModel):
+    strategy_name: str
+    strategy_id: Optional[UUID] = None
+    suggested_status: str
+    reason: str
+
+
+class AISuggestResponse(BaseModel):
+    flag_suggestions: list[FlagSuggestion]
+    strategy_suggestions: list[StrategySuggestion]
+    documents_analyzed: int
+    tax_year: int
+
+
+class AcceptedFlag(BaseModel):
+    flag: str
+    value: bool
+
+
+class AcceptedStrategy(BaseModel):
+    strategy_id: UUID
+    status: str
+    notes: Optional[str] = None
+
+
+class ApplySuggestionsRequest(BaseModel):
+    accepted_flags: list[AcceptedFlag] = []
+    accepted_strategies: list[AcceptedStrategy] = []
+    tax_year: int
+
+
+class ApplySuggestionsResponse(BaseModel):
+    flags_updated: int
+    strategies_updated: int
