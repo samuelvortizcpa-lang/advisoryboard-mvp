@@ -79,6 +79,35 @@ class Client(Base):
     # Per-client AI instruction override (optional)
     custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Tax strategy profile flags
+    has_business_entity: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    has_real_estate: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    is_real_estate_professional: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    has_high_income: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    has_estate_planning: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    is_medical_professional: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    has_retirement_plans: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    has_investments: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    has_employees: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+
     # IRC §7216 consent tracking
     consent_status: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="not_required"

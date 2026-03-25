@@ -15,6 +15,16 @@ class ClientBase(BaseModel):
     notes: Optional[str] = None
     client_type_id: Optional[UUID] = None
     custom_instructions: Optional[str] = None
+    # Tax strategy profile flags
+    has_business_entity: bool = False
+    has_real_estate: bool = False
+    is_real_estate_professional: bool = False
+    has_high_income: bool = False
+    has_estate_planning: bool = False
+    is_medical_professional: bool = False
+    has_retirement_plans: bool = False
+    has_investments: bool = False
+    has_employees: bool = False
 
 
 class ClientCreate(ClientBase):
@@ -30,6 +40,16 @@ class ClientUpdate(BaseModel):
     notes: Optional[str] = None
     client_type_id: Optional[UUID] = None
     custom_instructions: Optional[str] = None
+    # Tax strategy profile flags
+    has_business_entity: Optional[bool] = None
+    has_real_estate: Optional[bool] = None
+    is_real_estate_professional: Optional[bool] = None
+    has_high_income: Optional[bool] = None
+    has_estate_planning: Optional[bool] = None
+    is_medical_professional: Optional[bool] = None
+    has_retirement_plans: Optional[bool] = None
+    has_investments: Optional[bool] = None
+    has_employees: Optional[bool] = None
 
 
 class ClientResponse(ClientBase):
