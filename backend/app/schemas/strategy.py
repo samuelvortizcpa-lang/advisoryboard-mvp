@@ -181,3 +181,46 @@ class ApplySuggestionsRequest(BaseModel):
 class ApplySuggestionsResponse(BaseModel):
     flags_updated: int
     strategies_updated: int
+
+
+# ─── Strategy dashboard ──────────────────────────────────────────────────────
+
+
+class StrategyOverview(BaseModel):
+    total_clients: int
+    clients_reviewed: int
+    clients_unreviewed: int
+    total_implemented: int
+    total_estimated_impact: float
+
+
+class ClientStrategySummary(BaseModel):
+    client_id: UUID
+    client_name: str
+    client_type: Optional[str] = None
+    active_flags: list[str]
+    total_applicable: int
+    total_reviewed: int
+    total_implemented: int
+    total_estimated_impact: float
+    coverage_pct: float
+    last_reviewed_at: Optional[str] = None
+
+
+class StrategyAdoption(BaseModel):
+    strategy_id: UUID
+    strategy_name: str
+    category: str
+    total_applicable: int
+    total_implemented: int
+    total_recommended: int
+    total_declined: int
+    adoption_rate: float
+
+
+class UnreviewedAlert(BaseModel):
+    client_id: UUID
+    client_name: str
+    strategy_id: UUID
+    strategy_name: str
+    category: str

@@ -28,6 +28,7 @@ from app.api.consent_public import router as consent_public_router
 from app.api.organizations import router as organizations_router
 from app.api.client_assignments import router as client_assignments_router
 from app.api.strategies import router as strategies_router
+from app.api.strategy_dashboard import router as strategy_dashboard_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -132,3 +133,4 @@ app.include_router(consent_public_router, prefix="/api/consent", tags=["consent-
 app.include_router(organizations_router, prefix="/api", tags=["organizations"])
 app.include_router(client_assignments_router, prefix="/api", tags=["client-assignments"])
 app.include_router(strategies_router,          prefix="/api", tags=["tax-strategies"])
+app.include_router(strategy_dashboard_router,  prefix="/api", tags=["strategy-dashboard"])
