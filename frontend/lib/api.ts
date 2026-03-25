@@ -1616,6 +1616,37 @@ export interface ProfileFlags {
   has_employees: boolean;
 }
 
+export interface FlagSuggestion {
+  flag: string;
+  suggested_value: boolean;
+  reason: string;
+}
+
+export interface StrategySuggestion {
+  strategy_name: string;
+  strategy_id: string | null;
+  suggested_status: string;
+  reason: string;
+}
+
+export interface AISuggestResponse {
+  flag_suggestions: FlagSuggestion[];
+  strategy_suggestions: StrategySuggestion[];
+  documents_analyzed: number;
+  tax_year: number;
+}
+
+export interface ApplySuggestionsRequest {
+  accepted_flags: Array<{ flag: string; value: boolean }>;
+  accepted_strategies: Array<{ strategy_id: string; status: string; notes?: string }>;
+  tax_year: number;
+}
+
+export interface ApplySuggestionsResponse {
+  flags_updated: number;
+  strategies_updated: number;
+}
+
 export function createStrategiesApi(getToken: GetToken, orgId?: string) {
   const f = boundFetch(getToken, orgId);
   return {
@@ -1664,12 +1695,18 @@ export function createStrategiesApi(getToken: GetToken, orgId?: string) {
         body: JSON.stringify(flags),
       }),
 
-    /** AI-powered strategy suggestions (placeholder — backend not yet implemented) */
-    // TODO: implement POST /api/clients/{id}/strategies/ai-suggest endpoint
+    /** AI-powered strategy suggestions */
     aiSuggestStrategies: (clientId: string) =>
-      f<{ suggestions: Array<{ strategy_id: string; reason: string }> }>(
+      f<AISuggestResponse>(
         `/clients/${clientId}/strategies/ai-suggest`,
         { method: "POST" },
+      ),
+
+    /** Apply accepted AI suggestions */
+    applySuggestions: (clientId: string, data: ApplySuggestionsRequest) =>
+      f<ApplySuggestionsResponse>(
+        `/clients/${clientId}/strategies/ai-suggest/apply`,
+        { method: "POST", body: JSON.stringify(data) },
       ),
   };
 }

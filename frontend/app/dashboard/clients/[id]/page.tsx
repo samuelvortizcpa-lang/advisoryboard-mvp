@@ -1027,7 +1027,7 @@ function ClientDetailContent() {
                   initialFlags={profileFlags}
                   onFlagsChange={setProfileFlags}
                 />
-                <StrategyChecklist clientId={id} profileFlags={profileFlags} />
+                <StrategyChecklist clientId={id} profileFlags={profileFlags} onFlagsChange={setProfileFlags} />
               </div>
             )}
 
