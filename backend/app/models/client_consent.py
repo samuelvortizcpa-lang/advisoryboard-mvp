@@ -36,6 +36,9 @@ class ClientConsent(Base):
 
     consent_type: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    consent_tier: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="full_7216"
+    )
 
     consent_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

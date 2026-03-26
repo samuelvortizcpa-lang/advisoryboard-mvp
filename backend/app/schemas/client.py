@@ -25,6 +25,7 @@ class ClientBase(BaseModel):
     has_retirement_plans: bool = False
     has_investments: bool = False
     has_employees: bool = False
+    is_tax_preparer: Optional[bool] = None
 
 
 class ClientCreate(ClientBase):
@@ -50,6 +51,7 @@ class ClientUpdate(BaseModel):
     has_retirement_plans: Optional[bool] = None
     has_investments: Optional[bool] = None
     has_employees: Optional[bool] = None
+    is_tax_preparer: Optional[bool] = None
 
 
 class ClientResponse(ClientBase):

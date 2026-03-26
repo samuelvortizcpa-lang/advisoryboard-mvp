@@ -116,6 +116,17 @@ class Client(Base):
         Boolean, nullable=False, server_default="false"
     )
 
+    # Tiered consent: preparer vs advisory-only relationship
+    is_tax_preparer: Mapped[Optional[bool]] = mapped_column(
+        Boolean, nullable=True
+    )
+    data_handling_acknowledged: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    data_handling_acknowledged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
