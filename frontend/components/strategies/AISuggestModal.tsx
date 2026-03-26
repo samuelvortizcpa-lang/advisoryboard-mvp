@@ -3,7 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
 
-import type { AISuggestResponse, FlagSuggestion, StrategySuggestion } from "@/lib/api";
+import type { AISuggestResponse, StrategySuggestion } from "@/lib/api";
 import { createStrategiesApi } from "@/lib/api";
 
 interface Props {
@@ -30,15 +30,6 @@ const FLAG_LABELS: Record<string, string> = {
   has_retirement_plans: "Retirement Plans",
   has_investments: "Investments",
   has_employees: "Employees",
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  universal: "Universal Strategies",
-  business: "Business Strategies",
-  real_estate: "Real Estate Strategies",
-  high_income: "High Income Strategies",
-  estate: "Estate Planning Strategies",
-  medical: "Medical Professional Strategies",
 };
 
 const PROGRESS_MESSAGES = [
@@ -134,7 +125,7 @@ export default function AISuggestModal({ clientId, onClose, onApplied }: Props) 
     const acceptedStrategies = data.strategy_suggestions
       .filter((_, i) => selectedStrategies.has(i))
       .filter((s) => s.strategy_id)
-      .map((s, _origIdx) => {
+      .map((s) => {
         const realIdx = data.strategy_suggestions.indexOf(s);
         return {
           strategy_id: s.strategy_id!,
@@ -171,20 +162,6 @@ export default function AISuggestModal({ clientId, onClose, onApplied }: Props) 
       counts[s.suggested_status] = (counts[s.suggested_status] || 0) + 1;
     });
     return counts;
-  }
-
-  // Group strategies by category
-  function groupByCategory(suggestions: StrategySuggestion[]) {
-    const grouped = new Map<string, Array<{ suggestion: StrategySuggestion; index: number }>>();
-    suggestions.forEach((s, i) => {
-      // Infer category from strategy_name — the backend doesn't include it directly.
-      // We'll just group them all under one section unless we can match.
-      const cat = "all";
-      const list = grouped.get(cat) ?? [];
-      list.push({ suggestion: s, index: i });
-      grouped.set(cat, list);
-    });
-    return grouped;
   }
 
   return (
