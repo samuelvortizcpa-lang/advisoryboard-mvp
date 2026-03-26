@@ -52,6 +52,8 @@ def get_consent_status(
         .first()
     )
 
+    client = db.query(Client).filter(Client.id == client_id).first()
+
     if not record:
         return {
             "status": None,
@@ -60,6 +62,9 @@ def get_consent_status(
             "is_expired": False,
             "days_until_expiry": None,
             "consent_record": None,
+            "is_tax_preparer": client.is_tax_preparer if client else None,
+            "data_handling_acknowledged": client.data_handling_acknowledged if client else False,
+            "consent_tier": None,
         }
 
     now = datetime.now(timezone.utc)
@@ -79,6 +84,9 @@ def get_consent_status(
         "is_expired": is_expired,
         "days_until_expiry": days_until_expiry,
         "consent_record": record,
+        "is_tax_preparer": client.is_tax_preparer if client else None,
+        "data_handling_acknowledged": client.data_handling_acknowledged if client else False,
+        "consent_tier": record.consent_tier,
     }
 
 
@@ -148,8 +156,13 @@ def check_tax_document_upload(
 ) -> dict[str, Any]:
     """
     Called after document classification.  If the document is tax-related,
-    sets has_tax_documents=True and flips consent_status from 'not_required'
-    to 'pending'.
+    sets has_tax_documents=True and determines the appropriate consent status
+    based on the CPA's preparer relationship with the client.
+
+    Consent status flow:
+    - is_tax_preparer is NULL  → 'determination_needed'
+    - is_tax_preparer is TRUE  → 'pending' (full 7216 required)
+    - is_tax_preparer is FALSE → 'advisory_acknowledgment_needed' or 'acknowledged'
     """
     if not document_type or document_type.lower() not in TAX_DOCUMENT_TYPES:
         client = db.query(Client).filter(Client.id == client_id).first()
@@ -163,8 +176,18 @@ def check_tax_document_upload(
         return {"needs_consent": False, "consent_status": "not_required"}
 
     client.has_tax_documents = True
+
     if client.consent_status == "not_required":
-        client.consent_status = "pending"
+        if client.is_tax_preparer is None:
+            client.consent_status = "determination_needed"
+        elif client.is_tax_preparer is True:
+            client.consent_status = "pending"
+        else:
+            # Advisory-only relationship
+            if client.data_handling_acknowledged:
+                client.consent_status = "acknowledged"
+            else:
+                client.consent_status = "advisory_acknowledgment_needed"
 
     db.commit()
     db.refresh(client)
@@ -175,9 +198,95 @@ def check_tax_document_upload(
     )
 
     return {
-        "needs_consent": client.consent_status == "pending",
+        "needs_consent": client.consent_status in ("pending", "determination_needed", "advisory_acknowledgment_needed"),
         "consent_status": client.consent_status,
     }
+
+
+def set_preparer_status(
+    client_id: UUID,
+    is_preparer: bool,
+    user_id: str,
+    db: Session,
+) -> Client:
+    """
+    Set the CPA's preparer relationship for a client and update consent status
+    accordingly.
+
+    - is_preparer=True  → full 7216 consent workflow ('pending')
+    - is_preparer=False → AICPA acknowledgment workflow
+    """
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    client.is_tax_preparer = is_preparer
+
+    if client.has_tax_documents:
+        if is_preparer:
+            client.consent_status = "pending"
+        else:
+            if client.data_handling_acknowledged:
+                client.consent_status = "acknowledged"
+            else:
+                client.consent_status = "advisory_acknowledgment_needed"
+
+    db.commit()
+    db.refresh(client)
+
+    logger.info(
+        "Preparer status set for client %s: is_tax_preparer=%s, consent_status=%s",
+        client_id, is_preparer, client.consent_status,
+    )
+
+    return client
+
+
+def record_advisory_acknowledgment(
+    client_id: UUID,
+    user_id: str,
+    db: Session,
+) -> ClientConsent:
+    """
+    Record a CPA's acknowledgment of AICPA Confidential Client Information Rule
+    for an advisory-only engagement (not subject to IRC §7216).
+    """
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    now = datetime.now(timezone.utc)
+
+    client.data_handling_acknowledged = True
+    client.data_handling_acknowledged_at = now
+    client.consent_status = "acknowledged"
+
+    record = ClientConsent(
+        client_id=client_id,
+        user_id=user_id,
+        consent_tier="aicpa_acknowledgment",
+        consent_type="use",
+        status="obtained",
+        consent_date=now,
+        consent_method="platform_acknowledgment",
+        notes=(
+            "CPA acknowledged AICPA Confidential Client Information Rule "
+            "(Section 1.700.001) for advisory engagement. CPA confirmed they "
+            "are not the tax return preparer for this client and that uploaded "
+            "tax documents were obtained outside the tax preparation relationship."
+        ),
+    )
+    db.add(record)
+
+    db.commit()
+    db.refresh(record)
+
+    logger.info(
+        "Advisory acknowledgment recorded for client %s by user %s",
+        client_id, user_id,
+    )
+
+    return record
 
 
 # ---------------------------------------------------------------------------

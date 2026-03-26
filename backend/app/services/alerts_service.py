@@ -2,12 +2,13 @@
 Smart Alerts service: computes cross-client alerts on demand.
 
 Alert types:
-- overdue_action:      pending action item with due_date < today
-- upcoming_deadline:   pending action item with due_date within next 7 days
-- stale_client:        client with no documents and no chat messages in last 30 days
-- stuck_document:      document where processed = false (stuck in processing)
-- consent_needed:      tax documents uploaded but no §7216 consent on file
-- consent_expiring:    §7216 consent expires within 30 days
+- overdue_action:                pending action item with due_date < today
+- upcoming_deadline:             pending action item with due_date within next 7 days
+- stale_client:                  client with no documents and no chat messages in last 30 days
+- stuck_document:                document where processed = false (stuck in processing)
+- preparer_determination_needed: tax docs uploaded, preparer relationship not yet set
+- consent_needed:                preparer confirmed, full §7216 consent required
+- consent_expiring:              §7216 consent expires within 30 days
 """
 
 from __future__ import annotations
@@ -186,7 +187,34 @@ def compute_alerts(
             "created_at": doc.upload_date.isoformat() if doc.upload_date else datetime.now(timezone.utc).isoformat(),
         })
 
-    # ── 5. Consent needed (tax docs uploaded but no consent on file) ─────
+    # ── 5a. Preparer determination needed ────────────────────────────────
+    determination_needed_clients = (
+        db.query(Client)
+        .filter(
+            Client.owner_id == owner_id,
+            Client.has_tax_documents == True,  # noqa: E712
+            Client.consent_status == "determination_needed",
+        )
+        .all()
+    )
+    for c in determination_needed_clients:
+        if ("preparer_determination_needed", c.id) in dismissed:
+            continue
+        alerts.append({
+            "id": str(c.id),
+            "type": "preparer_determination_needed",
+            "severity": "info",
+            "client_id": str(c.id),
+            "client_name": c.name,
+            "message": (
+                f"Tax documents uploaded for {c.name} "
+                f"\u2014 please confirm your preparer relationship to determine compliance requirements"
+            ),
+            "related_id": str(c.id),
+            "created_at": datetime.now(timezone.utc).date().isoformat(),
+        })
+
+    # ── 5b. Consent needed (preparer confirmed, full 7216 required) ───
     consent_needed_clients = (
         db.query(Client)
         .filter(

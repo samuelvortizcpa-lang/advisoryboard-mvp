@@ -27,7 +27,9 @@ from app.services.consent_service import (
     create_or_update_consent,
     generate_consent_form_pdf,
     get_consent_status,
+    record_advisory_acknowledgment,
     send_consent_for_signature,
+    set_preparer_status,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,6 +79,13 @@ class ConsentStatusResponse(BaseModel):
     latest_consent: Optional[ConsentResponse] = None
     is_expired: bool
     days_until_expiry: Optional[int] = None
+    is_tax_preparer: Optional[bool] = None
+    data_handling_acknowledged: bool = False
+    consent_tier: Optional[str] = None
+
+
+class PreparerStatusRequest(BaseModel):
+    is_tax_preparer: bool
 
 
 class GenerateFormJsonResponse(BaseModel):
@@ -117,6 +126,9 @@ async def get_client_consent(
         latest_consent=latest_consent,
         is_expired=info["is_expired"],
         days_until_expiry=info["days_until_expiry"],
+        is_tax_preparer=info["is_tax_preparer"],
+        data_handling_acknowledged=info["data_handling_acknowledged"],
+        consent_tier=info["consent_tier"],
     )
 
 
@@ -228,6 +240,65 @@ async def consent_history(
     )
 
     return [ConsentResponse.model_validate(r) for r in records]
+
+
+# ---------------------------------------------------------------------------
+# POST /api/clients/{client_id}/preparer-status
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/clients/{client_id}/preparer-status",
+    response_model=ConsentStatusResponse,
+    summary="Set preparer relationship for a client",
+)
+async def update_preparer_status(
+    client_id: UUID,
+    body: PreparerStatusRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> ConsentStatusResponse:
+    check_client_access(auth, client_id, db)
+
+    client = set_preparer_status(client_id, body.is_tax_preparer, auth.user_id, db)
+
+    info = get_consent_status(client_id, auth.user_id, db)
+    latest_consent = None
+    if info["consent_record"]:
+        latest_consent = ConsentResponse.model_validate(info["consent_record"])
+
+    return ConsentStatusResponse(
+        consent_status=client.consent_status,
+        has_tax_documents=client.has_tax_documents,
+        latest_consent=latest_consent,
+        is_expired=info["is_expired"],
+        days_until_expiry=info["days_until_expiry"],
+        is_tax_preparer=info["is_tax_preparer"],
+        data_handling_acknowledged=info["data_handling_acknowledged"],
+        consent_tier=info["consent_tier"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/clients/{client_id}/advisory-acknowledgment
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/clients/{client_id}/advisory-acknowledgment",
+    response_model=ConsentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record AICPA advisory acknowledgment for a client",
+)
+async def create_advisory_acknowledgment(
+    client_id: UUID,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> ConsentResponse:
+    check_client_access(auth, client_id, db)
+
+    record = record_advisory_acknowledgment(client_id, auth.user_id, db)
+    return ConsentResponse.model_validate(record)
 
 
 # ---------------------------------------------------------------------------
