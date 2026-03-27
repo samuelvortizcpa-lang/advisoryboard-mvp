@@ -67,6 +67,10 @@ export default function ConsentBanner({
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [settingPreparer, setSettingPreparer] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
+  const [showLearnMore, setShowLearnMore] = useState(false);
+  const [showAckDetails, setShowAckDetails] = useState(false);
 
   // Send-for-signature state
   const [showSendForm, setShowSendForm] = useState(false);
@@ -238,6 +242,40 @@ export default function ConsentBanner({
     setShowForm(false);
   }
 
+  async function handleSetPreparerStatus(isPreparer: boolean) {
+    setSettingPreparer(true);
+    try {
+      const updated = await api.setPreparerStatus(clientId, isPreparer);
+      setStatus(updated);
+      setToast(
+        isPreparer
+          ? "Preparer relationship confirmed — 7216 consent is required"
+          : "Advisory relationship confirmed"
+      );
+    } catch (err) {
+      setToast(
+        err instanceof Error ? err.message : "Failed to update preparer status"
+      );
+    } finally {
+      setSettingPreparer(false);
+    }
+  }
+
+  async function handleAdvisoryAcknowledgment() {
+    setAcknowledging(true);
+    try {
+      await api.recordAdvisoryAcknowledgment(clientId);
+      setToast("AICPA acknowledgment recorded");
+      await refresh();
+    } catch (err) {
+      setToast(
+        err instanceof Error ? err.message : "Failed to record acknowledgment"
+      );
+    } finally {
+      setAcknowledging(false);
+    }
+  }
+
   // ── Don't render if not applicable ──────────────────────────────────────────
 
   if (loading || !status) return null;
@@ -257,6 +295,159 @@ export default function ConsentBanner({
       {toast && (
         <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700">
           {toast}
+        </div>
+      )}
+
+      {/* ── Determination needed — preparer status unknown ────────────────── */}
+      {effectiveStatus === "determination_needed" && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-start gap-3">
+            <HelpCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-blue-800">
+                Tax Documents Detected
+              </p>
+              <p className="mt-1 text-sm text-blue-700">
+                You&apos;ve uploaded tax return documents for this client. To
+                determine the appropriate data handling requirements, please
+                confirm your relationship:
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => handleSetPreparerStatus(true)}
+                  disabled={settingPreparer}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-300 bg-white px-3.5 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:opacity-50"
+                >
+                  <ShieldWarningIcon className="h-4 w-4" />
+                  I Prepare This Client&apos;s Returns
+                </button>
+                <button
+                  onClick={() => handleSetPreparerStatus(false)}
+                  disabled={settingPreparer}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-300 bg-white px-3.5 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:opacity-50"
+                >
+                  <BriefcaseIcon className="h-4 w-4" />
+                  Advisory / Consulting Only
+                </button>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-blue-600">
+                This determines whether IRC Section 7216 consent is required.
+                7216 applies only when you are the tax return preparer. Advisory
+                engagements using prior returns prepared by another firm are
+                subject to AICPA confidentiality standards instead.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Advisory acknowledgment needed ──────────────────────────────── */}
+      {effectiveStatus === "advisory_acknowledgment_needed" && (
+        <div className="rounded-lg border border-teal-200 bg-teal-50 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheckIcon className="mt-0.5 h-5 w-5 shrink-0 text-teal-600" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-teal-800">
+                Data Handling Acknowledgment
+              </p>
+              <p className="mt-1 text-sm text-teal-700">
+                As an advisory engagement, this client&apos;s tax documents are
+                covered by AICPA Confidential Client Information standards
+                (Section 1.700.001) rather than IRC Section 7216. Please confirm
+                that your engagement letter authorizes the use of third-party
+                document platforms.
+              </p>
+              <div className="mt-3">
+                <button
+                  onClick={handleAdvisoryAcknowledgment}
+                  disabled={acknowledging}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {acknowledging
+                    ? "Confirming..."
+                    : "I Confirm \u2014 Engagement Letter Covers This"}
+                </button>
+              </div>
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowLearnMore(!showLearnMore)}
+                  className="text-xs font-medium text-teal-600 underline decoration-teal-300 hover:text-teal-800"
+                >
+                  {showLearnMore ? "Show less" : "Learn more"}
+                </button>
+                {showLearnMore && (
+                  <p className="mt-2 text-xs leading-relaxed text-teal-600">
+                    Section 7216 applies specifically to tax return preparers
+                    handling information furnished in connection with return
+                    preparation. Since you indicated this is an advisory-only
+                    engagement, the tax documents uploaded here are treated as
+                    confidential client information under AICPA standards rather
+                    than 7216 &ldquo;tax return information.&rdquo; Your standard
+                    engagement letter and our platform&apos;s encryption, access
+                    controls, and data isolation policies provide the appropriate
+                    level of protection. If your relationship with this client
+                    changes to include tax preparation, you can update this
+                    designation from the client settings.
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => handleSetPreparerStatus(true)}
+                disabled={settingPreparer}
+                className="mt-2 text-xs text-teal-600 underline decoration-teal-300 hover:text-teal-800 disabled:opacity-50"
+              >
+                Actually, I do prepare this client&apos;s returns &rarr;
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Acknowledged — advisory AICPA complete ──────────────────────── */}
+      {effectiveStatus === "acknowledged" && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheckIcon className="h-4 w-4 text-green-600" />
+              <p className="text-sm text-green-700">
+                <span className="font-medium">Data Handling:</span> Acknowledged
+                on {fmtDate(status.latest_consent?.consent_date)} &mdash;
+                Advisory engagement, AICPA standards apply
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAckDetails(!showAckDetails)}
+              className="text-xs font-medium text-green-600 hover:text-green-800"
+            >
+              {showAckDetails ? "Hide" : "View Details"}
+            </button>
+          </div>
+          {showAckDetails && status.latest_consent && (
+            <div className="mt-2.5 border-t border-green-200 pt-2.5">
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
+                <div>
+                  <dt className="text-green-600">Acknowledged</dt>
+                  <dd className="font-medium text-green-800">
+                    {fmtDate(status.latest_consent.consent_date)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-green-600">Tier</dt>
+                  <dd className="font-medium text-green-800">
+                    AICPA Acknowledgment
+                  </dd>
+                </div>
+                {status.latest_consent.notes && (
+                  <div className="col-span-full">
+                    <dt className="text-green-600">Notes</dt>
+                    <dd className="font-medium text-green-800">
+                      {status.latest_consent.notes}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+          )}
         </div>
       )}
 
@@ -1004,6 +1195,7 @@ function methodLabel(m: string | null): string {
     electronic: "Electronic",
     existing_engagement: "Engagement letter",
     verbal_followup: "Verbal",
+    platform_acknowledgment: "Platform acknowledgment",
   };
   return map[m] ?? m;
 }
@@ -1079,6 +1271,41 @@ function MailIcon({ className }: { className?: string }) {
     >
       <rect x="2" y="4" width="20" height="16" rx="2" />
       <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+    </svg>
+  );
+}
+
+function HelpCircleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function BriefcaseIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
     </svg>
   );
 }

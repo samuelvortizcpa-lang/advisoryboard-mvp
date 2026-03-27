@@ -22,6 +22,7 @@ export default function DocumentUpload({ clientId, onUploaded }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consentToast, setConsentToast] = useState(false);
+  const [consentToastStatus, setConsentToastStatus] = useState<string>("pending");
 
   // Auto-dismiss consent toast after 10 seconds
   useEffect(() => {
@@ -37,13 +38,18 @@ export default function DocumentUpload({ clientId, onUploaded }: Props) {
       const doc = await createDocumentsApi(getToken).upload(clientId, file);
       onUploaded(doc);
 
-      // Check if consent is now needed (one-time per client per session)
+      // Check if consent action is needed (one-time per client per session)
       if (!consentToastShown.has(clientId)) {
         try {
-          const status = await createConsentApi(getToken).getStatus(clientId);
-          if (status.has_tax_documents && status.consent_status === "pending") {
+          const consentStatus = await createConsentApi(getToken).getStatus(clientId);
+          if (
+            consentStatus.has_tax_documents &&
+            (consentStatus.consent_status === "pending" ||
+              consentStatus.consent_status === "determination_needed")
+          ) {
             consentToastShown.add(clientId);
             setConsentToast(true);
+            setConsentToastStatus(consentStatus.consent_status);
           }
         } catch {
           /* non-fatal */
@@ -64,8 +70,46 @@ export default function DocumentUpload({ clientId, onUploaded }: Props) {
 
   return (
     <div>
-      {/* Consent reminder toast */}
-      {consentToast && (
+      {/* Consent reminder toast — determination needed (blue/info) */}
+      {consentToast && consentToastStatus === "determination_needed" && (
+        <div className="mb-3 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+          <svg
+            className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <div className="flex-1 text-sm text-blue-700">
+            <span className="font-medium">Tax document detected</span> —
+            Please confirm your preparer relationship for this client to set up
+            the appropriate data handling.{" "}
+            <Link
+              href={`/dashboard/clients/${clientId}?tab=overview`}
+              className="font-medium underline hover:text-blue-900"
+            >
+              Set Up Now
+            </Link>
+          </div>
+          <button
+            onClick={() => setConsentToast(false)}
+            className="shrink-0 rounded p-0.5 text-blue-400 hover:text-blue-600"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Consent reminder toast — 7216 pending (amber/warning) */}
+      {consentToast && consentToastStatus === "pending" && (
         <div className="mb-3 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <svg
             className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"

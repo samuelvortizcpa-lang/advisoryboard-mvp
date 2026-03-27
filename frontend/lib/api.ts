@@ -758,6 +758,9 @@ export interface ConsentStatus {
   latest_consent: ConsentRecord | null;
   is_expired: boolean;
   days_until_expiry: number | null;
+  is_tax_preparer: boolean | null;
+  data_handling_acknowledged: boolean;
+  consent_tier: "full_7216" | "aicpa_acknowledgment" | null;
 }
 
 export interface ConsentCreateRequest {
@@ -829,13 +832,26 @@ export function createConsentApi(getToken: GetToken, orgId?: string) {
         }
       );
     },
+
+    setPreparerStatus(clientId: string, is_tax_preparer: boolean) {
+      return f<ConsentStatus>(`/clients/${clientId}/preparer-status`, {
+        method: "POST",
+        body: JSON.stringify({ is_tax_preparer }),
+      });
+    },
+
+    recordAdvisoryAcknowledgment(clientId: string) {
+      return f<ConsentRecord>(`/clients/${clientId}/advisory-acknowledgment`, {
+        method: "POST",
+      });
+    },
   };
 }
 
 // ─── Alert types ───────────────────────────────────────────────────────────────
 
 export type AlertSeverity = "critical" | "warning" | "info";
-export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document" | "consent_needed" | "consent_expiring";
+export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document" | "consent_needed" | "consent_expiring" | "preparer_determination_needed";
 
 export interface Alert {
   id: string;
