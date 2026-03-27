@@ -40,6 +40,10 @@ export interface Client {
   client_type_id: string | null;
   custom_instructions: string | null;
   client_type: ClientType | null;
+  is_tax_preparer: boolean | null;
+  consent_status: string;
+  has_tax_documents: boolean;
+  data_handling_acknowledged: boolean;
   created_at: string;
   updated_at: string;
 }

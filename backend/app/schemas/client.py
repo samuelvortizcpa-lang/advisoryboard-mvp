@@ -59,6 +59,9 @@ class ClientResponse(ClientBase):
     owner_id: UUID
     org_id: Optional[UUID] = None
     created_by: Optional[str] = None
+    consent_status: str = "not_required"
+    has_tax_documents: bool = False
+    data_handling_acknowledged: bool = False
     created_at: datetime
     updated_at: datetime
     client_type: Optional[ClientTypeResponse] = None

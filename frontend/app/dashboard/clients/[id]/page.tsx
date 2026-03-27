@@ -19,6 +19,7 @@ import {
   createBriefsApi,
   createClientTypesApi,
   createClientsApi,
+  createConsentApi,
   createDocumentsApi,
   createOrganizationsApi,
   createRagApi,
@@ -621,6 +622,13 @@ function ClientDetailContent() {
                 Custom AI instructions specific to this client (optional).
               </p>
             </Field>
+
+            {/* ── Preparer Relationship ─────────────────────────────────────── */}
+            <PreparerRelationshipField
+              client={client}
+              getToken={getToken}
+              onStatusChanged={(updated) => setClient(updated)}
+            />
 
             <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
               <button
@@ -1447,6 +1455,147 @@ function formatRelativeTime(dateStr: string): string {
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// ─── Preparer Relationship Field ─────────────────────────────────────────────
+
+function PreparerRelationshipField({
+  client,
+  getToken,
+  onStatusChanged,
+}: {
+  client: Client;
+  getToken: () => Promise<string | null>;
+  onStatusChanged: (updated: Client) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [confirmChange, setConfirmChange] = useState<boolean | null>(null);
+
+  const current = client.is_tax_preparer;
+
+  async function handleChange(isPreparer: boolean) {
+    // If switching with tax docs, show confirmation first
+    if (client.has_tax_documents && current !== null && isPreparer !== current) {
+      setConfirmChange(isPreparer);
+      return;
+    }
+    await doChange(isPreparer);
+  }
+
+  async function doChange(isPreparer: boolean) {
+    setSaving(true);
+    setConfirmChange(null);
+    try {
+      const consentApi = createConsentApi(getToken);
+      await consentApi.setPreparerStatus(client.id, isPreparer);
+      // Refetch the client to get updated fields
+      const updated = await createClientsApi(getToken).get(client.id);
+      onStatusChanged(updated);
+    } catch {
+      // non-fatal
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-gray-100 pt-4">
+      <Field label="Preparer Relationship">
+        {current === null && (
+          <p className="mb-2 text-xs text-gray-500">
+            Not yet determined — this will be set when you first upload tax
+            documents, or you can set it here.
+          </p>
+        )}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => handleChange(true)}
+            className={[
+              "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+              current === true
+                ? "border-amber-300 bg-amber-50 text-amber-800"
+                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+              saving ? "opacity-50" : "",
+            ].join(" ")}
+          >
+            I prepare this client&apos;s returns
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => handleChange(false)}
+            className={[
+              "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+              current === false
+                ? "border-teal-300 bg-teal-50 text-teal-800"
+                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+              saving ? "opacity-50" : "",
+            ].join(" ")}
+          >
+            Advisory or consulting only
+          </button>
+        </div>
+
+        {/* Confirmation: switching advisory → preparer */}
+        {confirmChange === true && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+            <p className="text-sm text-amber-800">
+              Changing to preparer status will require IRC Section 7216 consent
+              for the tax documents already uploaded for this client. You&apos;ll
+              need to obtain taxpayer consent before continuing AI analysis.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => doChange(true)}
+                disabled={saving}
+                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Confirm Change"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmChange(null)}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Confirmation: switching preparer → advisory */}
+        {confirmChange === false && (
+          <div className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3">
+            <p className="text-sm text-teal-800">
+              This will switch from Section 7216 requirements to standard AICPA
+              confidentiality standards. Are you sure this is an advisory-only
+              engagement?
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => doChange(false)}
+                disabled={saving}
+                className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Confirm Change"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmChange(null)}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </Field>
+    </div>
+  );
 }
 
 function isOverdue(iso: string): boolean {

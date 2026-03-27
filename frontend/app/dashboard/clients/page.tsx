@@ -260,6 +260,7 @@ export default function ClientsPage() {
                           <RestrictedIcon />
                         </span>
                       )}
+                      <ComplianceBadge client={client} />
                     </div>
                     {client.business_name && (
                       <p className="text-xs text-gray-400">
@@ -446,6 +447,62 @@ function RestrictedIcon() {
         strokeLinejoin="round"
         d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
       />
+    </svg>
+  );
+}
+
+function ComplianceBadge({ client }: { client: Client }) {
+  if (!client.has_tax_documents) return null;
+
+  if (client.is_tax_preparer === true && client.consent_status === "obtained") {
+    return (
+      <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-green-50 text-green-700">
+        <MiniShield className="text-green-600" />
+        7216 ✓
+      </span>
+    );
+  }
+
+  if (client.is_tax_preparer === true && client.consent_status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700">
+        <MiniShield className="text-amber-500" />
+        7216 Pending
+      </span>
+    );
+  }
+
+  if (client.is_tax_preparer === false && client.data_handling_acknowledged) {
+    return (
+      <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-teal-50 text-teal-700">
+        Advisory ✓
+      </span>
+    );
+  }
+
+  if (client.consent_status === "determination_needed") {
+    return (
+      <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-600">
+        Setup needed
+      </span>
+    );
+  }
+
+  return null;
+}
+
+function MiniShield({ className }: { className?: string }) {
+  return (
+    <svg
+      className={`h-2.5 w-2.5 ${className ?? ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
 }
