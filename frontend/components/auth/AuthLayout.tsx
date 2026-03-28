@@ -21,13 +21,28 @@ const outfit = Outfit({
   display: "swap",
 });
 
+// ─── Design tokens ──────────────────────────────────────────────────────────
+
+const t = {
+  bgDeep: "#0c0e13",
+  bgMid: "#12151c",
+  bgSurface: "#181c25",
+  accent: "#c9944a",
+  accentLight: "#e8b06a",
+  white: "#f0ede6",
+  whiteDim: "#8a8680",
+  whiteFaint: "#4a4744",
+  serif: "var(--font-serif), 'Cormorant Garamond', Georgia, serif",
+  sans: "var(--font-sans), 'Outfit', sans-serif",
+} as const;
+
 // ─── Feature cards data ─────────────────────────────────────────────────────
 
 const features = [
   {
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9944a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
         <polyline points="17 8 12 3 7 8" />
         <line x1="12" y1="3" x2="12" y2="15" />
       </svg>
@@ -37,8 +52,8 @@ const features = [
   },
   {
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9944a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
     title: "Ask questions",
@@ -46,12 +61,12 @@ const features = [
   },
   {
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9944a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       </svg>
     ),
     title: "Stay compliant",
-    desc: "§7216 tracking, audit-ready",
+    desc: "\u00A77216 tracking, audit-ready",
   },
 ];
 
@@ -65,7 +80,7 @@ const stats = [
 
 // ─── Count-up hook ──────────────────────────────────────────────────────────
 
-function useCountUp(target: number, duration: number = 2000, delay: number = 1200) {
+function useCountUp(target: number, duration = 2000, delay = 1200) {
   const [count, setCount] = useState(0);
   const hasRun = useRef(false);
 
@@ -94,21 +109,50 @@ function useCountUp(target: number, duration: number = 2000, delay: number = 120
 // ─── Counter stats bar ──────────────────────────────────────────────────────
 
 function StatsBar() {
-  const counts = stats.map((s) => useCountUp(s.value));
+  const count0 = useCountUp(stats[0].value);
+  const count1 = useCountUp(stats[1].value);
+  const count2 = useCountUp(stats[2].value);
+  const counts = [count0, count1, count2];
 
   return (
-    <div style={{ display: "flex", flexDirection: "row", alignItems: "center", marginTop: "1.5rem" }}>
+    <div style={{ display: "flex", alignItems: "center", marginTop: 24 }}>
       {stats.map((stat, i) => (
         <div key={stat.label} style={{ display: "flex", alignItems: "center" }}>
           {i > 0 && (
-            <div style={{ width: 1, height: 24, background: "rgba(255,255,255,0.08)", margin: "0 16px", flexShrink: 0 }} />
+            <div
+              style={{
+                width: 1,
+                height: 24,
+                background: "rgba(255,255,255,0.08)",
+                margin: "0 16px",
+                flexShrink: 0,
+              }}
+            />
           )}
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontFamily: "var(--font-serif), 'Cormorant Garamond', Georgia, serif", fontSize: "1.6rem", fontWeight: 600, color: "#f0ede6", lineHeight: 1 }}>
+            <div
+              style={{
+                fontFamily: t.serif,
+                fontSize: "1.6rem",
+                fontWeight: 600,
+                color: t.white,
+                lineHeight: 1,
+              }}
+            >
               {counts[i]}
-              <span style={{ color: "#c9944a" }}>{stat.suffix}</span>
+              <span style={{ color: t.accent }}>{stat.suffix}</span>
             </div>
-            <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.65rem", fontWeight: 300, color: "#8a8680", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>
+            <div
+              style={{
+                fontFamily: t.sans,
+                fontSize: "0.65rem",
+                fontWeight: 300,
+                color: t.whiteDim,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                marginTop: 2,
+              }}
+            >
               {stat.label}
             </div>
           </div>
@@ -116,6 +160,87 @@ function StatsBar() {
       ))}
     </div>
   );
+}
+
+// ─── Feature card ───────────────────────────────────────────────────────────
+
+function FeatureCard({
+  icon,
+  title,
+  desc,
+  delay,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  delay?: string;
+}) {
+  const animStyle = delay
+    ? { opacity: 0 as number, animation: `fadeUp 0.7s ease ${delay} forwards` }
+    : {};
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.04)",
+        borderRadius: 8,
+        padding: "12px 14px",
+        ...animStyle,
+      }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: "50%",
+          background: "rgba(201,148,74,0.1)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </div>
+      <div>
+        <div
+          style={{
+            fontFamily: t.sans,
+            fontSize: "0.82rem",
+            fontWeight: 500,
+            color: t.white,
+            marginBottom: 2,
+          }}
+        >
+          {title}
+        </div>
+        <div
+          style={{
+            fontFamily: t.sans,
+            fontSize: "0.7rem",
+            fontWeight: 300,
+            color: t.whiteDim,
+          }}
+        >
+          {desc}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Animation helper ───────────────────────────────────────────────────────
+
+function fadeUp(delay: string): React.CSSProperties {
+  return { opacity: 0, animation: `fadeUp 0.7s ease ${delay} forwards` };
+}
+
+function fadeIn(delay: string): React.CSSProperties {
+  return { opacity: 0, animation: `fadeIn 0.7s ease ${delay} forwards` };
 }
 
 // ─── Clerk appearance config ─────────────────────────────────────────────────
@@ -128,19 +253,19 @@ export const clerkAppearance = {
     privacyPageUrl: "/privacy",
   },
   variables: {
-    colorPrimary: "#c9944a",
-    colorBackground: "#181c25",
-    colorText: "#f0ede6",
-    colorTextSecondary: "#8a8680",
+    colorPrimary: t.accent,
+    colorBackground: t.bgSurface,
+    colorText: t.white,
+    colorTextSecondary: t.whiteDim,
     colorInputBackground: "#1e222e",
-    colorInputText: "#f0ede6",
+    colorInputText: t.white,
     borderRadius: "8px",
     fontFamily: "'Outfit', -apple-system, sans-serif",
     fontSize: "0.9rem",
   },
   elements: {
     card: {
-      backgroundColor: "#181c25",
+      backgroundColor: t.bgSurface,
       border: "1px solid rgba(255,255,255,0.06)",
       borderRadius: "12px",
       boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
@@ -149,16 +274,16 @@ export const clerkAppearance = {
       fontFamily: "'Cormorant Garamond', Georgia, serif",
       fontSize: "1.6rem",
       fontWeight: "600",
-      color: "#f0ede6",
+      color: t.white,
     },
     headerSubtitle: {
-      color: "#8a8680",
+      color: t.whiteDim,
       fontWeight: "300",
     },
     socialButtonsBlockButton: {
       backgroundColor: "#1e222e",
       border: "1px solid rgba(255,255,255,0.08)",
-      color: "#f0ede6",
+      color: t.white,
       fontWeight: "400",
       "&:hover": {
         backgroundColor: "#252a38",
@@ -168,44 +293,31 @@ export const clerkAppearance = {
     formFieldInput: {
       backgroundColor: "#1e222e",
       border: "1px solid rgba(255,255,255,0.08)",
-      color: "#f0ede6",
+      color: t.white,
       "&:focus": {
-        borderColor: "#c9944a",
+        borderColor: t.accent,
         boxShadow: "0 0 0 2px rgba(201,148,74,0.15)",
       },
     },
     formButtonPrimary: {
-      backgroundColor: "#c9944a",
-      color: "#0c0e13",
+      backgroundColor: t.accent,
+      color: t.bgDeep,
       fontWeight: "500",
-      "&:hover": {
-        backgroundColor: "#e8b06a",
-      },
+      "&:hover": { backgroundColor: t.accentLight },
     },
     footerActionLink: {
-      color: "#c9944a",
+      color: t.accent,
       fontWeight: "400",
-      "&:hover": {
-        color: "#e8b06a",
-      },
+      "&:hover": { color: t.accentLight },
     },
-    dividerLine: {
-      backgroundColor: "rgba(255,255,255,0.06)",
-    },
-    dividerText: {
-      color: "#4a4744",
-    },
-    formFieldLabel: {
-      color: "#8a8680",
-      fontWeight: "400",
-    },
-    identityPreviewEditButton: {
-      color: "#c9944a",
-    },
+    dividerLine: { backgroundColor: "rgba(255,255,255,0.06)" },
+    dividerText: { color: t.whiteFaint },
+    formFieldLabel: { color: t.whiteDim, fontWeight: "400" },
+    identityPreviewEditButton: { color: t.accent },
     alert: {
       backgroundColor: "rgba(201,148,74,0.08)",
       border: "1px solid rgba(201,148,74,0.2)",
-      color: "#e8b06a",
+      color: t.accentLight,
     },
   },
 };
@@ -218,16 +330,71 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className={`${cormorant.variable} ${outfit.variable} flex min-h-screen`}
-    >
-      {/* ── Left branding panel ──────────────────────────────────────────── */}
-      <div className="auth-left relative hidden w-[45%] flex-col justify-between overflow-hidden md:flex">
-        {/* Animated gradient orbs */}
-        <div className="auth-orb1" />
-        <div className="auth-orb2" />
+    <div className={`${cormorant.variable} ${outfit.variable} flex min-h-screen`}>
+      {/* Keyframes — plain <style>, NOT styled-jsx */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes drift1 {
+          0%, 100% { transform: translate(0, 0); }
+          25% { transform: translate(20px, -15px); }
+          50% { transform: translate(-10px, 20px); }
+          75% { transform: translate(15px, 10px); }
+        }
+        @keyframes drift2 {
+          0%, 100% { transform: translate(0, 0); }
+          33% { transform: translate(-15px, 20px); }
+          66% { transform: translate(20px, -10px); }
+        }
+        @keyframes drawLine {
+          to { stroke-dashoffset: 0; }
+        }
+      `}} />
 
-        {/* Animated accent lines */}
+      {/* ── Left branding panel ──────────────────────────────────────────── */}
+      <div
+        className="relative hidden w-[45%] flex-col justify-between overflow-hidden md:flex"
+        style={{
+          background: `${t.bgDeep} radial-gradient(ellipse at 50% 50%, rgba(201,148,74,0.03) 0%, transparent 70%)`,
+        }}
+      >
+        {/* Gradient orbs */}
+        <div
+          style={{
+            position: "absolute",
+            width: 350,
+            height: 350,
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(201,148,74,0.07) 0%, transparent 70%)",
+            top: "10%",
+            right: "-10%",
+            zIndex: 0,
+            animation: "drift1 20s ease-in-out infinite",
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            width: 250,
+            height: 250,
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(201,148,74,0.04) 0%, transparent 70%)",
+            bottom: "20%",
+            left: "-5%",
+            zIndex: 0,
+            animation: "drift2 25s ease-in-out infinite",
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Accent lines */}
         <svg
           style={{ position: "absolute", top: "15%", right: "5%", zIndex: 0, overflow: "visible" }}
           width="140"
@@ -236,16 +403,24 @@ export default function AuthLayout({
           aria-hidden="true"
         >
           <line
-            className="auth-accent-line auth-accent-line1"
             x1="0" y1="60" x2="120" y2="0"
             stroke="rgba(201,148,74,0.15)"
             strokeWidth="1"
+            style={{
+              strokeDasharray: 120,
+              strokeDashoffset: 120,
+              animation: "drawLine 1.5s ease 0.8s forwards",
+            }}
           />
           <line
-            className="auth-accent-line auth-accent-line2"
             x1="30" y1="95" x2="90" y2="50"
             stroke="rgba(201,148,74,0.12)"
             strokeWidth="1"
+            style={{
+              strokeDasharray: 70,
+              strokeDashoffset: 70,
+              animation: "drawLine 1.5s ease 1.0s forwards",
+            }}
           />
         </svg>
 
@@ -260,336 +435,237 @@ export default function AuthLayout({
         </svg>
 
         {/* Logo */}
-        <div className="relative z-10 p-8 anim-fade-up" style={{ animationDelay: "0.1s" }}>
-          <Link href="https://callwen.com" className="auth-logo">
-            Call<span>wen</span>
+        <div className="relative z-10 p-8" style={fadeUp("0.1s")}>
+          <Link
+            href="https://callwen.com"
+            style={{
+              fontFamily: t.serif,
+              fontSize: "1.8rem",
+              fontWeight: 600,
+              color: t.white,
+              textDecoration: "none",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Call<span style={{ color: t.accent }}>wen</span>
           </Link>
         </div>
 
         {/* Center content */}
         <div className="relative z-10 flex-1 flex items-center px-8 lg:px-12">
           <div>
-            <p className="auth-overline anim-fade-up" style={{ animationDelay: "0.25s" }}>
+            {/* Overline */}
+            <p
+              style={{
+                fontFamily: t.sans,
+                fontSize: "0.7rem",
+                fontWeight: 500,
+                letterSpacing: "0.3em",
+                textTransform: "uppercase",
+                color: t.accent,
+                marginBottom: "1rem",
+                ...fadeUp("0.25s"),
+              }}
+            >
               AI DOCUMENT INTELLIGENCE
             </p>
-            <h1 className="auth-headline anim-fade-up" style={{ animationDelay: "0.4s" }}>
+
+            {/* Headline */}
+            <h1
+              style={{
+                fontFamily: t.serif,
+                fontSize: "3rem",
+                fontWeight: 400,
+                color: t.white,
+                lineHeight: 1.15,
+                ...fadeUp("0.4s"),
+              }}
+            >
               Your documents,
               <br />
-              <em>unlocked.</em>
+              <em style={{ fontStyle: "italic", color: t.accentLight }}>unlocked.</em>
             </h1>
-            <p className="auth-subtitle anim-fade-up" style={{ animationDelay: "0.55s" }}>
+
+            {/* Subtitle */}
+            <p
+              style={{
+                fontFamily: t.sans,
+                fontSize: "0.95rem",
+                fontWeight: 300,
+                color: t.whiteDim,
+                maxWidth: 380,
+                lineHeight: 1.7,
+                marginTop: "1.25rem",
+                ...fadeUp("0.55s"),
+              }}
+            >
               Upload tax returns, meeting recordings, and client files. Ask
               questions. Get source-cited answers in seconds.
             </p>
 
             {/* Feature cards */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: "1.8rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 28 }}>
               {features.map((f, i) => (
-                <div
+                <FeatureCard
                   key={f.title}
-                  style={{
-                    display: "flex", flexDirection: "row", alignItems: "center", gap: 12,
-                    background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)",
-                    borderRadius: 8, padding: "12px 14px",
-                    opacity: 0, animation: `fadeUp 0.6s ease-out ${0.65 + i * 0.1}s forwards`,
-                  }}
-                >
-                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(201,148,74,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    {f.icon}
-                  </div>
-                  <div>
-                    <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.82rem", fontWeight: 500, color: "#f0ede6", marginBottom: 2 }}>
-                      {f.title}
-                    </div>
-                    <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.7rem", fontWeight: 300, color: "#8a8680" }}>
-                      {f.desc}
-                    </div>
-                  </div>
-                </div>
+                  icon={f.icon}
+                  title={f.title}
+                  desc={f.desc}
+                  delay={`${0.65 + i * 0.1}s`}
+                />
               ))}
             </div>
 
-            <div className="auth-rule anim-fade-up" style={{ animationDelay: "0.95s" }} />
+            {/* Gold rule */}
+            <div
+              style={{
+                width: 36,
+                height: 1,
+                background: t.accent,
+                marginTop: 28,
+                ...fadeUp("0.95s"),
+              }}
+            />
 
-            {/* Counter stats bar */}
-            <div className="anim-fade-up" style={{ animationDelay: "1.05s" }}>
+            {/* Counter stats */}
+            <div style={fadeUp("1.05s")}>
               <StatsBar />
             </div>
           </div>
         </div>
 
         {/* Bottom tagline */}
-        <div className="relative z-10 p-8 anim-fade-up" style={{ animationDelay: "1.15s" }}>
-          <p className="auth-tagline">Built by a CPA, for CPAs.</p>
+        <div className="relative z-10 p-8" style={fadeUp("1.15s")}>
+          <p style={{ fontFamily: t.sans, fontSize: "0.8rem", color: t.whiteFaint }}>
+            Built by a CPA, for CPAs.
+          </p>
         </div>
       </div>
 
-      {/* ── Mobile header (visible below md) ─────────────────────────────── */}
-      <div className="auth-mobile-header md:hidden">
-        <Link href="https://callwen.com" className="auth-logo">
-          Call<span>wen</span>
+      {/* ── Mobile header ────────────────────────────────────────────────── */}
+      <div
+        className="md:hidden"
+        style={{ background: t.bgDeep, padding: "2rem 1.5rem 1.5rem" }}
+      >
+        <Link
+          href="https://callwen.com"
+          style={{
+            fontFamily: t.serif,
+            fontSize: "1.5rem",
+            fontWeight: 600,
+            color: t.white,
+            textDecoration: "none",
+          }}
+        >
+          Call<span style={{ color: t.accent }}>wen</span>
         </Link>
-        <p className="auth-overline mt-6">AI DOCUMENT INTELLIGENCE</p>
-        <h1 className="auth-headline auth-headline--mobile">
-          Your documents, <em>unlocked.</em>
+
+        <p
+          style={{
+            fontFamily: t.sans,
+            fontSize: "0.7rem",
+            fontWeight: 500,
+            letterSpacing: "0.3em",
+            textTransform: "uppercase",
+            color: t.accent,
+            marginTop: 24,
+            marginBottom: 12,
+          }}
+        >
+          AI DOCUMENT INTELLIGENCE
+        </p>
+
+        <h1
+          style={{
+            fontFamily: t.serif,
+            fontSize: "1.8rem",
+            fontWeight: 400,
+            color: t.white,
+            lineHeight: 1.15,
+          }}
+        >
+          Your documents, <em style={{ fontStyle: "italic", color: t.accentLight }}>unlocked.</em>
         </h1>
-        <p className="auth-subtitle mt-2">
+
+        <p
+          style={{
+            fontFamily: t.sans,
+            fontSize: "0.9rem",
+            fontWeight: 300,
+            color: t.whiteDim,
+            lineHeight: 1.7,
+            marginTop: 8,
+          }}
+        >
           Upload tax returns, meeting recordings, and client files. Ask
           questions. Get source-cited answers in seconds.
         </p>
 
-        {/* Feature cards on mobile */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: "1.8rem" }}>
+        {/* Mobile feature cards */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 24 }}>
           {features.map((f) => (
-            <div
-              key={f.title}
-              style={{
-                display: "flex", flexDirection: "row", alignItems: "center", gap: 12,
-                background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)",
-                borderRadius: 8, padding: "12px 14px",
-              }}
-            >
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(201,148,74,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                {f.icon}
-              </div>
-              <div>
-                <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.82rem", fontWeight: 500, color: "#f0ede6", marginBottom: 2 }}>
-                  {f.title}
-                </div>
-                <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.7rem", fontWeight: 300, color: "#8a8680" }}>
-                  {f.desc}
-                </div>
-              </div>
-            </div>
+            <FeatureCard key={f.title} icon={f.icon} title={f.title} desc={f.desc} />
           ))}
         </div>
 
-        <div className="auth-rule" style={{ marginTop: "1rem" }} />
+        {/* Mobile gold rule */}
+        <div style={{ width: 36, height: 1, background: t.accent, marginTop: 16 }} />
+
+        {/* Mobile stats */}
         <StatsBar />
       </div>
 
       {/* ── Right auth panel ─────────────────────────────────────────────── */}
-      <div className="auth-right flex min-h-screen flex-1 flex-col items-center justify-center px-6 py-12 md:min-h-0">
-        <div className="w-full max-w-[440px] anim-fade-in" style={{ animationDelay: "0.5s" }}>
+      <div
+        className="flex min-h-screen flex-1 flex-col items-center justify-center px-6 py-12 md:min-h-0"
+        style={{ background: t.bgMid }}
+      >
+        <div className="w-full max-w-[440px]" style={fadeIn("0.5s")}>
           {children}
         </div>
 
-        <div className="auth-free-text anim-fade-in" style={{ animationDelay: "0.7s" }}>
+        {/* Free to start */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 24,
+            fontFamily: t.sans,
+            fontSize: "0.8rem",
+            fontWeight: 400,
+            color: t.whiteDim,
+            ...fadeIn("0.7s"),
+          }}
+        >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <circle cx="7" cy="7" r="6.5" stroke="#c9944a" strokeWidth="1" />
-            <path d="M4.5 7L6.5 9L10 5" stroke="#c9944a" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="7" cy="7" r="6.5" stroke={t.accent} strokeWidth="1" />
+            <path d="M4.5 7L6.5 9L10 5" stroke={t.accent} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span>Free to start · No credit card required</span>
         </div>
 
-        <p className="auth-legal mt-4">
+        {/* Legal */}
+        <p
+          style={{
+            fontFamily: t.sans,
+            fontSize: "0.75rem",
+            color: t.whiteDim,
+            textAlign: "center",
+            maxWidth: 320,
+            marginTop: 16,
+          }}
+        >
           By continuing, you agree to our{" "}
-          <Link href="/terms">Terms of Service</Link> and{" "}
-          <Link href="/privacy">Privacy Policy</Link>
+          <Link href="/terms" style={{ color: t.accent, textDecoration: "none" }}>
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" style={{ color: t.accent, textDecoration: "none" }}>
+            Privacy Policy
+          </Link>
         </p>
       </div>
-
-      {/* ── Scoped styles ────────────────────────────────────────────────── */}
-      <style jsx global>{`
-        @keyframes fadeUp {
-          from {
-            opacity: 0;
-            transform: translateY(16px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-
-        @keyframes drift1 {
-          0%, 100% { transform: translate(0, 0); }
-          25% { transform: translate(20px, -15px); }
-          50% { transform: translate(-10px, 20px); }
-          75% { transform: translate(15px, 10px); }
-        }
-
-        @keyframes drift2 {
-          0%, 100% { transform: translate(0, 0); }
-          33% { transform: translate(-15px, 20px); }
-          66% { transform: translate(20px, -10px); }
-        }
-
-        @keyframes drawLine {
-          to { stroke-dashoffset: 0; }
-        }
-
-        .anim-fade-up {
-          opacity: 0;
-          animation: fadeUp 0.6s ease-out forwards;
-        }
-
-        .anim-fade-in {
-          opacity: 0;
-          animation: fadeIn 0.6s ease-out forwards;
-        }
-
-        /* ── Orbs ─────────────────────────────────────────────────────────── */
-
-        .auth-orb1 {
-          position: absolute;
-          width: 350px;
-          height: 350px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(201,148,74,0.07) 0%, transparent 70%);
-          top: 10%;
-          right: -10%;
-          z-index: 0;
-          animation: drift1 20s ease-in-out infinite;
-          pointer-events: none;
-        }
-
-        .auth-orb2 {
-          position: absolute;
-          width: 250px;
-          height: 250px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(201,148,74,0.04) 0%, transparent 70%);
-          bottom: 20%;
-          left: -5%;
-          z-index: 0;
-          animation: drift2 25s ease-in-out infinite;
-          pointer-events: none;
-        }
-
-        /* ── Accent lines ─────────────────────────────────────────────────── */
-
-        .auth-accent-line {
-          stroke-dasharray: 120;
-          stroke-dashoffset: 120;
-          animation: drawLine 1.5s ease forwards;
-        }
-
-        .auth-accent-line1 {
-          animation-delay: 0.8s;
-        }
-
-        .auth-accent-line2 {
-          stroke-dasharray: 70;
-          stroke-dashoffset: 70;
-          animation-delay: 1.0s;
-        }
-
-        /* ── Left panel ───────────────────────────────────────────────────── */
-
-        .auth-left {
-          background: #0c0e13;
-          background-image: radial-gradient(
-            ellipse at 50% 50%,
-            rgba(201, 148, 74, 0.03) 0%,
-            transparent 70%
-          );
-        }
-
-        .auth-mobile-header {
-          background: #0c0e13;
-          padding: 2rem 1.5rem 1.5rem;
-        }
-
-        .auth-right {
-          background: #12151c;
-        }
-
-        .auth-logo {
-          font-family: var(--font-serif), "Cormorant Garamond", Georgia, serif;
-          font-size: 1.8rem;
-          font-weight: 600;
-          color: #f0ede6;
-          text-decoration: none;
-          letter-spacing: -0.01em;
-        }
-        .auth-logo span {
-          color: #c9944a;
-        }
-
-        .auth-overline {
-          font-family: var(--font-sans), "Outfit", sans-serif;
-          font-size: 0.7rem;
-          font-weight: 500;
-          letter-spacing: 0.3em;
-          text-transform: uppercase;
-          color: #c9944a;
-          margin-bottom: 1rem;
-        }
-
-        .auth-headline {
-          font-family: var(--font-serif), "Cormorant Garamond", Georgia, serif;
-          font-size: 3rem;
-          font-weight: 400;
-          color: #f0ede6;
-          line-height: 1.15;
-        }
-        .auth-headline--mobile {
-          font-size: 1.8rem;
-        }
-        .auth-headline em {
-          font-style: italic;
-          color: #e8b06a;
-        }
-
-        .auth-subtitle {
-          font-family: var(--font-sans), "Outfit", sans-serif;
-          font-size: 0.95rem;
-          font-weight: 300;
-          color: #8a8680;
-          max-width: 380px;
-          line-height: 1.7;
-          margin-top: 1.25rem;
-        }
-
-        /* ── Gold rule ────────────────────────────────────────────────────── */
-
-        .auth-rule {
-          width: 40px;
-          height: 1px;
-          background: #c9944a;
-          margin-top: 1.8rem;
-        }
-
-        /* ── Bottom & utility ─────────────────────────────────────────────── */
-
-        .auth-tagline {
-          font-family: var(--font-sans), "Outfit", sans-serif;
-          font-size: 0.8rem;
-          color: #4a4744;
-        }
-
-        .auth-free-text {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          margin-top: 1.5rem;
-          font-family: var(--font-sans), "Outfit", sans-serif;
-          font-size: 0.8rem;
-          font-weight: 400;
-          color: #8a8680;
-        }
-
-        .auth-legal {
-          font-family: var(--font-sans), "Outfit", sans-serif;
-          font-size: 0.75rem;
-          color: #8a8680;
-          text-align: center;
-          max-width: 320px;
-        }
-        .auth-legal a {
-          color: #c9944a;
-          text-decoration: none;
-        }
-        .auth-legal a:hover {
-          color: #e8b06a;
-        }
-      `}</style>
     </div>
   );
 }
