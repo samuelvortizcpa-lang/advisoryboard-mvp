@@ -17,8 +17,14 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Callwen",
-  description: "Your AI-powered advisory board",
+  title: {
+    default: "Callwen",
+    template: "%s — Callwen",
+  },
+  description: "AI Document Intelligence for CPA Firms",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

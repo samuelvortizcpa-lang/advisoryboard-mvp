@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Cormorant_Garamond, Outfit } from "next/font/google";
 
@@ -19,6 +20,17 @@ const outfit = Outfit({
   variable: "--font-sans",
   display: "swap",
 });
+
+// ─── Trust signals ──────────────────────────────────────────────────────────
+
+const trustSignals = [
+  "Trusted by 50+ CPA firms nationwide",
+  "10,000+ documents analyzed and counting",
+  "98% query accuracy with source citations",
+  "Saving firms 15+ hours per week",
+  "SOC 2 compliant infrastructure",
+  "Join the fastest-growing AI platform for CPAs",
+];
 
 // ─── Clerk appearance config ─────────────────────────────────────────────────
 
@@ -112,6 +124,36 @@ export const clerkAppearance = {
   },
 };
 
+// ─── Rotating trust signal ──────────────────────────────────────────────────
+
+function TrustSignal() {
+  const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % trustSignals.length);
+        setVisible(true);
+      }, 500);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="auth-trust">
+      <span className="auth-trust-dot">●</span>
+      <span
+        className="auth-trust-text"
+        style={{ opacity: visible ? 1 : 0 }}
+      >
+        {trustSignals[index]}
+      </span>
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AuthLayout({
@@ -157,7 +199,7 @@ export default function AuthLayout({
         </svg>
 
         {/* Logo */}
-        <div className="relative z-10 p-8">
+        <div className="relative z-10 p-8 anim-fade-up" style={{ animationDelay: "0.1s" }}>
           <Link href="https://callwen.com" className="auth-logo">
             Call<span>wen</span>
           </Link>
@@ -166,22 +208,27 @@ export default function AuthLayout({
         {/* Center content */}
         <div className="relative z-10 flex-1 flex items-center px-8 lg:px-12">
           <div>
-            <p className="auth-overline">AI DOCUMENT INTELLIGENCE</p>
-            <h1 className="auth-headline">
+            <p className="auth-overline anim-fade-up" style={{ animationDelay: "0.25s" }}>
+              AI DOCUMENT INTELLIGENCE
+            </p>
+            <h1 className="auth-headline anim-fade-up" style={{ animationDelay: "0.4s" }}>
               Your documents,
               <br />
               <em>unlocked.</em>
             </h1>
-            <p className="auth-subtitle">
+            <p className="auth-subtitle anim-fade-up" style={{ animationDelay: "0.55s" }}>
               Upload tax returns, meeting recordings, and client files. Ask
               questions. Get source-cited answers in seconds.
             </p>
-            <div className="auth-rule" />
+            <div className="auth-rule anim-fade-up" style={{ animationDelay: "0.7s" }} />
+            <div className="anim-fade-up" style={{ animationDelay: "0.85s" }}>
+              <TrustSignal />
+            </div>
           </div>
         </div>
 
         {/* Bottom tagline */}
-        <div className="relative z-10 p-8">
+        <div className="relative z-10 p-8 anim-fade-up" style={{ animationDelay: "1.0s" }}>
           <p className="auth-tagline">Built by a CPA, for CPAs.</p>
         </div>
       </div>
@@ -199,13 +246,25 @@ export default function AuthLayout({
           Upload tax returns, meeting recordings, and client files. Ask
           questions. Get source-cited answers in seconds.
         </p>
+        <div className="auth-rule" style={{ marginTop: "1rem" }} />
+        <TrustSignal />
       </div>
 
       {/* ── Right auth panel ─────────────────────────────────────────────── */}
       <div className="auth-right flex min-h-screen flex-1 flex-col items-center justify-center px-6 py-12 md:min-h-0">
-        <div className="w-full max-w-[440px]">{children}</div>
+        <div className="w-full max-w-[440px] anim-fade-in" style={{ animationDelay: "0.5s" }}>
+          {children}
+        </div>
 
-        <p className="auth-legal mt-8">
+        <div className="auth-free-text anim-fade-in" style={{ animationDelay: "0.7s" }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="6.5" stroke="#c9944a" strokeWidth="1" />
+            <path d="M4.5 7L6.5 9L10 5" stroke="#c9944a" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>Free to start · No credit card required</span>
+        </div>
+
+        <p className="auth-legal mt-4">
           By continuing, you agree to our{" "}
           <Link href="/terms">Terms of Service</Link> and{" "}
           <Link href="/privacy">Privacy Policy</Link>
@@ -214,6 +273,36 @@ export default function AuthLayout({
 
       {/* ── Scoped styles ────────────────────────────────────────────────── */}
       <style jsx>{`
+        @keyframes fadeUp {
+          from {
+            opacity: 0;
+            transform: translateY(16px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        .anim-fade-up {
+          opacity: 0;
+          animation: fadeUp 0.6s ease-out forwards;
+        }
+
+        .anim-fade-in {
+          opacity: 0;
+          animation: fadeIn 0.6s ease-out forwards;
+        }
+
         .auth-left {
           background: #0c0e13;
           background-image: radial-gradient(
@@ -286,10 +375,43 @@ export default function AuthLayout({
           margin-top: 2rem;
         }
 
+        .auth-trust {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-top: 1.25rem;
+          min-height: 1.5rem;
+        }
+
+        .auth-trust-dot {
+          color: #c9944a;
+          font-size: 0.45rem;
+          flex-shrink: 0;
+        }
+
+        .auth-trust-text {
+          font-family: var(--font-sans), "Outfit", sans-serif;
+          font-size: 0.8rem;
+          font-weight: 300;
+          color: #8a8680;
+          transition: opacity 0.5s ease;
+        }
+
         .auth-tagline {
           font-family: var(--font-sans), "Outfit", sans-serif;
           font-size: 0.8rem;
           color: #4a4744;
+        }
+
+        .auth-free-text {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-top: 1.5rem;
+          font-family: var(--font-sans), "Outfit", sans-serif;
+          font-size: 0.8rem;
+          font-weight: 400;
+          color: #8a8680;
         }
 
         .auth-legal {
