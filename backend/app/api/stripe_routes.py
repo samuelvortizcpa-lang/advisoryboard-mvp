@@ -212,10 +212,12 @@ async def stripe_webhook(request: Request):
             db.rollback()
         except Exception:
             pass
+        # Return 500 so Stripe retries the event. Returning 200 here would
+        # cause Stripe to consider the event delivered even though processing
+        # failed, which can silently lose checkout/subscription events.
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
     finally:
         db.close()
-
-    return {"received": True}
 
 
 @router.get(

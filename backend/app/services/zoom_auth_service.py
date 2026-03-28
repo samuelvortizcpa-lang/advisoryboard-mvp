@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.integration_connection import IntegrationConnection
+from app.services import oauth_state
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ def get_authorization_url(user_id: str, redirect_uri: Optional[str] = None) -> s
         "response_type": "code",
         "client_id": settings.zoom_client_id,
         "redirect_uri": redirect,
-        "state": user_id,
+        "state": oauth_state.generate(user_id),
     }
 
     return f"{ZOOM_AUTH_URL}?{urlencode(params)}"
@@ -106,7 +107,7 @@ async def handle_callback(
     """
     settings = get_settings()
     redirect = redirect_uri or settings.zoom_redirect_uri
-    user_id = state  # state carries the Clerk user_id
+    user_id = oauth_state.verify(state)  # verify signed nonce, extract user_id
 
     # ── Exchange code for tokens ──────────────────────────────────────────
     async with httpx.AsyncClient(timeout=15) as client:

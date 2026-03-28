@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.integration_connection import IntegrationConnection
+from app.services import oauth_state
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ def get_authorization_url(user_id: str, redirect_uri: Optional[str] = None) -> s
         "scope": " ".join(GOOGLE_SCOPES),
         "access_type": "offline",       # request a refresh_token
         "prompt": "consent",            # always show consent screen for refresh_token
-        "state": user_id,               # CSRF / user association
+        "state": oauth_state.generate(user_id),  # CSRF-safe signed nonce
     }
 
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
@@ -105,7 +106,7 @@ async def handle_callback(
     """
     settings = get_settings()
     redirect = redirect_uri or settings.google_redirect_uri
-    user_id = state  # state carries the Clerk user_id
+    user_id = oauth_state.verify(state)  # verify signed nonce, extract user_id
 
     # ── Exchange code for tokens ──────────────────────────────────────────
     async with httpx.AsyncClient(timeout=15) as client:
