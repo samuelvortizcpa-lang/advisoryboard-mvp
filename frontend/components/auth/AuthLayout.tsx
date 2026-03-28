@@ -115,7 +115,7 @@ function StatsBar() {
   const counts = [count0, count1, count2];
 
   return (
-    <div style={{ display: "flex", alignItems: "center", marginTop: 18 }}>
+    <div style={{ display: "flex", alignItems: "center" }}>
       {stats.map((stat, i) => (
         <div key={stat.label} style={{ display: "flex", alignItems: "center" }}>
           {i > 0 && (
@@ -434,108 +434,110 @@ export default function AuthLayout({
           <line x1="90%" y1="0" x2="50%" y2="100%" stroke="rgba(201,148,74,0.03)" strokeWidth="1" />
         </svg>
 
-        {/* Logo */}
-        <div className="relative z-10 p-8" style={fadeUp("0.1s")}>
-          <Link
-            href="https://callwen.com"
-            style={{
-              fontFamily: t.serif,
-              fontSize: "1.8rem",
-              fontWeight: 600,
-              color: t.white,
-              textDecoration: "none",
-              letterSpacing: "-0.01em",
-            }}
-          >
-            Call<span style={{ color: t.accent }}>wen</span>
-          </Link>
-        </div>
-
-        {/* Center content */}
-        <div className="relative z-10 flex-1 flex items-start px-8 lg:px-12" style={{ paddingTop: "6vh" }}>
-          <div>
-            {/* Overline */}
-            <p
-              style={{
-                fontFamily: t.sans,
-                fontSize: "0.7rem",
-                fontWeight: 500,
-                letterSpacing: "0.3em",
-                textTransform: "uppercase",
-                color: t.accent,
-                marginBottom: "1rem",
-                ...fadeUp("0.25s"),
-              }}
-            >
-              AI DOCUMENT INTELLIGENCE
-            </p>
-
-            {/* Headline */}
-            <h1
+        {/* Center content — logo through stats as one centered block */}
+        <div
+          className="relative z-10 flex-1 flex flex-col justify-center"
+          style={{ padding: "3rem 2.5rem" }}
+        >
+          {/* Logo */}
+          <div style={{ marginBottom: "2.5rem", ...fadeUp("0.1s") }}>
+            <Link
+              href="https://callwen.com"
               style={{
                 fontFamily: t.serif,
-                fontSize: "3rem",
-                fontWeight: 400,
+                fontSize: "1.8rem",
+                fontWeight: 600,
                 color: t.white,
-                lineHeight: 1.15,
-                ...fadeUp("0.4s"),
+                textDecoration: "none",
+                letterSpacing: "-0.01em",
               }}
             >
-              Your documents,
-              <br />
-              <em style={{ fontStyle: "italic", color: t.accentLight }}>unlocked.</em>
-            </h1>
+              Call<span style={{ color: t.accent }}>wen</span>
+            </Link>
+          </div>
 
-            {/* Subtitle */}
-            <p
-              style={{
-                fontFamily: t.sans,
-                fontSize: "0.95rem",
-                fontWeight: 300,
-                color: t.whiteDim,
-                maxWidth: 380,
-                lineHeight: 1.7,
-                marginTop: "1rem",
-                ...fadeUp("0.55s"),
-              }}
-            >
-              Upload tax returns, meeting recordings, and client files. Ask
-              questions. Get source-cited answers in seconds.
-            </p>
+          {/* Overline */}
+          <p
+            style={{
+              fontFamily: t.sans,
+              fontSize: "0.7rem",
+              fontWeight: 500,
+              letterSpacing: "0.3em",
+              textTransform: "uppercase",
+              color: t.accent,
+              marginBottom: "0.75rem",
+              ...fadeUp("0.25s"),
+            }}
+          >
+            AI DOCUMENT INTELLIGENCE
+          </p>
 
-            {/* Feature cards */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 20 }}>
-              {features.map((f, i) => (
-                <FeatureCard
-                  key={f.title}
-                  icon={f.icon}
-                  title={f.title}
-                  desc={f.desc}
-                  delay={`${0.65 + i * 0.1}s`}
-                />
-              ))}
-            </div>
+          {/* Headline */}
+          <h1
+            style={{
+              fontFamily: t.serif,
+              fontSize: "3rem",
+              fontWeight: 400,
+              color: t.white,
+              lineHeight: 1.15,
+              marginBottom: "0.5rem",
+              ...fadeUp("0.4s"),
+            }}
+          >
+            Your documents,
+            <br />
+            <em style={{ fontStyle: "italic", color: t.accentLight }}>unlocked.</em>
+          </h1>
 
-            {/* Gold rule */}
-            <div
-              style={{
-                width: 36,
-                height: 1,
-                background: t.accent,
-                marginTop: 20,
-                ...fadeUp("0.95s"),
-              }}
-            />
+          {/* Subtitle */}
+          <p
+            style={{
+              fontFamily: t.sans,
+              fontSize: "0.95rem",
+              fontWeight: 300,
+              color: t.whiteDim,
+              maxWidth: 380,
+              lineHeight: 1.7,
+              marginBottom: "1.25rem",
+              ...fadeUp("0.55s"),
+            }}
+          >
+            Upload tax returns, meeting recordings, and client files. Ask
+            questions. Get source-cited answers in seconds.
+          </p>
 
-            {/* Counter stats */}
-            <div style={fadeUp("1.05s")}>
-              <StatsBar />
-            </div>
+          {/* Feature cards */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: "1.25rem" }}>
+            {features.map((f, i) => (
+              <FeatureCard
+                key={f.title}
+                icon={f.icon}
+                title={f.title}
+                desc={f.desc}
+                delay={`${0.65 + i * 0.1}s`}
+              />
+            ))}
+          </div>
+
+          {/* Gold rule */}
+          <div
+            style={{
+              width: 36,
+              height: 1,
+              background: t.accent,
+              marginBottom: "1rem",
+              ...fadeUp("0.95s"),
+            }}
+          />
+
+          {/* Counter stats */}
+          <div style={fadeUp("1.05s")}>
+            <StatsBar />
           </div>
         </div>
 
         {/* Bottom tagline */}
-        <div className="relative z-10 p-8" style={fadeUp("1.15s")}>
+        <div className="relative z-10" style={{ padding: "0 2.5rem 3rem", ...fadeUp("1.15s") }}>
           <p style={{ fontFamily: t.sans, fontSize: "0.8rem", color: t.whiteFaint }}>
             Built by a CPA, for CPAs.
           </p>
