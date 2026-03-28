@@ -115,25 +115,25 @@ function StatsBar() {
   const counts = [count0, count1, count2];
 
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
+    <div style={{ display: "flex", alignItems: "center", maxWidth: 320 }}>
       {stats.map((stat, i) => (
         <div key={stat.label} style={{ display: "flex", alignItems: "center" }}>
           {i > 0 && (
             <div
               style={{
                 width: 1,
-                height: 24,
+                height: 28,
                 background: "rgba(255,255,255,0.08)",
                 margin: "0 16px",
                 flexShrink: 0,
               }}
             />
           )}
-          <div style={{ textAlign: "center" }}>
+          <div style={{ textAlign: "center", minWidth: 80 }}>
             <div
               style={{
                 fontFamily: t.serif,
-                fontSize: "1.6rem",
+                fontSize: "2rem",
                 fontWeight: 600,
                 color: t.white,
                 lineHeight: 1,
@@ -145,12 +145,12 @@ function StatsBar() {
             <div
               style={{
                 fontFamily: t.sans,
-                fontSize: "0.65rem",
+                fontSize: "0.7rem",
                 fontWeight: 300,
                 color: t.whiteDim,
                 textTransform: "uppercase",
                 letterSpacing: "0.1em",
-                marginTop: 2,
+                marginTop: 3,
               }}
             >
               {stat.label}
@@ -188,14 +188,15 @@ function FeatureCard({
         background: "rgba(255,255,255,0.02)",
         border: "1px solid rgba(255,255,255,0.04)",
         borderRadius: 8,
-        padding: "12px 14px",
+        padding: "14px 16px",
+        maxWidth: 360,
         ...animStyle,
       }}
     >
       <div
         style={{
-          width: 32,
-          height: 32,
+          width: 36,
+          height: 36,
           borderRadius: "50%",
           background: "rgba(201,148,74,0.1)",
           display: "flex",
@@ -210,7 +211,7 @@ function FeatureCard({
         <div
           style={{
             fontFamily: t.sans,
-            fontSize: "0.82rem",
+            fontSize: "0.9rem",
             fontWeight: 500,
             color: t.white,
             marginBottom: 2,
@@ -221,7 +222,7 @@ function FeatureCard({
         <div
           style={{
             fontFamily: t.sans,
-            fontSize: "0.7rem",
+            fontSize: "0.78rem",
             fontWeight: 300,
             color: t.whiteDim,
           }}
@@ -437,7 +438,7 @@ export default function AuthLayout({
         {/* Center content — logo through stats as one centered block */}
         <div
           className="relative z-10 flex-1 flex flex-col justify-center"
-          style={{ padding: "3rem 2.5rem" }}
+          style={{ padding: "3rem 4rem" }}
         >
           {/* Logo */}
           <div style={{ marginBottom: "2.5rem", ...fadeUp("0.1s") }}>
@@ -460,9 +461,9 @@ export default function AuthLayout({
           <p
             style={{
               fontFamily: t.sans,
-              fontSize: "0.7rem",
+              fontSize: "0.75rem",
               fontWeight: 500,
-              letterSpacing: "0.3em",
+              letterSpacing: "0.25em",
               textTransform: "uppercase",
               color: t.accent,
               marginBottom: "0.75rem",
@@ -476,7 +477,7 @@ export default function AuthLayout({
           <h1
             style={{
               fontFamily: t.serif,
-              fontSize: "3rem",
+              fontSize: "clamp(2.2rem, 4vw, 3.2rem)",
               fontWeight: 400,
               color: t.white,
               lineHeight: 1.15,
@@ -493,10 +494,10 @@ export default function AuthLayout({
           <p
             style={{
               fontFamily: t.sans,
-              fontSize: "0.95rem",
+              fontSize: "1rem",
               fontWeight: 300,
               color: t.whiteDim,
-              maxWidth: 380,
+              maxWidth: 400,
               lineHeight: 1.7,
               marginBottom: "1.25rem",
               ...fadeUp("0.55s"),
@@ -522,7 +523,7 @@ export default function AuthLayout({
           {/* Gold rule */}
           <div
             style={{
-              width: 36,
+              width: 48,
               height: 1,
               background: t.accent,
               marginBottom: "1rem",
@@ -537,7 +538,7 @@ export default function AuthLayout({
         </div>
 
         {/* Bottom tagline */}
-        <div className="relative z-10" style={{ padding: "0 2.5rem 3rem", ...fadeUp("1.15s") }}>
+        <div className="relative z-10" style={{ padding: "0 4rem 3rem", ...fadeUp("1.15s") }}>
           <p style={{ fontFamily: t.sans, fontSize: "0.8rem", color: t.whiteFaint }}>
             Built by a CPA, for CPAs.
           </p>
