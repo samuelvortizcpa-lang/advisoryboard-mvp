@@ -40,7 +40,7 @@ from app.models.document_chunk import DocumentChunk
 from app.models.document_page_image import DocumentPageImage
 from app.services import storage_service
 from app.services.chunking import chunk_text, get_chunk_params
-from app.services.query_router import classify_query, route_completion
+from app.services.query_router import classify_query, route_completion, route_completion_stream
 from app.services.tax_terms import expand_query as expand_financial_terms
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
 
@@ -521,6 +521,21 @@ def _compute_confidence_tier(scores: list[float]) -> str:
     return "low"
 
 
+def _sanitize_user_input(text: str, max_length: int = 2000) -> str:
+    """
+    Sanitize user input before including it in LLM prompts.
+
+    - Truncates to max_length to prevent token abuse
+    - Strips common prompt injection delimiters
+    """
+    text = text[:max_length]
+    # Strip sequences that attempt to override system instructions
+    for marker in ("```system", "```assistant", "<|im_start|>", "<|im_end|>",
+                   "<<SYS>>", "<</SYS>>", "[INST]", "[/INST]"):
+        text = text.replace(marker, "")
+    return text.strip()
+
+
 async def answer_question(
     db: Session,
     client_id: UUID,
@@ -541,6 +556,7 @@ async def answer_question(
                          "score": float, "chunk_text": str, "chunk_index": int}]
         }
     """
+    question = _sanitize_user_input(question)
     chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
 
     # ---- Keyword fallback: direct text search for specific phrases ----
@@ -914,3 +930,226 @@ async def answer_question(
         "quota_remaining": quota_remaining,
         "quota_warning": quota_warning,
     }
+
+
+async def answer_question_stream(
+    db: Session,
+    client_id: UUID,
+    question: str,
+    user_id: str | None = None,
+    model_override: str | None = None,
+):
+    """
+    Streaming variant of answer_question. Yields SSE-formatted strings.
+
+    Reuses all the same retrieval/context logic, but streams the LLM
+    response token-by-token. Sends sources as a final SSE event.
+    """
+    import json as _json
+
+    question = _sanitize_user_input(question)
+
+    # ── Retrieval phase (identical to answer_question) ──
+    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
+
+    # Keyword fallback
+    _kw_tokens = question.lower().split()
+    _kw_bigrams = [
+        " ".join(_kw_tokens[i:i+2]) for i in range(len(_kw_tokens) - 1)
+    ]
+    _stop_bigrams = {"what is", "is the", "of the", "on the", "in the", "for the", "from the"}
+    _kw_bigrams = [b for b in _kw_bigrams if b not in _stop_bigrams and len(b) > 5]
+
+    _expansion_terms, _relevant_forms = expand_financial_terms(question)
+    _kw_search_phrases = list(_kw_bigrams)
+    for term in _expansion_terms:
+        if len(term) >= 4 and term.lower() not in {b.lower() for b in _kw_search_phrases}:
+            _kw_search_phrases.append(term.lower())
+
+    if _kw_search_phrases:
+        existing_chunk_ids = {id(c) for c, _ in chunk_results}
+        for phrase in _kw_search_phrases[:8]:
+            pattern = f"%{phrase}%"
+            keyword_rows = (
+                db.query(DocumentChunk)
+                .join(Document, DocumentChunk.document_id == Document.id)
+                .filter(
+                    DocumentChunk.client_id == client_id,
+                    Document.client_id == client_id,
+                    DocumentChunk.chunk_text.ilike(pattern),
+                )
+                .limit(5)
+                .all()
+            )
+            for kw_chunk in keyword_rows:
+                if id(kw_chunk) not in existing_chunk_ids:
+                    existing_chunk_ids.add(id(kw_chunk))
+                    kw_score = 92.0 if phrase in {e.lower() for e in _expansion_terms} else 90.0
+                    chunk_results.append((kw_chunk, kw_score))
+
+    if not chunk_results:
+        yield 'data: {"type":"token","content":"I couldn\'t find any processed documents for this client."}\n\n'
+        yield 'data: {"type":"done","sources":[],"confidence_tier":"low","confidence_score":0.0,"model_used":"none","query_type":"factual"}\n\n'
+        return
+
+    all_scores = [score for _, score in chunk_results]
+    best_score = max(all_scores)
+    confidence_tier = _compute_confidence_tier(all_scores)
+
+    # ── Build context (same as answer_question) ──
+    context_parts: list[str] = []
+    for chunk, score in chunk_results:
+        doc = chunk.document
+        filename = doc.filename if doc else "unknown"
+        doc_meta = f"Source: {filename} | Relevance: {score:.1f}%"
+        if doc and doc.document_type:
+            doc_meta += f" | Type: {doc.document_type}"
+        context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
+
+    context = "\n\n---\n\n".join(context_parts)
+
+    db_client = (
+        db.query(Client)
+        .options(joinedload(Client.client_type))
+        .filter(Client.id == client_id)
+        .first()
+    )
+
+    if db_client and db_client.client_type:
+        system_prompt = db_client.client_type.system_prompt.format(context=context)
+    else:
+        system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
+
+    if db_client and db_client.custom_instructions:
+        system_prompt += f"\n\nAdditional instructions for this specific client:\n{db_client.custom_instructions}"
+
+    if best_score < 50:
+        system_prompt += (
+            "\n\nNote: The retrieved context has low relevance scores. "
+            "If the context contains relevant financial data, always provide "
+            "the best answer possible from available information rather than "
+            "declining to answer."
+        )
+
+    # ── Classify query type ──
+    if model_override == "fast":
+        query_type = "factual"
+    elif model_override == "balanced":
+        query_type = "strategic"
+    else:
+        query_type = await classify_query(
+            question, db=db, user_id=user_id, client_id=client_id
+        )
+
+    _client_type_name = (
+        db_client.client_type.name if db_client and db_client.client_type else None
+    )
+
+    # ── Stream the LLM response ──
+    full_answer = ""
+    model_used = "gpt-4o-mini"
+    quota_remaining = None
+    quota_warning = None
+
+    async for token, metadata in route_completion_stream(
+        query_type, system_prompt, question,
+        db=db, user_id=user_id, client_id=client_id,
+        client_type=_client_type_name,
+    ):
+        if token is not None:
+            full_answer += token
+            yield f'data: {_json.dumps({"type": "token", "content": token})}\n\n'
+        elif metadata is not None:
+            model_used = metadata.get("model_used", "gpt-4o-mini")
+            quota_remaining = metadata.get("quota_remaining")
+            quota_warning = metadata.get("quota_warning")
+
+    # ── Build sources (simplified — skip page image scoring for streaming) ──
+    year_match = re.search(r"\b(20\d{2})\b", question)
+    question_year = year_match.group(1) if year_match else None
+
+    doc_map: dict[str, Document] = {}
+    best_chunk_score: dict[str, float] = {}
+    best_chunk_preview: dict[str, str] = {}
+    best_chunk_index: dict[str, int] = {}
+
+    for chunk, score in chunk_results:
+        doc = chunk.document
+        doc_id_str = str(chunk.document_id)
+        filename = doc.filename if doc else "unknown"
+
+        if question_year:
+            year_in_filename = question_year in filename
+            year_in_period = doc and doc.document_period and question_year in doc.document_period
+            if not year_in_filename and not year_in_period:
+                continue
+
+        boosted_score = score
+        if question_year and doc and doc.document_period and question_year in doc.document_period:
+            boosted_score = min(100.0, score + 10.0)
+
+        doc_map[doc_id_str] = doc
+        if boosted_score > best_chunk_score.get(doc_id_str, 0):
+            best_chunk_score[doc_id_str] = boosted_score
+            preview = chunk.chunk_text[:200]
+            if len(chunk.chunk_text) > 200:
+                preview += "…"
+            best_chunk_preview[doc_id_str] = preview
+            best_chunk_index[doc_id_str] = chunk.chunk_index
+
+    # Page image matching for sources
+    doc_ids_in_results = set(doc_map.keys())
+    page_images_by_doc: dict[str, list[DocumentPageImage]] = {}
+    if doc_ids_in_results:
+        all_page_imgs = (
+            db.query(DocumentPageImage)
+            .filter(DocumentPageImage.document_id.in_([UUID(did) for did in doc_ids_in_results]))
+            .order_by(DocumentPageImage.page_number)
+            .all()
+        )
+        for pi in all_page_imgs:
+            page_images_by_doc.setdefault(str(pi.document_id), []).append(pi)
+
+    # Build source cards (max 3)
+    sources: list[dict] = []
+    for doc_id_str, doc in list(doc_map.items())[:3]:
+        source = {
+            "document_id": doc_id_str,
+            "filename": doc.filename if doc else "unknown",
+            "preview": best_chunk_preview.get(doc_id_str, ""),
+            "score": best_chunk_score.get(doc_id_str, 0),
+            "chunk_text": best_chunk_preview.get(doc_id_str, ""),
+            "chunk_index": best_chunk_index.get(doc_id_str, 0),
+        }
+
+        # Try to find the best page image
+        pages = page_images_by_doc.get(doc_id_str, [])
+        if pages:
+            source["page_number"] = pages[0].page_number
+            if pages[0].image_path:
+                try:
+                    source["image_url"] = storage_service.get_signed_url(
+                        pages[0].image_path, expires_in=3600
+                    )
+                except Exception:
+                    pass
+                source["image_path"] = pages[0].image_path
+        else:
+            source["page_number"] = 1
+
+        sources.append(source)
+
+    # Persist chat messages
+    from app.models.chat_message import ChatMessage
+    db.add(ChatMessage(
+        client_id=client_id, user_id=user_id, role="user",
+        content=question, sources=None,
+    ))
+    db.add(ChatMessage(
+        client_id=client_id, user_id=user_id, role="assistant",
+        content=full_answer, sources=sources or None,
+    ))
+    db.commit()
+
+    # Send final event with metadata
+    yield f'data: {_json.dumps({"type": "done", "sources": sources, "confidence_tier": confidence_tier, "confidence_score": round(best_score, 2), "model_used": model_used, "query_type": query_type, "quota_remaining": quota_remaining, "quota_warning": quota_warning})}\n\n'

@@ -141,31 +141,69 @@ export default function ClientChat({ clientId, documentCount }: Props) {
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setLoading(true);
 
+    // Add a placeholder assistant message for streaming
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "" },
+    ]);
+
     try {
       const override = modelMode === "auto" ? null : modelMode;
-      const response = await createRagApi(getToken).chat(clientId, question, override);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: response.answer,
-          sources: response.sources,
-          confidence_tier: response.confidence_tier,
-          confidence_score: response.confidence_score,
-          model_used: response.model_used,
-          query_type: response.query_type,
-          quota_warning: response.quota_warning,
+      await createRagApi(getToken).chatStream(
+        clientId,
+        question,
+        override,
+        // onToken — append each token to the streaming message
+        (token: string) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last && last.role === "assistant") {
+              updated[updated.length - 1] = { ...last, content: last.content + token };
+            }
+            return updated;
+          });
         },
-      ]);
+        // onDone — finalize with sources and metadata
+        (meta) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last && last.role === "assistant") {
+              updated[updated.length - 1] = {
+                ...last,
+                sources: meta.sources,
+                confidence_tier: meta.confidence_tier as "high" | "medium" | "low",
+                confidence_score: meta.confidence_score,
+                model_used: meta.model_used,
+                query_type: meta.query_type,
+                quota_warning: meta.quota_warning,
+              };
+            }
+            return updated;
+          });
+        },
+      );
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: err instanceof Error ? err.message : "Something went wrong.",
-          error: true,
-        },
-      ]);
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === "assistant" && !last.content) {
+          // Replace empty streaming placeholder with error
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: err instanceof Error ? err.message : "Something went wrong.",
+            error: true,
+          };
+        } else {
+          updated.push({
+            role: "assistant",
+            content: err instanceof Error ? err.message : "Something went wrong.",
+            error: true,
+          });
+        }
+        return updated;
+      });
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 0);

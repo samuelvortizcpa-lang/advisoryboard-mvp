@@ -387,6 +387,49 @@ async def chat(
 
 
 # ---------------------------------------------------------------------------
+# Chat / Q&A — streaming SSE endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/clients/{client_id}/rag/chat/stream",
+    summary="Ask a question about client documents (streaming SSE)",
+)
+async def chat_stream(
+    client_id: UUID,
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> StreamingResponse:
+    _require_client(db, client_id, auth)
+
+    if not request.question.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty."
+        )
+
+    override = request.model_override
+    if override == "opus":
+        override = "balanced"  # streaming doesn't support opus, downgrade to sonnet
+
+    async def event_generator():
+        async for chunk in rag_service.answer_question_stream(
+            db, client_id=client_id, question=request.question,
+            user_id=auth.user_id, model_override=override,
+        ):
+            yield chunk
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Document comparison
 # ---------------------------------------------------------------------------
 

@@ -84,10 +84,12 @@ def step1_create_personal_orgs(db: Session) -> dict[str, str]:
             "SELECT email, first_name, last_name FROM users WHERE clerk_id = :cid"
         ), {"cid": clerk_id}).fetchone()
 
-        email = user_row[0] if user_row else f"{clerk_id}@unknown.local"
+        email = (user_row[0] if user_row and user_row[0] else None) or f"user-{clerk_id[:8]}"
         name = None
         if user_row and (user_row[1] or user_row[2]):
             name = " ".join(filter(None, [user_row[1], user_row[2]]))
+        if not name:
+            name = "Unknown User"
 
         # Check if personal org already exists
         existing = db.execute(text(

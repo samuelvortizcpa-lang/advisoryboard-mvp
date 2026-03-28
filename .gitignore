@@ -253,3 +253,4 @@ backend/uploads/
 
 # ─── Local-only admin dashboard ──────────────
 admin-dashboard/
+.gstack/

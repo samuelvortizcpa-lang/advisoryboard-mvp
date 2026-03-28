@@ -8,13 +8,13 @@ Routes:
   POST /api/consent/sign/{token}  — complete the e-signature
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -22,6 +22,8 @@ from app.models.client_consent import ClientConsent
 from app.services.consent_service import complete_signing, validate_signing_token
 
 logger = logging.getLogger(__name__)
+
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
 
@@ -135,10 +137,11 @@ async def get_signing_form(
     response_model=SigningResultResponse,
     summary="Complete the e-signature",
 )
+@limiter.limit("5/minute")
 async def submit_signing(
+    request: Request,
     token: str,
     body: SigningRequest,
-    request: Request,
     db: Session = Depends(get_db),
 ) -> SigningResultResponse:
     consent = validate_signing_token(token, db)

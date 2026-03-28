@@ -374,6 +374,73 @@ export function createRagApi(getToken: GetToken, orgId?: string) {
       });
     },
 
+    async chatStream(
+      clientId: string,
+      question: string,
+      modelOverride: string | null | undefined,
+      onToken: (token: string) => void,
+      onDone: (meta: {
+        sources: RagSource[];
+        confidence_tier: string;
+        confidence_score: number;
+        model_used: string;
+        query_type: string;
+        quota_remaining: number | null;
+        quota_warning: string | null;
+      }) => void,
+    ): Promise<void> {
+      const token = await getToken();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (orgId) headers["X-Org-Id"] = orgId;
+
+      const res = await fetch(
+        `${API_BASE}/clients/${clientId}/rag/chat/stream`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ question, model_override: modelOverride ?? null }),
+        },
+      );
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
+        throw new Error(body.detail || `Request failed (${res.status})`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const json = line.slice(6);
+          try {
+            const event = JSON.parse(json);
+            if (event.type === "token") {
+              onToken(event.content);
+            } else if (event.type === "done") {
+              onDone(event);
+            }
+          } catch {
+            // skip malformed SSE lines
+          }
+        }
+      }
+    },
+
     getChatHistory(clientId: string, limit = 100, skip = 0) {
       return f<ChatHistoryResponse>(
         `/clients/${clientId}/chat-history?limit=${limit}&skip=${skip}`

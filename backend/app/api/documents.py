@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
@@ -16,6 +17,8 @@ from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.notification_service import send_notification
 from app.services.subscription_service import check_document_limit
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -33,6 +36,39 @@ async def upload_document(
     auth: AuthContext = Depends(get_auth),
 ) -> DocumentResponse:
     check_client_access(auth, client_id, db)
+
+    # ── File validation ──────────────────────────────────────────────────
+    ALLOWED_CONTENT_TYPES = {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "application/vnd.ms-outlook",
+        "text/plain",
+        "text/csv",
+        "image/png",
+        "image/jpeg",
+        "image/tiff",
+    }
+    ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".msg", ".txt", ".csv", ".png", ".jpg", ".jpeg", ".tiff", ".tif"}
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+    filename = file.filename or ""
+    ext = ("." + filename.rsplit(".", 1)[-1]).lower() if "." in filename else ""
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type '{ext}' is not supported. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+
+    # Read file to check size (file is in memory anyway for upload)
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds maximum size of {MAX_FILE_SIZE // (1024*1024)} MB.",
+        )
+    # Reset file position so save_document can read it
+    await file.seek(0)
 
     limit_check = check_document_limit(db, auth.user_id, org_id=auth.org_id)
     if not limit_check["allowed"]:
@@ -224,7 +260,10 @@ async def backfill_page_images(
             total_pages += page_count
             processed += 1
         except Exception:
-            pass  # logged inside process_page_images
+            logger.warning(
+                "Failed to process page images for document %s (%s)",
+                doc.id, doc.filename, exc_info=True,
+            )
 
     return {
         "processed": processed,

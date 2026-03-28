@@ -677,7 +677,7 @@ def send_consent_for_signature(
         consent_type="both",
         status="sent",
         signing_token=token,
-        signing_token_expires_at=now + timedelta(days=30),
+        signing_token_expires_at=now + timedelta(hours=72),
         sent_to_email=email,
         preparer_name=preparer_name,
         preparer_firm=preparer_firm,
@@ -720,7 +720,7 @@ def send_consent_for_signature(
             )
         )
     except Exception:
-        pass  # fire-and-forget
+        logger.warning("Failed to send consent_sent Slack notification", exc_info=True)
 
     logger.info(
         "Consent form sent for signing: client=%s email=%s token=%s",
@@ -751,9 +751,11 @@ def validate_signing_token(
     if record.signed_at is not None:
         return None
 
-    # Token expired
+    # Token expired — reject if no expiry is set (legacy) or if expired
     now = datetime.now(timezone.utc)
-    if record.signing_token_expires_at and record.signing_token_expires_at.astimezone(timezone.utc) < now:
+    if not record.signing_token_expires_at:
+        return None
+    if record.signing_token_expires_at.astimezone(timezone.utc) < now:
         return None
 
     return record
@@ -789,6 +791,10 @@ def complete_signing(
     record.signer_user_agent = user_agent
     record.taxpayer_name = typed_name
 
+    # Invalidate the signing token so it cannot be reused
+    record.signing_token = None
+    record.signing_token_expires_at = None
+
     # Update client-level status
     client = db.query(Client).filter(Client.id == record.client_id).first()
     if client:
@@ -816,7 +822,7 @@ def complete_signing(
             )
         )
     except Exception:
-        pass
+        logger.warning("Failed to send consent_signed Slack notification", exc_info=True)
 
     # Email CPA
     try:

@@ -36,10 +36,11 @@ class OrganizationMember(Base):
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
 
     # Clerk user ID
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
     # 'admin', 'member', 'readonly'
     role: Mapped[str] = mapped_column(

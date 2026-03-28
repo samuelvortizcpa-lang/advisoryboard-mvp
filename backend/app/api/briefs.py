@@ -9,36 +9,18 @@ Routes (all require Clerk JWT auth):
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.models.client import Client
 from app.models.client_brief import ClientBrief
-from app.services import user_service
+from app.services.auth_context import AuthContext, check_client_access, get_auth
 
 router = APIRouter()
-
-
-# ---------------------------------------------------------------------------
-# Ownership guard
-# ---------------------------------------------------------------------------
-
-
-def _require_client(db: Session, client_id: UUID, owner_id: UUID) -> Client:
-    client = (
-        db.query(Client)
-        .filter(Client.id == client_id, Client.owner_id == owner_id)
-        .first()
-    )
-    if client is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    return client
 
 
 # ---------------------------------------------------------------------------
@@ -71,15 +53,14 @@ class BriefResponse(BaseModel):
 async def generate_brief(
     client_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> BriefResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    check_client_access(auth, client_id, db)
 
     from app.services.brief_generator import generate_brief as _generate
 
     try:
-        result = await _generate(db, client_id=client_id, user_id=user.clerk_id)
+        result = await _generate(db, client_id=client_id, user_id=auth.user_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -89,7 +70,7 @@ async def generate_brief(
     # Persist the brief
     brief = ClientBrief(
         client_id=client_id,
-        user_id=user.clerk_id,
+        user_id=auth.user_id,
         content=result["content"],
         document_count=result["document_count"],
         action_item_count=result["action_item_count"],
@@ -123,10 +104,9 @@ async def generate_brief(
 async def get_latest_brief(
     client_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> Optional[BriefResponse]:
-    user = user_service.get_or_create_user(db, current_user)
-    _require_client(db, client_id, user.id)
+    check_client_access(auth, client_id, db)
 
     brief = (
         db.query(ClientBrief)

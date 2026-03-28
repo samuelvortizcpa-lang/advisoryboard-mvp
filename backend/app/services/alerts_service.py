@@ -130,28 +130,32 @@ def compute_alerts(
         })
 
     # ── 3. Stale clients ─────────────────────────────────────────────────────
+    # Bulk query: document counts per client
+    doc_counts_rows = (
+        db.query(Document.client_id, func.count(Document.id))
+        .filter(Document.client_id.in_(client_ids))
+        .group_by(Document.client_id)
+        .all()
+    )
+    doc_counts = {row[0]: row[1] for row in doc_counts_rows}
+
+    # Bulk query: recent chat message counts per client
+    chat_counts_rows = (
+        db.query(ChatMessage.client_id, func.count(ChatMessage.id))
+        .filter(
+            ChatMessage.client_id.in_(client_ids),
+            ChatMessage.created_at >= thirty_days_ago,
+        )
+        .group_by(ChatMessage.client_id)
+        .all()
+    )
+    chat_counts = {row[0]: row[1] for row in chat_counts_rows}
+
     for cid in client_ids:
         if ("stale_client", cid) in dismissed:
             continue
 
-        # Check documents
-        doc_count = (
-            db.query(func.count(Document.id))
-            .filter(Document.client_id == cid)
-            .scalar()
-        ) or 0
-
-        # Check recent chat messages
-        recent_chat = (
-            db.query(func.count(ChatMessage.id))
-            .filter(
-                ChatMessage.client_id == cid,
-                ChatMessage.created_at >= thirty_days_ago,
-            )
-            .scalar()
-        ) or 0
-
-        if doc_count == 0 and recent_chat == 0:
+        if doc_counts.get(cid, 0) == 0 and chat_counts.get(cid, 0) == 0:
             alerts.append({
                 "id": str(cid),
                 "type": "stale_client",

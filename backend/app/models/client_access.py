@@ -38,10 +38,11 @@ class ClientAccess(Base):
         UUID(as_uuid=True),
         ForeignKey("clients.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
 
     # Clerk user ID of the member who has access
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
     # 'full', 'readonly', 'none'
     access_level: Mapped[str] = mapped_column(

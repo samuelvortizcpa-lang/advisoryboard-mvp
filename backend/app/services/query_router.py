@@ -312,3 +312,143 @@ async def route_completion(
         "quota_remaining": quota_remaining,
         "quota_warning": quota_warning,
     }
+
+
+async def route_completion_stream(
+    query_type: str,
+    system_prompt: str,
+    question: str,
+    *,
+    db: Optional[Session] = None,
+    user_id: Optional[str] = None,
+    client_id: Optional[UUID] = None,
+    client_type: Optional[str] = None,
+):
+    """
+    Streaming variant of route_completion. Yields (token, None) for content
+    chunks and (None, metadata_dict) as the final item with model_used etc.
+
+    For simplicity, always uses GPT-4o-mini with streaming to avoid
+    complexity of streaming from three different providers. The non-streaming
+    endpoint still routes to Claude for strategic queries.
+    """
+    global _anthropic_warned
+    settings = get_settings()
+
+    quota_remaining: int | None = None
+    quota_warning: str | None = None
+    model_used = "gpt-4o-mini"
+
+    # Check strategic quota (same logic as non-streaming)
+    if query_type == "strategic" and db and user_id:
+        try:
+            from app.services.subscription_service import check_quota
+            quota = check_quota(db, user_id)
+            quota_remaining = quota["remaining"]
+            if not quota["allowed"]:
+                quota_warning = (
+                    f"Strategic query limit reached. Using standard model."
+                )
+                query_type = "factual"
+        except Exception:
+            logger.error("Quota check failed — allowing query", exc_info=True)
+
+    # Strategic queries: stream from Claude Sonnet if available
+    if query_type == "strategic" and settings.anthropic_api_key:
+        strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
+        try:
+            client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+            full_answer = ""
+            async with client.messages.stream(
+                model="claude-sonnet-4-20250514",
+                max_tokens=2000,
+                system=strategic_system,
+                messages=[{"role": "user", "content": question}],
+                temperature=0.2,
+            ) as stream:
+                async for text in stream.text_stream:
+                    full_answer += text
+                    yield text, None
+
+            model_used = "claude-sonnet-4.6"
+            logger.info("Streaming strategic query answered by Claude Sonnet 4.6")
+
+            # Increment usage
+            if db and user_id:
+                try:
+                    from app.services.subscription_service import increment_usage, check_quota
+                    increment_usage(db, user_id, "strategic")
+                    updated_quota = check_quota(db, user_id)
+                    quota_remaining = updated_quota["remaining"]
+                    if quota_remaining is not None and quota_remaining < 10:
+                        quota_warning = (
+                            f"You have {quota_remaining} strategic "
+                            f"quer{'y' if quota_remaining == 1 else 'ies'} "
+                            f"remaining this month."
+                        )
+                except Exception:
+                    logger.error("Failed to increment usage", exc_info=True)
+
+            # Log token usage
+            if db and user_id:
+                try:
+                    final_message = await stream.get_final_message()
+                    usage = final_message.usage
+                    log_token_usage(
+                        db, user_id=user_id, client_id=client_id,
+                        query_type=query_type, model="claude-sonnet-4-20250514",
+                        prompt_tokens=usage.input_tokens if usage else 0,
+                        completion_tokens=usage.output_tokens if usage else 0,
+                        endpoint="chat_stream",
+                    )
+                except Exception:
+                    logger.error("Failed to log Claude stream token usage", exc_info=True)
+
+            yield None, {
+                "model_used": model_used,
+                "quota_remaining": quota_remaining,
+                "quota_warning": quota_warning,
+            }
+            return
+        except Exception:
+            logger.exception("Claude streaming failed — falling back to GPT-4o-mini")
+
+    # Factual queries (or fallback): stream from GPT-4o-mini
+    oai = AsyncOpenAI(api_key=settings.openai_api_key)
+    stream = await oai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ],
+        temperature=0.1,
+        max_tokens=1_500,
+        stream=True,
+    )
+
+    full_answer = ""
+    async for chunk in stream:
+        delta = chunk.choices[0].delta if chunk.choices else None
+        if delta and delta.content:
+            full_answer += delta.content
+            yield delta.content, None
+
+    logger.info("Streaming query answered by GPT-4o-mini")
+
+    # Log token usage (approximate from content length since streaming doesn't give usage)
+    if db and user_id:
+        try:
+            log_token_usage(
+                db, user_id=user_id, client_id=client_id,
+                query_type=query_type, model="gpt-4o-mini",
+                prompt_tokens=0, completion_tokens=0,
+                endpoint="chat_stream",
+            )
+        except Exception:
+            logger.error("Failed to log GPT stream token usage", exc_info=True)
+
+    yield None, {
+        "model_used": model_used,
+        "quota_remaining": quota_remaining,
+        "quota_warning": quota_warning,
+    }

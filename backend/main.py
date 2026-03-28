@@ -6,8 +6,11 @@ import os
 
 import sentry_sdk
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.action_items import router as action_items_router
 from app.api.alerts import router as alerts_router
@@ -58,6 +61,11 @@ app = FastAPI(
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # cors_origins always includes localhost dev origins; production origins are
 # added via the ALLOWED_ORIGINS env var (comma-separated list).
+# ── Rate limiting ─────────────────────────────────────────────────────────
+from app.api.consent_public import limiter as consent_limiter
+app.state.limiter = consent_limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origins,
