@@ -97,16 +97,20 @@ function StatsBar() {
   const counts = stats.map((s) => useCountUp(s.value));
 
   return (
-    <div className="auth-stats">
+    <div style={{ display: "flex", flexDirection: "row", alignItems: "center", marginTop: "1.5rem" }}>
       {stats.map((stat, i) => (
-        <div key={stat.label} className="auth-stat-group">
-          {i > 0 && <div className="auth-stat-divider" />}
-          <div className="auth-stat">
-            <div className="auth-stat-value">
+        <div key={stat.label} style={{ display: "flex", alignItems: "center" }}>
+          {i > 0 && (
+            <div style={{ width: 1, height: 24, background: "rgba(255,255,255,0.08)", margin: "0 16px", flexShrink: 0 }} />
+          )}
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontFamily: "var(--font-serif), 'Cormorant Garamond', Georgia, serif", fontSize: "1.6rem", fontWeight: 600, color: "#f0ede6", lineHeight: 1 }}>
               {counts[i]}
-              <span className="auth-stat-suffix">{stat.suffix}</span>
+              <span style={{ color: "#c9944a" }}>{stat.suffix}</span>
             </div>
-            <div className="auth-stat-label">{stat.label}</div>
+            <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.65rem", fontWeight: 300, color: "#8a8680", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>
+              {stat.label}
+            </div>
           </div>
         </div>
       ))}
@@ -279,17 +283,27 @@ export default function AuthLayout({
             </p>
 
             {/* Feature cards */}
-            <div className="auth-features">
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: "1.8rem" }}>
               {features.map((f, i) => (
                 <div
                   key={f.title}
-                  className="auth-feature-card anim-fade-up"
-                  style={{ animationDelay: `${0.65 + i * 0.1}s` }}
+                  style={{
+                    display: "flex", flexDirection: "row", alignItems: "center", gap: 12,
+                    background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)",
+                    borderRadius: 8, padding: "12px 14px",
+                    opacity: 0, animation: `fadeUp 0.6s ease-out ${0.65 + i * 0.1}s forwards`,
+                  }}
                 >
-                  <div className="auth-feature-icon">{f.icon}</div>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(201,148,74,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {f.icon}
+                  </div>
                   <div>
-                    <div className="auth-feature-title">{f.title}</div>
-                    <div className="auth-feature-desc">{f.desc}</div>
+                    <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.82rem", fontWeight: 500, color: "#f0ede6", marginBottom: 2 }}>
+                      {f.title}
+                    </div>
+                    <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.7rem", fontWeight: 300, color: "#8a8680" }}>
+                      {f.desc}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -325,13 +339,26 @@ export default function AuthLayout({
         </p>
 
         {/* Feature cards on mobile */}
-        <div className="auth-features">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: "1.8rem" }}>
           {features.map((f) => (
-            <div key={f.title} className="auth-feature-card">
-              <div className="auth-feature-icon">{f.icon}</div>
+            <div
+              key={f.title}
+              style={{
+                display: "flex", flexDirection: "row", alignItems: "center", gap: 12,
+                background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)",
+                borderRadius: 8, padding: "12px 14px",
+              }}
+            >
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(201,148,74,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {f.icon}
+              </div>
               <div>
-                <div className="auth-feature-title">{f.title}</div>
-                <div className="auth-feature-desc">{f.desc}</div>
+                <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.82rem", fontWeight: 500, color: "#f0ede6", marginBottom: 2 }}>
+                  {f.title}
+                </div>
+                <div style={{ fontFamily: "var(--font-sans), 'Outfit', sans-serif", fontSize: "0.7rem", fontWeight: 300, color: "#8a8680" }}>
+                  {f.desc}
+                </div>
               </div>
             </div>
           ))}
@@ -520,52 +547,6 @@ export default function AuthLayout({
           margin-top: 1.25rem;
         }
 
-        /* ── Feature cards ────────────────────────────────────────────────── */
-
-        .auth-features {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          margin-top: 1.8rem;
-        }
-
-        .auth-feature-card {
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          gap: 12px;
-          background: rgba(255,255,255,0.02);
-          border: 1px solid rgba(255,255,255,0.04);
-          border-radius: 8px;
-          padding: 12px 14px;
-        }
-
-        .auth-feature-icon {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          background: rgba(201,148,74,0.1);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-
-        .auth-feature-title {
-          font-family: var(--font-sans), "Outfit", sans-serif;
-          font-size: 0.82rem;
-          font-weight: 500;
-          color: #f0ede6;
-          margin-bottom: 2px;
-        }
-
-        .auth-feature-desc {
-          font-family: var(--font-sans), "Outfit", sans-serif;
-          font-size: 0.7rem;
-          font-weight: 300;
-          color: #8a8680;
-        }
-
         /* ── Gold rule ────────────────────────────────────────────────────── */
 
         .auth-rule {
@@ -573,54 +554,6 @@ export default function AuthLayout({
           height: 1px;
           background: #c9944a;
           margin-top: 1.8rem;
-        }
-
-        /* ── Counter stats ────────────────────────────────────────────────── */
-
-        .auth-stats {
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          margin-top: 1.5rem;
-        }
-
-        .auth-stat-group {
-          display: flex;
-          align-items: center;
-        }
-
-        .auth-stat-divider {
-          width: 1px;
-          height: 24px;
-          background: rgba(255,255,255,0.08);
-          margin: 0 16px;
-          flex-shrink: 0;
-        }
-
-        .auth-stat {
-          text-align: center;
-        }
-
-        .auth-stat-value {
-          font-family: var(--font-serif), "Cormorant Garamond", Georgia, serif;
-          font-size: 1.6rem;
-          font-weight: 600;
-          color: #f0ede6;
-          line-height: 1;
-        }
-
-        .auth-stat-suffix {
-          color: #c9944a;
-        }
-
-        .auth-stat-label {
-          font-family: var(--font-sans), "Outfit", sans-serif;
-          font-size: 0.65rem;
-          font-weight: 300;
-          color: #8a8680;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          margin-top: 2px;
         }
 
         /* ── Bottom & utility ─────────────────────────────────────────────── */
