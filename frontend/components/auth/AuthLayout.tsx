@@ -272,7 +272,7 @@ export default function AuthLayout({
       </div>
 
       {/* ── Scoped styles ────────────────────────────────────────────────── */}
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes fadeUp {
           from {
             opacity: 0;
@@ -385,7 +385,7 @@ export default function AuthLayout({
 
         .auth-trust-dot {
           color: #c9944a;
-          font-size: 0.45rem;
+          font-size: 0.5rem;
           flex-shrink: 0;
         }
 
@@ -393,7 +393,7 @@ export default function AuthLayout({
           font-family: var(--font-sans), "Outfit", sans-serif;
           font-size: 0.8rem;
           font-weight: 300;
-          color: #8a8680;
+          color: #f0ede6;
           transition: opacity 0.5s ease;
         }
 
@@ -421,11 +421,11 @@ export default function AuthLayout({
           text-align: center;
           max-width: 320px;
         }
-        .auth-legal :global(a) {
+        .auth-legal a {
           color: #c9944a;
           text-decoration: none;
         }
-        .auth-legal :global(a:hover) {
+        .auth-legal a:hover {
           color: #e8b06a;
         }
       `}</style>
