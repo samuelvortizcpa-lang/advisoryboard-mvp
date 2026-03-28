@@ -115,7 +115,7 @@ function StatsBar() {
   const counts = [count0, count1, count2];
 
   return (
-    <div style={{ display: "flex", alignItems: "center", marginTop: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", marginTop: 18 }}>
       {stats.map((stat, i) => (
         <div key={stat.label} style={{ display: "flex", alignItems: "center" }}>
           {i > 0 && (
@@ -452,7 +452,7 @@ export default function AuthLayout({
         </div>
 
         {/* Center content */}
-        <div className="relative z-10 flex-1 flex items-center px-8 lg:px-12">
+        <div className="relative z-10 flex-1 flex items-start px-8 lg:px-12" style={{ paddingTop: "6vh" }}>
           <div>
             {/* Overline */}
             <p
@@ -495,7 +495,7 @@ export default function AuthLayout({
                 color: t.whiteDim,
                 maxWidth: 380,
                 lineHeight: 1.7,
-                marginTop: "1.25rem",
+                marginTop: "1rem",
                 ...fadeUp("0.55s"),
               }}
             >
@@ -504,7 +504,7 @@ export default function AuthLayout({
             </p>
 
             {/* Feature cards */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 28 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 20 }}>
               {features.map((f, i) => (
                 <FeatureCard
                   key={f.title}
@@ -522,7 +522,7 @@ export default function AuthLayout({
                 width: 36,
                 height: 1,
                 background: t.accent,
-                marginTop: 28,
+                marginTop: 20,
                 ...fadeUp("0.95s"),
               }}
             />
