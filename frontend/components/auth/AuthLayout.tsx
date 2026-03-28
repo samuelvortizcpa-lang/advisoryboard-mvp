@@ -235,96 +235,6 @@ function FeatureCard({
   );
 }
 
-// ─── Product preview mockup ─────────────────────────────────────────────────
-
-function ProductPreview({ delay }: { delay: string }) {
-  return (
-    <div
-      style={{
-        maxWidth: 360,
-        height: 180,
-        marginTop: "2rem",
-        borderRadius: 12,
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.06)",
-        background: "#0a0a09",
-        transform: "perspective(800px) rotateY(-2deg)",
-        opacity: 0,
-        animation: `fadeUp 0.7s ease ${delay} forwards`,
-      }}
-    >
-      {/* Title bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "10px 14px",
-          borderBottom: "1px solid rgba(255,255,255,0.04)",
-        }}
-      >
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ff5f57" }} />
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#febc2e" }} />
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#28c840" }} />
-        <span
-          style={{
-            fontFamily: t.sans,
-            fontSize: "0.6rem",
-            color: t.faint,
-            marginLeft: 8,
-          }}
-        >
-          Callwen Dashboard
-        </span>
-      </div>
-      {/* Body */}
-      <div style={{ display: "flex", height: "calc(100% - 33px)" }}>
-        {/* Sidebar */}
-        <div
-          style={{
-            width: 48,
-            borderRight: "1px solid rgba(255,255,255,0.04)",
-            padding: "12px 8px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
-          <div style={{ width: "100%", height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)" }} />
-          <div style={{ width: "70%", height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)" }} />
-          <div style={{ width: "85%", height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)" }} />
-        </div>
-        {/* Main */}
-        <div style={{ flex: 1, padding: 16, position: "relative" }}>
-          <div style={{ width: "60%", height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", marginBottom: 12 }} />
-          <div style={{ width: "90%", height: 4, borderRadius: 2, background: "rgba(255,255,255,0.03)", marginBottom: 8 }} />
-          <div style={{ width: "75%", height: 4, borderRadius: 2, background: "rgba(255,255,255,0.03)", marginBottom: 8 }} />
-          <div style={{ width: "80%", height: 4, borderRadius: 2, background: "rgba(255,255,255,0.03)" }} />
-          {/* Chat icon */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: 12,
-              right: 12,
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              background: "rgba(201,148,74,0.15)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Animation helper ───────────────────────────────────────────────────────
 
 function anim(delay: string): React.CSSProperties {
@@ -662,9 +572,56 @@ export default function AuthLayout({
               ))}
             </div>
 
-            {/* Product preview — hidden on mobile */}
-            <div className="hidden lg:block">
-              <ProductPreview delay="0.65s" />
+            {/* Product preview — real dashboard screenshot */}
+            <div
+              className="hidden lg:block"
+              style={{
+                marginTop: '2rem',
+                maxWidth: '420px',
+                opacity: 0,
+                animation: 'fadeUp 0.7s ease forwards',
+                animationDelay: '0.65s',
+              }}
+            >
+              <div
+                style={{
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 60px rgba(201,148,74,0.04)',
+                  transform: 'perspective(800px) rotateY(-2deg)',
+                  transition: 'transform 0.4s ease, box-shadow 0.4s ease',
+                  position: 'relative' as const,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'perspective(800px) rotateY(0deg) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 12px 48px rgba(0,0,0,0.5), 0 0 80px rgba(201,148,74,0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'perspective(800px) rotateY(-2deg)';
+                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.4), 0 0 60px rgba(201,148,74,0.04)';
+                }}
+              >
+                <img
+                  src="/dashboard-preview.png"
+                  alt="Callwen dashboard preview"
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    display: 'block',
+                    filter: 'blur(0.5px) brightness(0.95)',
+                  }}
+                />
+                {/* Subtle gradient overlay to blend with dark theme */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'linear-gradient(to bottom, rgba(14,13,12,0.05) 0%, rgba(14,13,12,0.15) 100%)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </div>
             </div>
 
             {/* Gold rule */}
