@@ -136,7 +136,7 @@ async def _startup_log() -> None:
     """Log key configuration flags so the first log line confirms the runtime mode."""
     settings = get_settings()
     logger.info(
-        "AdvisoryBoard API started | environment=%s | test_mode=%s | "
+        "Callwen API started | environment=%s | test_mode=%s | "
         "storage=supabase | cors_origins=%s",
         settings.environment,
         settings.test_mode,

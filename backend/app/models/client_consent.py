@@ -14,7 +14,7 @@ class ClientConsent(Base):
     IRC Section 7216 consent record.
 
     Tracks taxpayer consent for disclosure/use of tax return information
-    by CPA firms through AdvisoryBoard.
+    by CPA firms through Callwen.
     """
 
     __tablename__ = "client_consents"

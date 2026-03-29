@@ -1265,7 +1265,7 @@ async def list_unmatched_recordings(
     Since client_id is NOT NULL on documents, unmatched recordings are
     never ingested by the sync service.  This endpoint instead returns
     Zoom meetings that were *skipped* during sync — i.e., meetings that
-    exist in Zoom but have no corresponding document in AdvisoryBoard.
+    exist in Zoom but have no corresponding document in Callwen.
 
     Implementation: returns Zoom-sourced documents that were ingested but
     may need re-assignment.  In practice this returns recently synced Zoom

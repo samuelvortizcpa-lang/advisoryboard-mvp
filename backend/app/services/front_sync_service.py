@@ -1,6 +1,6 @@
 """
 Front conversation sync service: fetches conversations from a connected
-Front account and ingests them into AdvisoryBoard as documents.
+Front account and ingests them into Callwen as documents.
 
 Flow
 ----

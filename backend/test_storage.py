@@ -7,7 +7,7 @@ load_dotenv()
 
 from app.services.storage_service import upload_file, download_file, delete_file
 
-TEST_BYTES = b"Hello from AdvisoryBoard storage test!"
+TEST_BYTES = b"Hello from Callwen storage test!"
 USER_ID = "test-user-000"
 CLIENT_ID = "test-client-000"
 FILE_ID = "test-file-000"

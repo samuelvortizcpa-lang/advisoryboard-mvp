@@ -33,7 +33,7 @@ TEST_CLERK_ID = "user_e2e_test_document_upload"
 
 MOCK_USER = {
     "user_id": TEST_CLERK_ID,
-    "email": "e2e-test@advisoryboard.local",
+    "email": "e2e-test@callwen.local",
     "email_verified": True,
     "first_name": "E2E",
     "last_name": "Tester",
@@ -155,7 +155,7 @@ def assert_status(r, expected: int, step: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    banner("AdvisoryBoard — Document Upload End-to-End Test")
+    banner("Callwen — Document Upload End-to-End Test")
 
     # ── Warm-up: list clients to auto-create the test user in DB ──────────
     print("\n📋  Step 0 · Warm-up (auto-creates test user via get_or_create_user)")
@@ -172,7 +172,7 @@ def main() -> int:
 
     # ── Create test file ──────────────────────────────────────────────────
     test_content = (
-        "AdvisoryBoard E2E Test Document\n"
+        "Callwen E2E Test Document\n"
         "================================\n"
         "Client: E2E Test Client LLC\n"
         "Date: 2026-03-02\n"

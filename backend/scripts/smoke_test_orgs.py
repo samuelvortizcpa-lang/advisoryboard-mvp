@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Quick smoke test for the AdvisoryBoard organization system.
+Quick smoke test for the Callwen organization system.
 
 Verifies core endpoints respond correctly without creating firm orgs or
 modifying shared state.  Safe to run against any environment.

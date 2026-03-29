@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-End-to-end tests for the AdvisoryBoard organization system.
+End-to-end tests for the Callwen organization system.
 
 Tests the full flow: personal orgs, firm creation, shared clients, access
 restriction, subscription enforcement, and edge cases.
@@ -40,9 +40,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 BASE_URL = os.environ.get("TEST_BASE_URL", "http://localhost:8000")
 TEST_USER_ID = "user_test_isolation"
-TEST_USER_EMAIL = "test-isolation@advisoryboard.test"
+TEST_USER_EMAIL = "test-isolation@callwen.test"
 MEMBER_B_CLERK_ID = f"user_test_member_b_{uuid.uuid4().hex[:8]}"
-MEMBER_B_EMAIL = f"testmember-{uuid.uuid4().hex[:6]}@advisoryboard.test"
+MEMBER_B_EMAIL = f"testmember-{uuid.uuid4().hex[:6]}@callwen.test"
 
 # ─── Result tracker ──────────────────────────────────────────────────────────
 
@@ -487,7 +487,7 @@ def test_5_subscription_enforcement(
     db.commit()
 
     # 5c. Try adding a third member — should fail with seat limit
-    dummy_email = f"dummy-seat-{uuid.uuid4().hex[:6]}@advisoryboard.test"
+    dummy_email = f"dummy-seat-{uuid.uuid4().hex[:6]}@callwen.test"
     dummy_clerk = f"user_test_dummy_{uuid.uuid4().hex[:8]}"
     db.execute(
         text("""

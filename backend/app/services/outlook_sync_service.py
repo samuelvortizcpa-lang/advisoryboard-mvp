@@ -1,6 +1,6 @@
 """
 Outlook sync service: fetches emails from a connected Microsoft 365 account
-and ingests them into AdvisoryBoard as documents.
+and ingests them into Callwen as documents.
 
 Flow
 ----

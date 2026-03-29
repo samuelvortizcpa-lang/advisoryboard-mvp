@@ -187,7 +187,7 @@ def _ensure_test_client() -> Optional[dict]:
         owner = db.query(User).filter(User.clerk_id == "user_test_isolation").first()
         if not owner:
             # Create the user too
-            owner = User(clerk_id="user_test_isolation", email="test-isolation@advisoryboard.test")
+            owner = User(clerk_id="user_test_isolation", email="test-isolation@callwen.test")
             db.add(owner)
             db.commit()
             db.refresh(owner)
@@ -495,7 +495,7 @@ def test_email_matcher() -> None:
         # Find or create the test user and client
         owner = db.query(User).filter(User.clerk_id == "user_test_isolation").first()
         if not owner:
-            owner = User(clerk_id="user_test_isolation", email="test-isolation@advisoryboard.test")
+            owner = User(clerk_id="user_test_isolation", email="test-isolation@callwen.test")
             db.add(owner)
             db.commit()
             db.refresh(owner)

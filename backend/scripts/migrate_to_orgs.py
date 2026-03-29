@@ -265,7 +265,7 @@ def step8_verify(db: Session) -> bool:
 
 def main() -> None:
     print("=" * 60)
-    print("  AdvisoryBoard — Org Migration Backfill")
+    print("  Callwen — Org Migration Backfill")
     print("=" * 60)
 
     start = time.time()

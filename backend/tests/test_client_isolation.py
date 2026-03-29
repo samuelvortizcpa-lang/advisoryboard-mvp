@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Client isolation integration test for the AdvisoryBoard API.
+Client isolation integration test for the Callwen API.
 
 Verifies that documents, RAG responses, action items, timelines, and chat
 histories are fully isolated between different clients owned by the same user.

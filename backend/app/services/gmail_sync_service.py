@@ -1,6 +1,6 @@
 """
 Gmail sync service: fetches emails from a connected Gmail account and
-ingests them into AdvisoryBoard as documents.
+ingests them into Callwen as documents.
 
 Flow
 ----

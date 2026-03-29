@@ -1,6 +1,6 @@
 """
 Zoom recording sync service: fetches meeting recordings from a connected
-Zoom account and ingests transcripts into AdvisoryBoard as documents.
+Zoom account and ingests transcripts into Callwen as documents.
 
 Flow
 ----

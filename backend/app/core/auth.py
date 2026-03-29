@@ -113,7 +113,7 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
             )
             return {
                 "sub": "user_test_isolation",
-                "email": "test-isolation@advisoryboard.test",
+                "email": "test-isolation@callwen.test",
                 "email_verified": True,
                 "first_name": "Test",
                 "last_name": "Isolation",
