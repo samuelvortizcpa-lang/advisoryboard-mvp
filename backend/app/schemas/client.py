@@ -62,6 +62,7 @@ class ClientResponse(ClientBase):
     consent_status: str = "not_required"
     has_tax_documents: bool = False
     data_handling_acknowledged: bool = False
+    document_count: int = 0
     created_at: datetime
     updated_at: datetime
     client_type: Optional[ClientTypeResponse] = None

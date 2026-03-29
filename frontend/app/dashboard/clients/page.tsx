@@ -299,8 +299,10 @@ export default function ClientsPage() {
                     )}
                   </td>
 
-                  {/* Documents — not available from list endpoint */}
-                  <td className="px-4 py-3.5 text-sm text-gray-300">—</td>
+                  {/* Documents */}
+                  <td className="px-4 py-3.5 text-sm text-gray-600">
+                    {client.document_count}
+                  </td>
 
                   {/* Last Activity */}
                   <td className="px-4 py-3.5 text-sm text-gray-500">

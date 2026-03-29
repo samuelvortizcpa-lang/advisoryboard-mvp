@@ -3,7 +3,7 @@ from typing import List, Tuple
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.client import Client
@@ -129,6 +129,19 @@ def get_clients(
         .limit(limit)
         .all()
     )
+
+    # Enrich with document counts (single batch query)
+    if clients:
+        client_ids = [c.id for c in clients]
+        doc_counts = dict(
+            db.query(Document.client_id, func.count(Document.id))
+            .filter(Document.client_id.in_(client_ids))
+            .group_by(Document.client_id)
+            .all()
+        )
+        for c in clients:
+            c.document_count = doc_counts.get(c.id, 0)
+
     return clients, total
 
 

@@ -44,6 +44,7 @@ export interface Client {
   consent_status: string;
   has_tax_documents: boolean;
   data_handling_acknowledged: boolean;
+  document_count: number;
   created_at: string;
   updated_at: string;
 }
