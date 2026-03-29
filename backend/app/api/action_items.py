@@ -12,7 +12,7 @@ Endpoints:
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -43,8 +43,8 @@ router = APIRouter()
 async def list_action_items(
     client_id: UUID,
     status: Optional[str] = None,   # 'pending' | 'completed' | 'cancelled' | 'all'
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ActionItemListResponse:
@@ -67,8 +67,8 @@ async def list_action_items(
 )
 async def list_pending_action_items(
     client_id: UUID,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ActionItemListResponse:

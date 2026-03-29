@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ─── Reference table ──────────────────────────────────────────────────────────
@@ -56,16 +56,16 @@ class StrategyChecklistResponse(BaseModel):
 
 class StrategyStatusUpdate(BaseModel):
     tax_year: int
-    status: str
-    notes: Optional[str] = None
+    status: str = Field(..., max_length=50)
+    notes: Optional[str] = Field(None, max_length=5000)
     estimated_impact: Optional[float] = None
 
 
 class BulkStatusItem(BaseModel):
     strategy_id: UUID
     tax_year: int
-    status: str
-    notes: Optional[str] = None
+    status: str = Field(..., max_length=50)
+    notes: Optional[str] = Field(None, max_length=5000)
     estimated_impact: Optional[float] = None
 
 

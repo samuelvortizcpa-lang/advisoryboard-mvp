@@ -1,7 +1,9 @@
 import logging
+import os
+import re
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -20,6 +22,21 @@ from app.services.subscription_service import check_document_limit
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _sanitize_filename(filename: str) -> str:
+    """Sanitize a filename to prevent path traversal and other attacks."""
+    # Remove path separators and null bytes
+    filename = filename.replace("/", "").replace("\\", "").replace("\0", "")
+    # Remove leading dots (hidden files)
+    filename = filename.lstrip(".")
+    # Remove control characters
+    filename = re.sub(r"[\x00-\x1f\x7f]", "", filename)
+    # Truncate to 255 chars preserving extension
+    if len(filename) > 255:
+        name, ext = os.path.splitext(filename)
+        filename = name[: 255 - len(ext)] + ext
+    return filename or "unnamed"
 
 
 @router.post(
@@ -52,7 +69,9 @@ async def upload_document(
     ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".msg", ".txt", ".csv", ".png", ".jpg", ".jpeg", ".tiff", ".tif"}
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
-    filename = file.filename or ""
+    # Sanitize filename to prevent path traversal
+    filename = _sanitize_filename(file.filename or "")
+    file.filename = filename
     ext = ("." + filename.rsplit(".", 1)[-1]).lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -124,8 +143,8 @@ async def upload_document(
 )
 async def list_documents(
     client_id: UUID,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> DocumentListResponse:
@@ -167,11 +186,14 @@ async def download_document(
             detail="File not found in storage",
         )
 
+    safe_filename = _sanitize_filename(document.filename or "download")
+    # Escape quotes in filename for Content-Disposition header
+    safe_filename = safe_filename.replace('"', '\\"')
     return Response(
         content=file_bytes,
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{document.filename}"'
+            "Content-Disposition": f'attachment; filename="{safe_filename}"'
         },
     )
 

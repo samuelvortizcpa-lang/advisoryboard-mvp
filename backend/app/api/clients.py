@@ -21,8 +21,8 @@ router = APIRouter()
 
 @router.get("/clients", response_model=ClientListResponse)
 async def list_clients(
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     assigned_to_me: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),

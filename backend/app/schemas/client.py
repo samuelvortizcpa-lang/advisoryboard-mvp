@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
@@ -7,14 +7,14 @@ from app.schemas.client_type import ClientTypeResponse
 
 
 class ClientBase(BaseModel):
-    name: str
-    email: Optional[EmailStr] = None
-    business_name: Optional[str] = None
-    entity_type: Optional[str] = None
-    industry: Optional[str] = None
-    notes: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=255)
+    email: Optional[EmailStr] = Field(None, max_length=255)
+    business_name: Optional[str] = Field(None, max_length=255)
+    entity_type: Optional[str] = Field(None, max_length=100)
+    industry: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = Field(None, max_length=10000)
     client_type_id: Optional[UUID] = None
-    custom_instructions: Optional[str] = None
+    custom_instructions: Optional[str] = Field(None, max_length=5000)
     # Tax strategy profile flags
     has_business_entity: bool = False
     has_real_estate: bool = False
@@ -33,14 +33,14 @@ class ClientCreate(ClientBase):
 
 
 class ClientUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    business_name: Optional[str] = None
-    entity_type: Optional[str] = None
-    industry: Optional[str] = None
-    notes: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    email: Optional[EmailStr] = Field(None, max_length=255)
+    business_name: Optional[str] = Field(None, max_length=255)
+    entity_type: Optional[str] = Field(None, max_length=100)
+    industry: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = Field(None, max_length=10000)
     client_type_id: Optional[UUID] = None
-    custom_instructions: Optional[str] = None
+    custom_instructions: Optional[str] = Field(None, max_length=5000)
     # Tax strategy profile flags
     has_business_entity: Optional[bool] = None
     has_real_estate: Optional[bool] = None

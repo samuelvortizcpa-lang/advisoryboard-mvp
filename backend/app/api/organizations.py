@@ -26,7 +26,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -66,12 +66,12 @@ class OrgDetailResponse(OrgResponse):
 
 
 class OrgUpdateRequest(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=255)
     settings: Optional[dict] = None
 
 
 class UpdateRoleRequest(BaseModel):
-    role: str
+    role: str = Field(..., max_length=50)
 
 
 class ClientAccessResponse(BaseModel):
@@ -89,8 +89,8 @@ class ClientAccessResponse(BaseModel):
 
 
 class GrantAccessRequest(BaseModel):
-    user_id: str
-    access_level: str = "full"
+    user_id: str = Field(..., max_length=255)
+    access_level: str = Field(default="full", max_length=50)
 
 
 class ClientAccessSummary(BaseModel):

@@ -20,7 +20,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -118,8 +118,8 @@ class RagStatusResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
-    limit: int = 5
+    query: str = Field(..., min_length=1, max_length=10000)
+    limit: int = Field(default=5, ge=1, le=50)
 
 
 class SearchResult(BaseModel):
@@ -134,8 +134,8 @@ class SearchResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    question: str
-    model_override: str | None = None  # null=auto, "fast"=GPT-4o-mini, "balanced"=Claude Sonnet, "opus"=Claude Opus
+    question: str = Field(..., min_length=1, max_length=10000)
+    model_override: str | None = Field(default=None, max_length=50)
 
 
 class SourceItem(BaseModel):
@@ -163,8 +163,8 @@ class ChatResponse(BaseModel):
 
 
 class CompareRequest(BaseModel):
-    document_ids: List[UUID]
-    comparison_type: str = "summary"  # "summary" | "changes" | "financial"
+    document_ids: List[UUID] = Field(..., max_length=10)
+    comparison_type: str = Field(default="summary", max_length=50)
 
 
 class CompareDocumentMeta(BaseModel):
@@ -534,8 +534,8 @@ async def compare_documents(
 )
 async def get_chat_history(
     client_id: UUID,
-    limit: int = 100,
-    skip: int = 0,
+    limit: int = Query(default=100, ge=1, le=500),
+    skip: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ChatHistoryResponse:

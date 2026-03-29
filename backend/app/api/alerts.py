@@ -13,7 +13,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -53,8 +53,8 @@ class AlertsSummaryResponse(BaseModel):
 
 
 class DismissRequest(BaseModel):
-    alert_type: str
-    related_id: str
+    alert_type: str = Field(..., max_length=100)
+    related_id: str = Field(..., max_length=100)
 
 
 class DismissResponse(BaseModel):

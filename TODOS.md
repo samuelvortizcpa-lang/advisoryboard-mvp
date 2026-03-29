@@ -22,7 +22,7 @@ Last updated: 2026-03-28
 - [x] M2: JWT audience (aud) verification disabled
 - [x] M3: §7216 consent enforcement — AI processing blocked until consent obtained
 - [ ] M4: Localhost CORS origins in production
-- [ ] M5: Unsanitized filename in Content-Disposition headers
+- [x] M5: Unsanitized filename in Content-Disposition headers
 - [ ] M6: Client types not org-scoped
 - [ ] M7: Untyped org settings dict — no schema validation
 - [x] M8: Chat history cross-user isolation — DELETE/export scoped to user_id

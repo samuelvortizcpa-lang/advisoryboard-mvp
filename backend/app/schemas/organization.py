@@ -1,17 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
 
 class OrgCreateRequest(BaseModel):
-    name: str
-    slug: Optional[str] = None  # auto-generated if blank
+    name: str = Field(..., min_length=1, max_length=255)
+    slug: Optional[str] = Field(None, max_length=100)
 
 
 class AddMemberRequest(BaseModel):
-    user_email: str
-    role: str = "member"
+    user_email: str = Field(..., max_length=255)
+    role: str = Field(default="member", max_length=50)
 
 
 class OrgResponse(BaseModel):
