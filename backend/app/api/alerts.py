@@ -9,18 +9,17 @@ Routes (all require Clerk JWT auth):
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.dismissed_alert import DismissedAlert
-from app.services import user_service
 from app.services.alerts_service import compute_alerts, compute_summary
+from app.services.auth_context import AuthContext, get_auth
 
 router = APIRouter()
 
@@ -74,10 +73,9 @@ class DismissResponse(BaseModel):
 )
 async def list_alerts(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> AlertsListResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    alerts = compute_alerts(db, owner_id=user.id, clerk_user_id=user.clerk_id)
+    alerts = compute_alerts(db, org_id=auth.org_id, clerk_user_id=auth.user_id)
 
     return AlertsListResponse(
         alerts=[AlertItem(**a) for a in alerts],
@@ -98,9 +96,8 @@ async def list_alerts(
 async def dismiss_alert(
     request: DismissRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> DismissResponse:
-    user = user_service.get_or_create_user(db, current_user)
 
     # Parse related_id to UUID
     try:
@@ -115,7 +112,7 @@ async def dismiss_alert(
     existing = (
         db.query(DismissedAlert)
         .filter(
-            DismissedAlert.user_id == user.clerk_id,
+            DismissedAlert.user_id == auth.user_id,
             DismissedAlert.alert_type == request.alert_type,
             DismissedAlert.related_id == related_uuid,
         )
@@ -124,7 +121,7 @@ async def dismiss_alert(
 
     if not existing:
         dismissed = DismissedAlert(
-            user_id=user.clerk_id,
+            user_id=auth.user_id,
             alert_type=request.alert_type,
             related_id=related_uuid,
         )
@@ -146,9 +143,8 @@ async def dismiss_alert(
 )
 async def alerts_summary(
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth),
 ) -> AlertsSummaryResponse:
-    user = user_service.get_or_create_user(db, current_user)
-    summary = compute_summary(db, owner_id=user.id, clerk_user_id=user.clerk_id)
+    summary = compute_summary(db, org_id=auth.org_id, clerk_user_id=auth.user_id)
 
     return AlertsSummaryResponse(**summary)

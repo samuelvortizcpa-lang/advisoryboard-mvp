@@ -35,11 +35,11 @@ SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2}
 
 def compute_alerts(
     db: Session,
-    owner_id: UUID,
+    org_id: UUID,
     clerk_user_id: str,
 ) -> list[dict[str, Any]]:
     """
-    Compute all alerts for a user's clients, filtering out dismissed ones.
+    Compute all alerts for clients in the user's active org, filtering out dismissed ones.
 
     Returns a list of alert dicts sorted by severity (critical first), then date.
     """
@@ -47,10 +47,10 @@ def compute_alerts(
     seven_days = today + timedelta(days=7)
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
 
-    # Get all client IDs owned by this user
+    # Get all clients in this org
     client_rows = (
         db.query(Client.id, Client.name)
-        .filter(Client.owner_id == owner_id)
+        .filter(Client.org_id == org_id)
         .all()
     )
     if not client_rows:
@@ -195,7 +195,7 @@ def compute_alerts(
     determination_needed_clients = (
         db.query(Client)
         .filter(
-            Client.owner_id == owner_id,
+            Client.org_id == org_id,
             Client.has_tax_documents == True,  # noqa: E712
             Client.consent_status == "determination_needed",
         )
@@ -222,7 +222,7 @@ def compute_alerts(
     consent_needed_clients = (
         db.query(Client)
         .filter(
-            Client.owner_id == owner_id,
+            Client.org_id == org_id,
             Client.has_tax_documents == True,  # noqa: E712
             Client.consent_status == "pending",
         )
@@ -276,11 +276,11 @@ def compute_alerts(
 
 def compute_summary(
     db: Session,
-    owner_id: UUID,
+    org_id: UUID,
     clerk_user_id: str,
 ) -> dict[str, int]:
     """Return alert counts by severity."""
-    alerts = compute_alerts(db, owner_id, clerk_user_id)
+    alerts = compute_alerts(db, org_id, clerk_user_id)
     summary = {"critical": 0, "warning": 0, "info": 0, "total": 0}
     for a in alerts:
         sev = a["severity"]

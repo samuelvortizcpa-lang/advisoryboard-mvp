@@ -11,7 +11,7 @@ Last updated: 2026-03-28
 
 ### HIGH — Open
 - [ ] H2: Upgrade Next.js 14 → 15.5.14+ (7 known CVEs including SSRF, request smuggling, DoS)
-- [ ] H3: Briefs router uses old auth pattern — bypasses org access control
+- [x] H3: Briefs router auth — already fixed in Sprint 1; alerts router migrated to org-aware auth
 - [ ] H4: Consent signing token brute-force — add rate limiting
 - [ ] H5/H6: Add missing indexes on organization_members.user_id, org_id; client_access.client_id, user_id
 - [ ] H7: N+1 query in alerts_service.compute_alerts() — batch the per-client queries
