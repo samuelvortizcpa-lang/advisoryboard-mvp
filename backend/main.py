@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.action_items import router as action_items_router
 from app.api.alerts import router as alerts_router
@@ -80,6 +81,24 @@ app.add_middleware(
     ],
     expose_headers=["Content-Disposition"],
 )
+
+
+# ── Security response headers ────────────────────────────────────────────────
+# Added AFTER CORSMiddleware so it executes first (Starlette LIFO order).
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "0"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 # ── Startup log ───────────────────────────────────────────────────────────────
