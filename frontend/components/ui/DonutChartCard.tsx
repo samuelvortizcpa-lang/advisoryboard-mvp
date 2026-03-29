@@ -24,7 +24,7 @@ export default function DonutChartCard({
   height = 240,
 }: DonutChartCardProps) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
       <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
 
       {/* Chart with center label */}

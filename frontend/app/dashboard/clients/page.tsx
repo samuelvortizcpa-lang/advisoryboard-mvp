@@ -132,7 +132,7 @@ export default function ClientsPage() {
         </div>
         <Link
           href="/dashboard/clients/new"
-          className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          className="inline-flex items-center gap-1.5 rounded-md bg-[#c9944a] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#b8843e]"
         >
           + New Client
         </Link>
@@ -140,7 +140,7 @@ export default function ClientsPage() {
 
       {/* ── Search + Filter ────────────────────────────────────────────────── */}
       <div className="mb-4 flex items-center gap-3">
-        <div className="relative w-64">
+        <div className="relative flex-1 max-w-sm">
           <svg
             className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
             fill="none"
@@ -217,7 +217,7 @@ export default function ClientsPage() {
           {!searchQuery.trim() && (
             <Link
               href="/dashboard/clients/new"
-              className="mt-5 inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              className="mt-5 inline-flex items-center rounded-md bg-[#c9944a] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#b8843e]"
             >
               + New Client
             </Link>
@@ -227,7 +227,7 @@ export default function ClientsPage() {
 
       {/* ── Table ────────────────────────────────────────────────────────── */}
       {!loading && !error && filteredItems.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/60">
@@ -235,7 +235,7 @@ export default function ClientsPage() {
                   <th
                     key={h}
                     scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
                   >
                     {h}
                   </th>

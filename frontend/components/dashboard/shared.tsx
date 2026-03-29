@@ -38,22 +38,22 @@ export function DashboardSkeleton() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">Overview</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Overview</h1>
         <div className="flex items-center gap-3">
           <div className="h-9 w-28 animate-pulse rounded-lg bg-gray-200" />
           <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
         </div>
       </div>
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="animate-pulse rounded-lg bg-gray-50 p-4">
+          <div key={i} className="animate-pulse rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
             <div className="h-3 w-16 rounded bg-gray-200" />
-            <div className="mt-2 h-7 w-12 rounded bg-gray-200" />
+            <div className="mt-2 h-8 w-12 rounded bg-gray-200" />
             <div className="mt-2 h-3 w-20 rounded bg-gray-100" />
           </div>
         ))}
       </div>
-      <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-5">
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 lg:col-span-3">
           <div className="h-4 w-24 rounded bg-gray-200" />
           <div className="mt-4 h-[240px] rounded bg-gray-50" />
@@ -63,7 +63,7 @@ export function DashboardSkeleton() {
           <div className="mt-4 h-[240px] rounded bg-gray-50" />
         </div>
       </div>
-      <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {[1, 2].map((i) => (
           <div key={i} className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
             <div className="h-4 w-28 rounded bg-gray-200" />
@@ -75,7 +75,7 @@ export function DashboardSkeleton() {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {[1, 2].map((i) => (
           <div key={i} className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
             <div className="h-4 w-20 rounded bg-gray-200" />

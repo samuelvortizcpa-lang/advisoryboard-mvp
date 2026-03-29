@@ -72,7 +72,7 @@ export default function AreaChartCard({
   const gradientId = `area-gradient-${color}`;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

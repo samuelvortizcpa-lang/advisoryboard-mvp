@@ -79,7 +79,7 @@ export default function Sidebar() {
                 <LogoMark />
               </span>
               <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
-                Callwen
+                Call<span className="text-[#c9944a]">wen</span>
               </span>
             </>
           )}

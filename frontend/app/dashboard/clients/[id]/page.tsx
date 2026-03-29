@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ChangeEvent, FormEvent, Suspense, useEffect, useState } from "react";
 
@@ -666,17 +667,38 @@ function ClientDetailContent() {
         <>
           {/* ── Client entity header ──────────────────────────────────────── */}
           <div className="bg-white border-b border-gray-100">
+            {/* Breadcrumb */}
+            <div className="px-8 pt-4 pb-0">
+              <nav className="flex items-center gap-1.5 text-sm">
+                <Link href="/dashboard/clients" className="text-gray-500 hover:text-gray-700 transition-colors">Clients</Link>
+                <span className="text-gray-300">&gt;</span>
+                <span className="text-gray-600">{client.name}</span>
+              </nav>
+            </div>
             <div className="px-8 py-5 flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-[28px] font-bold leading-tight text-gray-900">
-                    {client.name}
-                  </h1>
-                  {client.client_type && <ClientTypeBadge type={client.client_type} />}
+              <div className="flex items-start gap-4">
+                {/* Client monogram */}
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-100 text-lg font-semibold text-gray-600">
+                  {client.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
-                {client.business_name && (
-                  <p className="mt-1 text-sm text-gray-500">{client.business_name}</p>
-                )}
+                <div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h1 className="text-[28px] font-bold leading-tight text-gray-900">
+                      {client.name}
+                    </h1>
+                    {client.client_type && <ClientTypeBadge type={client.client_type} />}
+                  </div>
+                  {client.business_name && (
+                    <p className="mt-0.5 text-sm text-gray-500">{client.business_name}</p>
+                  )}
+                  <p className="mt-1 text-sm text-gray-400">
+                    {docsLoading ? "…" : `${documents.length} document${documents.length !== 1 ? "s" : ""}`}
+                    {" · "}
+                    {pendingActionsCount === null ? "…" : `${pendingActionsCount} pending action${pendingActionsCount !== 1 ? "s" : ""}`}
+                    {" · "}
+                    Last active {formatHeaderDate(client.updated_at)}
+                  </p>
+                </div>
               </div>
               <div className="flex shrink-0 gap-2">
                 <button
@@ -1440,6 +1462,15 @@ function formatDate(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function formatHeaderDate(iso: string): string {
+  const date = new Date(iso);
+  const diffDays = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function formatRelativeTime(dateStr: string): string {

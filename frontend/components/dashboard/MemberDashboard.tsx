@@ -32,7 +32,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
     return (
       <div>
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-gray-900">My Overview</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">My Overview</h1>
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-700">
             {initials}
           </div>
@@ -71,11 +71,11 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
     <div>
       {/* Top bar */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">My Overview</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">My Overview</h1>
         <div className="flex items-center gap-3">
           <Link
             href="/dashboard/clients/new"
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="rounded-lg bg-[#c9944a] px-4 py-2 text-sm font-medium text-white hover:bg-[#b8843e]"
           >
             + New client
           </Link>
@@ -86,35 +86,39 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
       </div>
 
       {/* Row 1: Stat cards */}
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           label="My clients"
           value={stats.clients.count}
           context={stats.clients.limit != null ? `of ${stats.clients.limit}` : undefined}
           contextType="muted"
+          accentColor="border-l-blue-500"
         />
         <StatCard
           label="My action items"
           value={stats.action_items.pending}
           context={stats.action_items.overdue > 0 ? `${stats.action_items.overdue} overdue` : "All on track"}
           contextType={stats.action_items.overdue > 0 ? "warning" : "success"}
+          accentColor="border-l-amber-500"
         />
         <StatCard
           label="My documents"
           value={stats.documents.count}
           context={stats.documents.limit != null ? `of ${stats.documents.limit}` : undefined}
           contextType="muted"
+          accentColor="border-l-teal-500"
         />
         <StatCard
           label="My AI queries"
           value={stats.ai_queries.used}
           context={`of ${stats.ai_queries.limit}`}
           contextType={queryPct > 80 ? "warning" : "muted"}
+          accentColor="border-l-purple-500"
         />
       </div>
 
       {/* Row 2: Charts */}
-      <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-5">
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <AreaChartCard title="My activity" data={chartData} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
         </div>
@@ -124,13 +128,13 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
       </div>
 
       {/* Row 3: Content cards */}
-      <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <AttentionCard data={data} />
         <RecentClientsCard data={data} />
       </div>
 
       {/* Row 4: Utility cards */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <QuickActionsCard data={data} />
         <UsageCard data={data} showSeats={false} showUpgrade={false} />
       </div>

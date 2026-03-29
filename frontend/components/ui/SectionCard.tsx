@@ -9,7 +9,7 @@ export interface SectionCardProps {
 
 export default function SectionCard({ title, action, children }: SectionCardProps) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         {action && (
