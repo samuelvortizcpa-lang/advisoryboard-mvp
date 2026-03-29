@@ -27,9 +27,6 @@ anthropic>=0.42.0
 # Chat export
 reportlab==4.0.9
 
-# S3 file storage (optional — falls back to local filesystem when credentials not set)
-boto3>=1.35.0
-
 # Supabase Storage
 supabase>=2.0.0
 
