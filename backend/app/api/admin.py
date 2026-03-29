@@ -14,6 +14,7 @@ Routes:
 
 from __future__ import annotations
 
+import hmac
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -51,9 +52,11 @@ async def verify_admin_access(request: Request) -> None:
     """
     settings = get_settings()
 
-    # Method 1: static API key via X-Admin-Key header
+    # Method 1: static API key via X-Admin-Key header (constant-time comparison)
     api_key = request.headers.get("X-Admin-Key")
-    if api_key and settings.admin_api_key and api_key == settings.admin_api_key:
+    if api_key and settings.admin_api_key and hmac.compare_digest(
+        api_key.encode("utf-8"), settings.admin_api_key.encode("utf-8")
+    ):
         return
 
     # Method 2: Clerk JWT (existing flow)
@@ -65,7 +68,9 @@ async def verify_admin_access(request: Request) -> None:
             from app.core.auth import verify_clerk_token
             payload = await verify_clerk_token(credentials.credentials)
             user_id = payload.get("sub")
-            if settings.admin_user_id and user_id == settings.admin_user_id:
+            if settings.admin_user_id and user_id and hmac.compare_digest(
+                user_id.encode("utf-8"), settings.admin_user_id.encode("utf-8")
+            ):
                 return
         except HTTPException:
             pass  # JWT invalid/expired — fall through to 403

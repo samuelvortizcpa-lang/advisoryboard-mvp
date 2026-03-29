@@ -18,8 +18,8 @@ Last updated: 2026-03-28
 - [x] H8: Silent exception swallowing — all `except: pass` replaced with logging
 
 ### MEDIUM — Open
-- [ ] M1: Admin API key timing attack — use hmac.compare_digest()
-- [ ] M2: JWT audience (aud) verification disabled
+- [x] M1: Admin API key timing attack — use hmac.compare_digest()
+- [x] M2: JWT audience (aud) verification disabled
 - [x] M3: §7216 consent enforcement — AI processing blocked until consent obtained
 - [ ] M4: Localhost CORS origins in production
 - [ ] M5: Unsanitized filename in Content-Disposition headers

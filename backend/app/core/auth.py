@@ -18,6 +18,7 @@ Two usage patterns are supported:
            ...
 """
 
+import hmac
 import inspect
 import json
 import logging
@@ -102,7 +103,10 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
     # This block must stay ABOVE all JWT parsing so that the Clerk-secret-key
     # bearer token never reaches get_unverified_header().
     if settings.test_mode:
-        if settings.clerk_secret_key and token.strip() == settings.clerk_secret_key.strip():
+        if settings.clerk_secret_key and hmac.compare_digest(
+            token.strip().encode("utf-8"),
+            settings.clerk_secret_key.strip().encode("utf-8"),
+        ):
             logger.warning(
                 "TEST_MODE: secret-key bearer accepted — returning fixed test user "
                 "(user_test_isolation).  This bypass must never reach production."
@@ -118,10 +122,9 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
         # test_mode is ON but the token didn't match — log details to help diagnose
         logger.warning(
             "TEST_MODE is enabled but the bearer token did NOT match CLERK_SECRET_KEY. "
-            "token_len=%d  key_len=%d  keys_match=%s  key_set=%s",
+            "token_len=%d  key_len=%d  key_set=%s",
             len(token.strip()),
             len(settings.clerk_secret_key.strip()),
-            token.strip() == settings.clerk_secret_key.strip(),
             bool(settings.clerk_secret_key),
         )
     # ── End TEST_MODE bypass ────────────────────────────────────────────────
@@ -148,7 +151,8 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
             token,
             public_key,
             algorithms=["RS256"],
-            # Clerk does not always populate 'aud'; skip that check.
+            # Clerk populates 'azp' (authorized party) instead of 'aud'.
+            # We verify azp below after decoding.
             options={"verify_aud": False},
         )
     except ExpiredSignatureError:
@@ -162,6 +166,22 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         )
+
+    # ── Verify azp (authorized party) ────────────────────────────────────
+    # Clerk JWTs include 'azp' with the requesting origin.  Validate it
+    # against the frontend URL to prevent token confusion attacks (a JWT
+    # issued for a different Clerk app being accepted here).
+    azp = payload.get("azp")
+    if azp:
+        allowed_origins = set(settings.cors_origins)
+        if settings.clerk_frontend_api_url:
+            allowed_origins.add(settings.clerk_frontend_api_url.rstrip("/"))
+        if azp not in allowed_origins:
+            logger.warning("JWT azp claim '%s' not in allowed origins", azp)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token issued for unauthorized origin",
+            )
 
     return payload
 
