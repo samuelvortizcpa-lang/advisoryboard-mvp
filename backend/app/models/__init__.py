@@ -26,6 +26,7 @@ from app.models.client_access import ClientAccess
 from app.models.client_assignment import ClientAssignment
 from app.models.tax_strategy import TaxStrategy
 from app.models.client_strategy_status import ClientStrategyStatus
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -55,4 +56,5 @@ __all__ = [
     "ClientAssignment",
     "TaxStrategy",
     "ClientStrategyStatus",
+    "AuditLog",
 ]

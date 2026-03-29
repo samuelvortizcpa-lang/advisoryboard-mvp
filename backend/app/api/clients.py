@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -13,6 +13,7 @@ from app.schemas.client import (
     ClientUpdate,
 )
 from app.services import client_service
+from app.services.audit_service import log_action
 from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.subscription_service import check_client_limit
 
@@ -42,6 +43,7 @@ async def list_clients(
 @router.post("/clients", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
 async def create_client(
     data: ClientCreate,
+    request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ClientResponse:
@@ -51,17 +53,20 @@ async def create_client(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Client limit reached. Upgrade your plan to add more clients.",
         )
-    return client_service.create_client(
+    client = client_service.create_client(
         db,
         data=data,
         org_id=auth.org_id,
         created_by=auth.user_id,
     )
+    log_action(db, auth, "client.create", "client", client.id, request=request)
+    return client
 
 
 @router.get("/clients/{client_id}", response_model=ClientDetailResponse)
 async def get_client(
     client_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ClientDetailResponse:
@@ -71,6 +76,7 @@ async def get_client(
     )
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+    log_action(db, auth, "client.view", "client", client_id, request=request)
     return client
 
 
@@ -78,6 +84,7 @@ async def get_client(
 async def update_client(
     client_id: UUID,
     data: ClientUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ClientResponse:
@@ -90,12 +97,14 @@ async def update_client(
     )
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+    log_action(db, auth, "client.update", "client", client_id, request=request)
     return client
 
 
 @router.delete("/clients/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_client(
     client_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> None:
@@ -104,3 +113,4 @@ async def delete_client(
     deleted = client_service.delete_client(db, client_id=client_id, org_id=auth.org_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+    log_action(db, auth, "client.delete", "client", client_id, request=request)

@@ -25,7 +25,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -43,6 +43,7 @@ from app.schemas.organization import (
     OrgResponse,
 )
 from app.services import organization_service
+from app.services.audit_service import log_action
 from app.services.auth_context import AuthContext, get_auth, require_admin
 from app.services.subscription_service import TIER_DEFAULTS, check_seat_limit, get_or_create_subscription
 
@@ -427,6 +428,7 @@ async def list_members(
 async def add_member(
     org_id: UUID,
     body: AddMemberRequest,
+    request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> OrgMemberResponse:
@@ -485,6 +487,8 @@ async def add_member(
         code, detail = error_map.get(result, (status.HTTP_400_BAD_REQUEST, result))
         raise HTTPException(status_code=code, detail=detail)
 
+    log_action(db, auth, "member.invite", "member", target_user.clerk_id,
+               detail={"email": body.user_email, "role": body.role}, request=request)
     return OrgMemberResponse(
         id=result.id,
         user_id=result.user_id,
@@ -572,6 +576,7 @@ async def update_member_role(
 async def remove_member(
     org_id: UUID,
     user_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> None:
@@ -593,6 +598,8 @@ async def remove_member(
         }
         code, detail = error_map.get(result, (status.HTTP_400_BAD_REQUEST, result))
         raise HTTPException(status_code=code, detail=detail)
+
+    log_action(db, auth, "member.remove", "member", user_id, request=request)
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ import os
 import re
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.models.document import Document
 from app.models.document_page_image import DocumentPageImage
 from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services import document_service, rag_service, storage_service, user_service
+from app.services.audit_service import log_action
 from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.notification_service import send_notification
 from app.services.subscription_service import check_document_limit
@@ -48,6 +49,7 @@ def _sanitize_filename(filename: str) -> str:
 )
 async def upload_document(
     client_id: UUID,
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
@@ -140,6 +142,9 @@ async def upload_document(
         {"email": user.email or user.clerk_id, "filename": document.filename, "client": client_obj.name if client_obj else str(client_id)},
     ))
 
+    log_action(db, auth, "document.upload", "document", document.id,
+               detail={"client_id": str(client_id), "filename": document.filename},
+               request=request)
     return document
 
 
@@ -212,6 +217,7 @@ async def download_document(
 )
 async def delete_document(
     document_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> None:
@@ -231,6 +237,7 @@ async def delete_document(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
+    log_action(db, auth, "document.delete", "document", document_id, request=request)
 
 
 @router.post(

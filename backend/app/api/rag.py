@@ -19,12 +19,13 @@ import logging
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.services.audit_service import log_action
 from app.models.chat_message import ChatMessage
 from app.models.client import Client
 from app.models.document import Document
@@ -367,11 +368,14 @@ async def semantic_search(
 async def chat(
     client_id: UUID,
     request: ChatRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ChatResponse:
     client = _require_client(db, client_id, auth)
     _require_consent_for_ai(client, auth, db)
+    log_action(db, auth, "chat.query", "chat", client_id,
+               detail={"query": request.question[:100]}, request=http_request)
 
     if not request.question.strip():
         raise HTTPException(

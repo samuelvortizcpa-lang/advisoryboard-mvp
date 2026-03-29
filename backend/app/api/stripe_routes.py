@@ -25,6 +25,7 @@ from app.core.database import get_db
 from app.models.processed_webhook_event import ProcessedWebhookEvent
 from app.models.user_subscription import UserSubscription
 from app.services import stripe_service
+from app.services.audit_service import log_action
 from app.services.auth_context import AuthContext, get_auth, require_admin
 from app.services.subscription_service import get_or_create_subscription, get_seat_info
 
@@ -86,6 +87,7 @@ class SeatInfoResponse(BaseModel):
 )
 async def create_checkout(
     body: CheckoutRequest,
+    request: Request,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> CheckoutResponse:
@@ -115,6 +117,9 @@ async def create_checkout(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    log_action(db, auth, "subscription.checkout", "subscription", auth.org_id,
+               detail={"tier": body.tier, "billing_interval": body.billing_interval},
+               request=request)
     return CheckoutResponse(url=url)
 
 
