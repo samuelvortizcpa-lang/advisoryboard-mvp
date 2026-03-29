@@ -37,8 +37,8 @@ async def get_client_timeline(
     types: Optional[List[str]] = Query(default=None),  # ["document", "action_item"]
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    limit: int = 50,
-    skip: int = 0,
+    limit: int = Query(default=50, ge=1, le=200),
+    skip: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> TimelineResponse:
@@ -49,14 +49,22 @@ async def get_client_timeline(
 
     items: List[TimelineItem] = []
 
+    # Cap per-source fetch to skip+limit so we never load unbounded result
+    # sets into memory. This bounds total in-memory records to 2*(skip+limit).
+    fetch_limit = skip + limit
+
     # Fetch documents
     if include_documents:
-        doc_query = db.query(Document).filter(Document.client_id == client_id)
+        doc_query = (
+            db.query(Document)
+            .filter(Document.client_id == client_id)
+            .order_by(Document.upload_date.desc())
+        )
         if start_date:
             doc_query = doc_query.filter(Document.upload_date >= start_date)
         if end_date:
             doc_query = doc_query.filter(Document.upload_date <= end_date)
-        for doc in doc_query.all():
+        for doc in doc_query.limit(fetch_limit).all():
             items.append(
                 DocumentTimelineItem(
                     type="document",
@@ -75,12 +83,13 @@ async def get_client_timeline(
             db.query(ActionItem)
             .filter(ActionItem.client_id == client_id)
             .options(joinedload(ActionItem.document))
+            .order_by(ActionItem.created_at.desc())
         )
         if start_date:
             ai_query = ai_query.filter(ActionItem.created_at >= start_date)
         if end_date:
             ai_query = ai_query.filter(ActionItem.created_at <= end_date)
-        for ai in ai_query.all():
+        for ai in ai_query.limit(fetch_limit).all():
             items.append(
                 ActionItemTimelineItem(
                     type="action_item",
@@ -93,9 +102,8 @@ async def get_client_timeline(
                 )
             )
 
-    # Sort newest first
+    # Sort newest first and apply pagination
     items.sort(key=lambda x: x.date, reverse=True)
-
     total = len(items)
     paginated = items[skip : skip + limit]
 

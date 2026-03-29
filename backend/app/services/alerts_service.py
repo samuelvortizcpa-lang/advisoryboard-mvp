@@ -102,6 +102,7 @@ def _compute_alerts_uncached(
     dismissed_rows = (
         db.query(DismissedAlert.alert_type, DismissedAlert.related_id)
         .filter(DismissedAlert.user_id == clerk_user_id)
+        .limit(500)
         .all()
     )
     for d in dismissed_rows:
@@ -199,6 +200,7 @@ def _compute_alerts_uncached(
             Document.client_id.in_(client_ids),
             Document.processed == False,  # noqa: E712
         )
+        .limit(100)
         .all()
     )
     for doc in stuck_docs:
@@ -227,6 +229,7 @@ def _compute_alerts_uncached(
                 Client.consent_status == "pending",
             ),
         )
+        .limit(100)
         .all()
     )
     for c in consent_alert_clients:

@@ -196,13 +196,24 @@ async def get_rag_status(
 ) -> RagStatusResponse:
     _require_client(db, client_id, auth)
 
-    documents = db.query(Document).filter(Document.client_id == client_id).all()
+    from sqlalchemy import func as sa_func, case
 
-    processed = sum(1 for d in documents if d.processed)
-    errors = sum(
-        1 for d in documents if d.processing_error and not d.processed
+    stats = (
+        db.query(
+            sa_func.count(Document.id).label("total"),
+            sa_func.count(case((Document.processed == True, 1))).label("processed"),  # noqa: E712
+            sa_func.count(case((
+                (Document.processed == False) & (Document.processing_error.isnot(None)), 1
+            ))).label("errors"),
+        )
+        .filter(Document.client_id == client_id)
+        .first()
     )
-    pending = len(documents) - processed - errors
+
+    total_docs = stats.total if stats else 0
+    processed = stats.processed if stats else 0
+    errors = stats.errors if stats else 0
+    pending = total_docs - processed - errors
 
     total_chunks = (
         db.query(DocumentChunk)
@@ -211,7 +222,7 @@ async def get_rag_status(
     )
 
     return RagStatusResponse(
-        total_documents=len(documents),
+        total_documents=total_docs,
         processed=processed,
         pending=pending,
         errors=errors,
@@ -242,6 +253,7 @@ async def process_client_documents(
             Document.client_id == client_id,
             Document.processed == False,  # noqa: E712
         )
+        .limit(500)
         .all()
     )
 

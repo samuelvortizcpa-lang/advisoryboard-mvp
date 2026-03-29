@@ -346,7 +346,7 @@ def delete_client(
         return False
 
     # Remove files from Supabase Storage before CASCADE deletes DB records
-    documents = db.query(Document).filter(Document.client_id == client_id).all()
+    documents = db.query(Document).filter(Document.client_id == client_id).limit(500).all()
     for doc in documents:
         if doc.file_path:
             try:

@@ -372,7 +372,7 @@ async def usage_export(
         end_dt = datetime.fromisoformat(end_date) + timedelta(days=1)
         query = query.filter(TokenUsage.created_at < end_dt)
 
-    rows = query.order_by(TokenUsage.created_at.desc()).all()
+    rows = query.order_by(TokenUsage.created_at.desc()).limit(10000).all()
 
     buf = io.StringIO()
     writer = csv.writer(buf)

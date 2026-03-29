@@ -28,7 +28,7 @@ def _get_messages(
     q = db.query(ChatMessage).filter(ChatMessage.client_id == client_id)
     if user_id is not None:
         q = q.filter(ChatMessage.user_id == user_id)
-    return q.order_by(ChatMessage.created_at.asc()).all()
+    return q.order_by(ChatMessage.created_at.asc()).limit(1000).all()
 
 
 def _fmt_ts(dt: datetime) -> str:
