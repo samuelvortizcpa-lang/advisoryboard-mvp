@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth, useUser } from "@clerk/nextjs";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createDashboardApi, type DashboardSummary } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
@@ -10,28 +10,49 @@ import AdminDashboard from "@/components/dashboard/AdminDashboard";
 import MemberDashboard from "@/components/dashboard/MemberDashboard";
 
 export default function DashboardPage() {
-  const { getToken } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
-  const { activeOrg, isAdmin, isPersonalOrg } = useOrg();
+  const { activeOrg, isAdmin, isPersonalOrg, isLoading: orgLoading } = useOrg();
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
     async (range: TimeRange) => {
       try {
+        const token = await getToken();
+        if (!token) return false; // auth not ready yet
         const api = createDashboardApi(getToken, activeOrg?.id);
         const result = await api.summary(RANGE_DAYS[range]);
         setData(result);
-      } catch {
-        // non-fatal — keep stale data or null
+        return true;
+      } catch (err) {
+        console.error("Dashboard fetch failed:", err);
+        return false;
       }
     },
     [getToken, activeOrg?.id],
   );
 
   useEffect(() => {
-    load(timeRange);
-  }, [load, timeRange]);
+    if (!isLoaded || !isSignedIn || orgLoading) return;
+
+    let cancelled = false;
+    (async () => {
+      const ok = await load(timeRange);
+      // If the fetch failed (e.g. token not ready yet), retry once after a short delay
+      if (!ok && !cancelled) {
+        retryTimer.current = setTimeout(() => {
+          if (!cancelled) load(timeRange);
+        }, 1000);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
+  }, [load, timeRange, isLoaded, isSignedIn, orgLoading]);
 
   const initials =
     ((user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "")).toUpperCase() ||
