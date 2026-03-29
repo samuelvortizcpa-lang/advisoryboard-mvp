@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.dismissed_alert import DismissedAlert
-from app.services.alerts_service import compute_alerts, compute_summary
+from app.services.alerts_service import compute_alerts, compute_summary, invalidate_alerts_cache
 from app.services.auth_context import AuthContext, get_auth
 
 router = APIRouter()
@@ -127,6 +127,7 @@ async def dismiss_alert(
         )
         db.add(dismissed)
         db.commit()
+        invalidate_alerts_cache(auth.org_id, auth.user_id)
 
     return DismissResponse(dismissed=True)
 

@@ -14,7 +14,7 @@ Last updated: 2026-03-28
 - [x] H3: Briefs router auth — already fixed in Sprint 1; alerts router migrated to org-aware auth
 - [x] H4: Consent signing token brute-force — rate limiting + enumeration protection added
 - [x] H5/H6: Add missing indexes — org_members/client_access (af15d3a) + 6 more perf indexes
-- [ ] H7: N+1 query in alerts_service.compute_alerts() — batch the per-client queries
+- [x] H7: Alerts query optimization — merged queries + 60s TTL cache
 - [ ] H8: Silent exception swallowing in document backfill (`except Exception: pass`)
 
 ### MEDIUM — Open
