@@ -8,7 +8,7 @@
 #   make lint        — run frontend eslint
 #   make hooks       — install pre-commit hooks
 
-.PHONY: deploy check push typecheck test lint lint-backend hooks health
+.PHONY: deploy check push typecheck test test-e2e lint lint-backend hooks health
 
 # ── Full pipeline ────────────────────────────────────────────────────────────
 
@@ -46,6 +46,11 @@ push:
 	@echo "→ Pushing to vercel-deploy..."
 	git push vercel-deploy main
 	@echo "  Both remotes updated."
+
+test-e2e:
+	@echo "→ E2E tests (requires running dev server + .env.test credentials)..."
+	cd frontend && npx playwright test
+	@echo "  E2E tests passed."
 
 # ── Health checks ────────────────────────────────────────────────────────────
 
