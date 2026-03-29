@@ -25,7 +25,7 @@ Last updated: 2026-03-28
 - [ ] M5: Unsanitized filename in Content-Disposition headers
 - [ ] M6: Client types not org-scoped
 - [ ] M7: Untyped org settings dict — no schema validation
-- [ ] M8: Chat history visible/deletable cross-user
+- [x] M8: Chat history cross-user isolation — DELETE/export scoped to user_id
 - [ ] M9: In-memory pagination in timeline
 - [ ] M10: Unhandled date parsing in usage API
 - [ ] M11: Test mode bypass is case-sensitive

@@ -20,13 +20,15 @@ from app.models.chat_message import ChatMessage
 # ---------------------------------------------------------------------------
 
 
-def _get_messages(db: Session, client_id: UUID) -> list[ChatMessage]:
-    return (
-        db.query(ChatMessage)
-        .filter(ChatMessage.client_id == client_id)
-        .order_by(ChatMessage.created_at.asc())
-        .all()
-    )
+def _get_messages(
+    db: Session,
+    client_id: UUID,
+    user_id: str | None = None,
+) -> list[ChatMessage]:
+    q = db.query(ChatMessage).filter(ChatMessage.client_id == client_id)
+    if user_id is not None:
+        q = q.filter(ChatMessage.user_id == user_id)
+    return q.order_by(ChatMessage.created_at.asc()).all()
 
 
 def _fmt_ts(dt: datetime) -> str:
@@ -42,8 +44,10 @@ def _escape_html(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def export_chat_as_txt(client_id: UUID, client_name: str, db: Session) -> str:
-    messages = _get_messages(db, client_id)
+def export_chat_as_txt(
+    client_id: UUID, client_name: str, db: Session, *, user_id: str | None = None,
+) -> str:
+    messages = _get_messages(db, client_id, user_id=user_id)
 
     lines = [
         "==========================================",
@@ -82,14 +86,16 @@ def export_chat_as_txt(client_id: UUID, client_name: str, db: Session) -> str:
 # ---------------------------------------------------------------------------
 
 
-def export_chat_as_pdf(client_id: UUID, client_name: str, db: Session) -> bytes:
+def export_chat_as_pdf(
+    client_id: UUID, client_name: str, db: Session, *, user_id: str | None = None,
+) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
     from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
 
-    messages = _get_messages(db, client_id)
+    messages = _get_messages(db, client_id, user_id=user_id)
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(

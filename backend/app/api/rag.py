@@ -542,7 +542,7 @@ async def get_chat_history(
     "/clients/{client_id}/chat-history",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
-    summary="Delete all chat messages for a client",
+    summary="Delete the current user's chat messages for a client",
 )
 async def clear_chat_history(
     client_id: UUID,
@@ -551,7 +551,11 @@ async def clear_chat_history(
 ) -> None:
     _require_client(db, client_id, auth)
 
-    db.query(ChatMessage).filter(ChatMessage.client_id == client_id).delete()
+    # Only delete the requesting user's messages — not other org members'
+    db.query(ChatMessage).filter(
+        ChatMessage.client_id == client_id,
+        ChatMessage.user_id == auth.user_id,
+    ).delete()
     db.commit()
 
 
@@ -589,7 +593,7 @@ async def export_chat_history(
     from app.services.chat_exporter import export_chat_as_pdf, export_chat_as_txt
 
     if format == "txt":
-        content = export_chat_as_txt(client_id, client.name, db)
+        content = export_chat_as_txt(client_id, client.name, db, user_id=auth.user_id)
         return StreamingResponse(
             iter([content.encode("utf-8")]),
             media_type="text/plain; charset=utf-8",
@@ -598,7 +602,7 @@ async def export_chat_history(
             },
         )
     else:
-        pdf_bytes = export_chat_as_pdf(client_id, client.name, db)
+        pdf_bytes = export_chat_as_pdf(client_id, client.name, db, user_id=auth.user_id)
         return StreamingResponse(
             iter([pdf_bytes]),
             media_type="application/pdf",
