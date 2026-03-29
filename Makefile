@@ -4,7 +4,7 @@
 #   make check       — lint + typecheck + test (no push)
 #   make push        — push to both origin and vercel-deploy
 #   make typecheck   — run tsc --noEmit
-#   make test        — run backend pytest
+#   make test        — run backend pytest + frontend vitest
 #   make lint        — run frontend eslint
 #   make hooks       — install pre-commit hooks
 
@@ -36,6 +36,9 @@ test:
 	@echo "→ Backend tests..."
 	cd backend && venv/bin/python -m pytest tests/ -q --tb=short --ignore=tests/test_client_isolation.py
 	@echo "  Backend tests passed."
+	@echo "→ Frontend tests..."
+	cd frontend && npx vitest run
+	@echo "  Frontend tests passed."
 
 push:
 	@echo "→ Pushing to origin..."
