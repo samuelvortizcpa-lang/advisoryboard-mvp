@@ -5,8 +5,9 @@ Dashboard endpoints — aggregate counts and summary data for the frontend.
 from __future__ import annotations
 
 import logging
+import time as _time
 from datetime import date, datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -33,6 +34,11 @@ from app.services.subscription_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ─── TTL cache for dashboard summary ──────────────────────────────────────────
+_DASHBOARD_CACHE_TTL = 30  # seconds
+_dashboard_cache: dict[str, tuple[float, Any]] = {}
 
 
 # ─── Legacy endpoint (kept for backward compat) ──────────────────────────────
@@ -201,6 +207,24 @@ async def dashboard_summary(
     days: int = Query(30, ge=7, le=90),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
+) -> DashboardSummary:
+    # Check TTL cache — avoid recomputing on rapid navigation
+    cache_key = f"{auth.org_id}:{auth.user_id}:{days}"
+    cached = _dashboard_cache.get(cache_key)
+    if cached is not None:
+        ts, data = cached
+        if _time.monotonic() - ts < _DASHBOARD_CACHE_TTL:
+            return data
+
+    result = _build_dashboard_summary(days, db, auth)
+    _dashboard_cache[cache_key] = (_time.monotonic(), result)
+    return result
+
+
+def _build_dashboard_summary(
+    days: int,
+    db: Session,
+    auth: AuthContext,
 ) -> DashboardSummary:
     now = datetime.now(timezone.utc)
     today = date.today()
@@ -412,24 +436,43 @@ async def dashboard_summary(
             .all()
         )
 
+        # Batch query: usage counts + last activity for all members at once
+        member_ids = [m.user_id for m, _ in members]
+        usage_stats = (
+            db.query(
+                TokenUsage.user_id,
+                func.count(TokenUsage.id).label("cnt"),
+                func.max(TokenUsage.created_at).label("last_active"),
+            )
+            .filter(TokenUsage.user_id.in_(member_ids))
+            .group_by(TokenUsage.user_id)
+            .all()
+        ) if member_ids else []
+
+        # Split into period counts and overall last-active
+        period_counts = {}
+        last_active_map = {}
+        for row in usage_stats:
+            last_active_map[row.user_id] = row.last_active
+
+        # Separate query for period-scoped counts
+        period_stats = (
+            db.query(
+                TokenUsage.user_id,
+                func.count(TokenUsage.id).label("cnt"),
+            )
+            .filter(
+                TokenUsage.user_id.in_(member_ids),
+                TokenUsage.created_at >= cutoff,
+            )
+            .group_by(TokenUsage.user_id)
+            .all()
+        ) if member_ids else []
+        for row in period_stats:
+            period_counts[row.user_id] = row.cnt
+
         team_members = []
         for mem, usr in members:
-            # Query count for this member
-            q_count = (
-                db.query(func.count(TokenUsage.id))
-                .filter(
-                    TokenUsage.user_id == mem.user_id,
-                    TokenUsage.created_at >= cutoff,
-                )
-                .scalar()
-            ) or 0
-
-            last_q = (
-                db.query(func.max(TokenUsage.created_at))
-                .filter(TokenUsage.user_id == mem.user_id)
-                .scalar()
-            )
-
             name = ""
             email = ""
             if usr:
@@ -437,12 +480,13 @@ async def dashboard_summary(
                 name = " ".join(p for p in parts if p) or ""
                 email = usr.email or ""
 
+            last_q = last_active_map.get(mem.user_id)
             team_members.append(TeamMember(
                 user_id=mem.user_id,
                 name=name or mem.user_id,
                 email=email,
                 role=mem.role,
-                queries_used=q_count,
+                queries_used=period_counts.get(mem.user_id, 0),
                 last_active=last_q.isoformat() if last_q else None,
             ))
 

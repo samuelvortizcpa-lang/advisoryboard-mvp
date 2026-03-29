@@ -101,6 +101,33 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 
+# ── Performance timing middleware ─────────────────────────────────────────────
+import time as _time
+
+_perf_logger = logging.getLogger("performance")
+
+
+class TimingMiddleware(BaseHTTPMiddleware):
+    """Log slow requests and add X-Response-Time header for debugging."""
+
+    async def dispatch(self, request, call_next):
+        start = _time.monotonic()
+        response = await call_next(request)
+        duration = _time.monotonic() - start
+
+        if duration > 1.0:
+            _perf_logger.warning(
+                "SLOW REQUEST: %s %s took %.2fs",
+                request.method, request.url.path, duration,
+            )
+
+        response.headers["X-Response-Time"] = f"{duration:.3f}s"
+        return response
+
+
+app.add_middleware(TimingMiddleware)
+
+
 # ── Startup log ───────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
