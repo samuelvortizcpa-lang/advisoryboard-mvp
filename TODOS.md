@@ -15,7 +15,7 @@ Last updated: 2026-03-28
 - [x] H4: Consent signing token brute-force — rate limiting + enumeration protection added
 - [x] H5/H6: Add missing indexes — org_members/client_access (af15d3a) + 6 more perf indexes
 - [x] H7: Alerts query optimization — merged queries + 60s TTL cache
-- [ ] H8: Silent exception swallowing in document backfill (`except Exception: pass`)
+- [x] H8: Silent exception swallowing — all `except: pass` replaced with logging
 
 ### MEDIUM — Open
 - [ ] M1: Admin API key timing attack — use hmac.compare_digest()

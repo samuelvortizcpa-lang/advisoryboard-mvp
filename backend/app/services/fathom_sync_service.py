@@ -1060,7 +1060,7 @@ async def _process_single_call(
         try:
             storage_service.delete_file(old_path)
         except Exception:
-            pass
+            logger.warning("Fathom sync: failed to delete old file %s", old_path, exc_info=True)
 
         logger.info(
             "Fathom sync: updated call %s → document %s (client=%s, title=%r)",

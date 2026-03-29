@@ -389,7 +389,7 @@ def handle_checkout_completed(db: Session, session: dict) -> None:
                     logger.info("Legacy firm price detected in checkout — addon_seats=0")
                     break
         except Exception:
-            pass
+            logger.warning("Failed to check legacy firm pricing for sub %s", stripe_sub_id, exc_info=True)
 
     db.commit()
 

@@ -669,7 +669,7 @@ async def _process_single_conversation(
         try:
             storage_service.delete_file(old_path)
         except Exception:
-            pass  # non-fatal
+            logger.warning("Front sync: failed to delete old file %s", old_path, exc_info=True)
 
         logger.info(
             "Front sync: updated conversation %s → document %s (client=%s, subject=%r)",
