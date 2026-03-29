@@ -14,11 +14,12 @@ Routes (all require Clerk JWT auth):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -230,7 +231,6 @@ async def get_rag_status(
 )
 async def process_client_documents(
     client_id: UUID,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ProcessResponse:
@@ -250,8 +250,13 @@ async def process_client_documents(
             queued=0, message="All documents are already processed."
         )
 
+    from app.services.background_processor import run_in_process
+    from app.core.config import get_settings
+    db_url = get_settings().database_url
     for doc in unprocessed:
-        background_tasks.add_task(rag_service.process_document_task, doc.id)
+        asyncio.create_task(
+            run_in_process(rag_service.process_document_sync, str(doc.id), db_url)
+        )
 
     return ProcessResponse(
         queued=len(unprocessed),
@@ -272,7 +277,6 @@ async def process_client_documents(
 async def process_single_document(
     client_id: UUID,
     document_id: UUID,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ProcessResponse:
@@ -286,7 +290,15 @@ async def process_single_document(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    background_tasks.add_task(rag_service.process_document_task, document.id)
+    from app.services.background_processor import run_in_process
+    from app.core.config import get_settings
+    asyncio.create_task(
+        run_in_process(
+            rag_service.process_document_sync,
+            str(document.id),
+            get_settings().database_url,
+        )
+    )
 
     return ProcessResponse(queued=1, message="Document queued for processing.")
 

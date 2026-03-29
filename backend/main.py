@@ -129,7 +129,9 @@ async def _startup_log() -> None:
 async def _shutdown() -> None:
     """Clean up background services on shutdown."""
     from app.services.auto_sync_service import stop_scheduler
+    from app.services.background_processor import shutdown_executor
     stop_scheduler()
+    shutdown_executor()
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

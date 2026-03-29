@@ -173,6 +173,33 @@ async def process_document_task(document_id: UUID) -> None:
         db.close()
 
 
+def process_document_sync(document_id: str, database_url: str) -> None:
+    """Synchronous entry point for ProcessPoolExecutor.
+
+    Runs the full async pipeline in a new event loop inside a subprocess.
+    Creates its own DB engine + session since SQLAlchemy objects can't cross
+    process boundaries.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(database_url)
+    _Session = sessionmaker(bind=engine)
+    db = _Session()
+
+    try:
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if document is None:
+            logger.warning("process_document_sync: document %s not found", document_id)
+            return
+        asyncio.run(process_document(db, document))
+    except Exception as exc:
+        logger.error("process_document_sync failed for %s: %s", document_id, exc)
+    finally:
+        db.close()
+        engine.dispose()
+
+
 async def process_document(db: Session, document: Document) -> None:
     """
     Full pipeline: extract → chunk → embed → store.

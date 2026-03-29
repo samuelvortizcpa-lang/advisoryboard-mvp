@@ -1,9 +1,10 @@
+import asyncio
 import logging
 import os
 import re
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -47,7 +48,6 @@ def _sanitize_filename(filename: str) -> str:
 )
 async def upload_document(
     client_id: UUID,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
@@ -121,11 +121,18 @@ async def upload_document(
         uploaded_by=user.id,
         org_id=auth.org_id,
     )
-    # Auto-process: kick off RAG embedding in the background right after upload
-    background_tasks.add_task(rag_service.process_document_task, document.id)
+    # Auto-process: kick off RAG embedding in a subprocess to avoid blocking the API
+    from app.services.background_processor import run_in_process
+    from app.core.config import get_settings
+    asyncio.create_task(
+        run_in_process(
+            rag_service.process_document_sync,
+            str(document.id),
+            get_settings().database_url,
+        )
+    )
 
     # Slack notification (fire-and-forget)
-    import asyncio
     client_obj = db.query(Client).filter(Client.id == client_id).first()
     asyncio.create_task(send_notification(
         "document_upload",
