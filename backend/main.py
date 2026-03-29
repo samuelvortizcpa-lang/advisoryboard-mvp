@@ -77,6 +77,7 @@ app.add_middleware(
         "Authorization",
         "Content-Type",
         "X-Admin-Key",
+        "X-Org-Id",
         "sentry-trace",
         "baggage",
     ],
