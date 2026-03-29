@@ -1,16 +1,54 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
+
+const faqData = [
+  {
+    q: 'How does Callwen handle sensitive client data?',
+    a: 'All data is encrypted in transit (TLS 1.2+) and at rest (AES-256). Your documents are stored on SOC 2 Type II certified infrastructure in US-based data centers. We never use your data to train AI models. Our AI providers (OpenAI and Anthropic) process queries via their commercial APIs with zero data retention.',
+  },
+  {
+    q: 'What is IRC \u00a77216 and why does it matter?',
+    a: 'IRC Section 7216 requires written client consent before a tax preparer can disclose or use tax return information for purposes beyond the original engagement. Callwen has built-in consent tracking with e-signature capture, expiration alerts, and audit trails \u2014 so you stay compliant without spreadsheets.',
+  },
+  {
+    q: 'What types of documents can I upload?',
+    a: 'Tax returns (1040, 1120, 1065, 1120-S), W-2s, K-1s, engagement letters, meeting recordings (audio/video), email threads, financial statements, and any PDF, Word, Excel, or text file. Callwen auto-classifies tax documents and extracts text from all formats.',
+  },
+  {
+    q: 'How accurate are the AI answers?',
+    a: 'Every AI response includes a confidence score and source citations pointing to the specific document and page. You can verify any answer by clicking the source reference. We use dual-model routing \u2014 fast lookups via GPT-4o-mini and deep analysis via Claude \u2014 to balance speed and accuracy.',
+  },
+  {
+    q: 'Can my team share a workspace?',
+    a: 'Yes. The Firm plan includes 3 seats with additional seats at $79/month each. Team members share a unified client knowledge base with role-based access controls. Admins can assign specific clients to specific team members.',
+  },
+  {
+    q: 'How long does setup take?',
+    a: 'Under two minutes. Sign up, upload your first documents, and start asking questions. There is no onboarding call required, no data migration, and no IT department needed. Connect Gmail or Outlook in one click to auto-sync client emails.',
+  },
+  {
+    q: 'Can I cancel anytime?',
+    a: 'Yes. No contracts, no cancellation fees. Cancel from your account settings and your subscription ends at the end of the current billing period. You can export all your data at any time.',
+  },
+];
 
 export default function LandingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const threeLoaded = useRef(false);
 
+  // State for interactive elements
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [annualBilling, setAnnualBilling] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+
   // Initialize Three.js scene after script loads
   const initThree = () => {
+    // Skip Three.js on mobile for performance
+    if (window.innerWidth < 768) return;
     if (threeLoaded.current || !canvasRef.current || typeof window === 'undefined') return;
     const THREE = (window as any).THREE;
     if (!THREE) return;
@@ -358,11 +396,28 @@ export default function LandingPage() {
     };
   }, []);
 
+  // Close mobile menu when clicking outside
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.nav')) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [menuOpen]);
+
   // Three.js cleanup ref
   const cleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     return () => { cleanupRef.current?.(); };
   }, []);
+
+  // Pricing helpers
+  const starterPrice = annualBilling ? 79 : 99;
+  const proPrice = annualBilling ? 119 : 149;
 
   return (
     <>
@@ -390,7 +445,22 @@ export default function LandingPage() {
               <a href="#founder">About</a>
               <Link href="/sign-in" className="nav-cta">Get started</Link>
             </div>
+            <button
+              className={`hamburger${menuOpen ? ' open' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+              aria-label="Toggle menu"
+            >
+              <span /><span /><span />
+            </button>
           </div>
+          {menuOpen && (
+            <div className="mobile-menu">
+              <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
+              <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
+              <a href="#founder" onClick={() => setMenuOpen(false)}>About</a>
+              <Link href="/sign-in" className="mobile-menu-cta" onClick={() => setMenuOpen(false)}>Get started</Link>
+            </div>
+          )}
         </nav>
 
         {/* Hero */}
@@ -408,6 +478,33 @@ export default function LandingPage() {
           <div className="scroll-hint">Explore</div>
         </section>
 
+        {/* Trust strip */}
+        <div className="trust-strip" data-reveal>
+          <p className="overline">Trusted by financial professionals</p>
+          <div className="trust-badges">
+            <div className="trust-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+              <span>AICPA Aligned</span>
+            </div>
+            <div className="trust-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              <span>SOC 2 Infrastructure</span>
+            </div>
+            <div className="trust-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/></svg>
+              <span>IRC {'\u00a7'}7216 Compliant</span>
+            </div>
+            <div className="trust-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+              <span>256-bit Encryption</span>
+            </div>
+            <div className="trust-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              <span>US-Based Data Centers</span>
+            </div>
+          </div>
+        </div>
+
         {/* Feature sections */}
         <div className="sections" id="features">
           <div className="section left" data-reveal>
@@ -424,7 +521,7 @@ export default function LandingPage() {
                   <div className="doc-page"><div className="lines"><span /><span /><span /><span /><span /></div></div>
                   <div className="doc-page"><div className="lines"><span /><span /><span /><span /><span /></div></div>
                 </div>
-                <div className="doc-arrow">→</div>
+                <div className="doc-arrow">{'\u2192'}</div>
                 <div className="doc-result">
                   <svg viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </div>
@@ -455,7 +552,7 @@ export default function LandingPage() {
             <div className="content">
               <h2>7216 compliance,<br /><em>built in</em></h2>
               <p>Tax documents are auto-detected. Consent forms with mandatory IRS language are generated in one click. E-signatures, expiration tracking, and smart alerts.</p>
-              <span className="tag">IRC §7216 · Auto-detection · E-sign</span>
+              <span className="tag">IRC {'\u00a7'}7216 · Auto-detection · E-sign</span>
             </div>
             <div className="section-visual" aria-hidden="true">
               <div className="vis-shield">
@@ -464,7 +561,7 @@ export default function LandingPage() {
                     <path d="M40 5 L75 20 L75 50 C75 70 40 85 40 85 C40 85 5 70 5 50 L5 20 Z"/>
                     <path d="M28 45 L36 53 L54 35" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  <div className="shield-badge">§7216 Compliant</div>
+                  <div className="shield-badge">{'\u00a7'}7216 Compliant</div>
                 </div>
               </div>
             </div>
@@ -513,6 +610,19 @@ export default function LandingPage() {
         <section className="pricing" id="pricing">
           <div className="pricing-inner">
             <p className="overline" data-reveal>Pricing</p>
+            <div className="billing-toggle" data-reveal>
+              <div className="toggle-pill">
+                <button
+                  className={`toggle-opt${!annualBilling ? ' active' : ''}`}
+                  onClick={() => setAnnualBilling(false)}
+                >Monthly</button>
+                <button
+                  className={`toggle-opt${annualBilling ? ' active' : ''}`}
+                  onClick={() => setAnnualBilling(true)}
+                >Annual</button>
+              </div>
+              {annualBilling && <span className="save-badge">Save 20%</span>}
+            </div>
             <h2 data-reveal>Plans that grow with your practice</h2>
             <div className="price-grid" data-reveal>
               <div className="p-card">
@@ -529,7 +639,8 @@ export default function LandingPage() {
               </div>
               <div className="p-card">
                 <div className="p-tier">Starter</div>
-                <div className="p-price">$99 <span className="mo">/mo</span></div>
+                <div className="p-price">${starterPrice} <span className="mo">/mo</span></div>
+                {annualBilling && <div className="p-billed">billed $948/year</div>}
                 <div className="p-desc">Solo practitioners getting organized.</div>
                 <ul className="p-list">
                   <li>25 clients</li>
@@ -537,11 +648,12 @@ export default function LandingPage() {
                   <li>500 AI queries/month</li>
                   <li>All integrations</li>
                 </ul>
-                <Link href="/sign-in" className="p-btn p-btn-ghost">Start trial</Link>
+                <Link href="/sign-in" className="p-btn p-btn-ghost">Start 14-day trial</Link>
               </div>
               <div className="p-card featured">
                 <div className="p-tier">Professional</div>
-                <div className="p-price">$149 <span className="mo">/mo</span></div>
+                <div className="p-price">${proPrice} <span className="mo">/mo</span></div>
+                {annualBilling && <div className="p-billed">billed $1,428/year</div>}
                 <div className="p-desc">Growing firms with 10+ clients.</div>
                 <ul className="p-list">
                   <li>100 clients</li>
@@ -549,7 +661,7 @@ export default function LandingPage() {
                   <li>Claude deep analysis</li>
                   <li>Smart alerts + compliance</li>
                 </ul>
-                <Link href="/sign-in" className="p-btn p-btn-primary">Start trial</Link>
+                <Link href="/sign-in" className="p-btn p-btn-primary">Start 14-day trial</Link>
               </div>
               <div className="p-card">
                 <div className="p-tier">Firm</div>
@@ -576,6 +688,25 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {/* FAQ */}
+        <div className="faq-section">
+          <p className="overline" data-reveal>FAQ</p>
+          <h2 data-reveal>Common questions</h2>
+          <div className="faq-list" data-reveal>
+            {faqData.map((item, i) => (
+              <div key={i} className={`faq-item${openFaq === i ? ' open' : ''}`}>
+                <button className="faq-q" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+                  <span>{item.q}</span>
+                  <span className="faq-icon">{openFaq === i ? '\u00d7' : '+'}</span>
+                </button>
+                {openFaq === i && (
+                  <div className="faq-a">{item.a}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Final CTA */}
         <div className="finale">
           <p className="overline" data-reveal>Ready?</p>
@@ -584,13 +715,13 @@ export default function LandingPage() {
           <Link href="/sign-in" className="cta-btn" data-reveal>
             Get started for free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
           </Link>
-          <p className="trust" data-reveal><span>★★★★★</span>&ensp; Built by a CPA, for CPAs</p>
+          <p className="trust" data-reveal><span>{'\u2605\u2605\u2605\u2605\u2605'}</span>&ensp; Built by a CPA, for CPAs</p>
         </div>
 
         {/* Footer */}
         <footer>
           <div className="foot-inner">
-            <div className="foot-copy">© 2026 Callwen. All rights reserved.</div>
+            <div className="foot-copy">{'\u00a9'} 2026 Callwen. All rights reserved.</div>
             <div className="foot-links">
               <Link href="/privacy">Privacy</Link>
               <Link href="/terms">Terms</Link>
@@ -631,6 +762,18 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .nav-cta { padding: 10px 24px !important; background: var(--accent) !important; color: var(--bg-deep) !important; font-weight: 500 !important; border-radius: 6px; transition: all 0.25s !important; }
 .nav-cta:hover { background: var(--accent-light) !important; transform: translateY(-1px); }
 
+/* Hamburger menu */
+.hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; z-index: 101; }
+.hamburger span { display: block; width: 22px; height: 2px; background: var(--white); border-radius: 1px; transition: all 0.3s ease; }
+.hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+
+.mobile-menu { display: none; background: rgba(12,14,19,0.95); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,0.05); }
+.mobile-menu a { display: block; padding: 1rem 2rem; font-size: 0.9rem; font-weight: 400; color: var(--white-dim); text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.05); transition: color 0.25s; }
+.mobile-menu a:hover { color: var(--white); }
+.mobile-menu-cta { background: var(--accent) !important; color: var(--bg-deep) !important; font-weight: 500 !important; text-align: center; margin: 1rem; border-radius: 6px; border-bottom: none !important; }
+
 .splash { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; padding: 0 2rem; }
 .hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 18px; border-radius: 99px; font-size: 0.78rem; font-weight: 500; background: var(--accent-glow); color: var(--accent-light); border: 1px solid rgba(201,148,74,0.18); margin-bottom: 2.5rem; opacity: 0; animation: fadeUp 0.8s 0.3s forwards; backdrop-filter: blur(8px); }
 .hero-badge .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulseAnim 2s ease infinite; }
@@ -650,6 +793,14 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .scroll-hint::after { content: ''; display: block; width: 1px; height: 36px; background: var(--accent); margin: 0.6rem auto 0; animation: scrollPulse 2s ease-in-out infinite; }
 @keyframes scrollPulse { 0%,100%{opacity:0.2;transform:scaleY(0.5)} 50%{opacity:0.8;transform:scaleY(1)} }
 @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+/* Trust strip */
+.trust-strip { padding: 4rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); text-align: center; }
+.trust-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.trust-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.trust-badge { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+.trust-badge svg { width: 16px; height: 16px; stroke: var(--accent); opacity: 0.7; flex-shrink: 0; }
+.trust-badge span { font-size: 0.75rem; font-weight: 400; color: var(--white-dim); letter-spacing: 0.05em; }
 
 [data-reveal] { opacity: 0; transform: translateY(30px); transition: opacity 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1); }
 [data-reveal].visible { opacity: 1; transform: translateY(0); }
@@ -714,6 +865,14 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .pricing-inner { max-width: 1100px; margin: 0 auto; text-align: center; }
 .pricing .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .pricing h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
+
+/* Billing toggle */
+.billing-toggle { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 1.5rem; }
+.toggle-pill { display: inline-flex; border-radius: 99px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); padding: 3px; }
+.toggle-opt { padding: 8px 20px; border-radius: 99px; font-family: var(--sans); font-size: 0.8rem; font-weight: 500; border: none; cursor: pointer; transition: all 0.25s; background: transparent; color: var(--white-dim); }
+.toggle-opt.active { background: var(--accent); color: var(--bg-deep); }
+.save-badge { display: inline-block; font-size: 0.7rem; background: var(--teal-dim); color: var(--teal); padding: 3px 10px; border-radius: 99px; font-weight: 500; }
+
 .price-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
 .p-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 2.5rem 2rem; text-align: left; display: flex; flex-direction: column; position: relative; }
 .p-card.featured { background: rgba(24,28,37,0.9); border-top: 2px solid var(--accent); }
@@ -721,6 +880,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .p-tier { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); margin-bottom: 1rem; }
 .p-price { font-family: var(--serif); font-size: 2.8rem; font-weight: 600; margin-bottom: 0.3rem; }
 .p-price .mo { font-size: 0.9rem; font-weight: 300; color: var(--white-dim); font-family: var(--sans); }
+.p-billed { font-size: 0.72rem; color: var(--teal); margin-bottom: 0.3rem; font-weight: 400; }
 .p-desc { font-size: 0.82rem; color: var(--white-dim); margin-bottom: 1.8rem; line-height: 1.5; }
 .p-list { list-style: none; margin-bottom: 2rem; flex: 1; }
 .p-list li { font-size: 0.82rem; color: var(--white-dim); padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.03); position: relative; padding-left: 1.2rem; }
@@ -737,6 +897,17 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .founder blockquote { font-family: var(--serif); font-size: clamp(1.2rem,2.5vw,1.6rem); font-style: italic; line-height: 1.6; color: var(--white); margin-bottom: 1.5rem; opacity: 0.9; }
 .founder cite { font-style: normal; font-family: var(--sans); font-size: 0.85rem; color: var(--white-dim); }
 .founder cite strong { display: block; font-weight: 500; color: var(--white); margin-bottom: 2px; }
+
+/* FAQ */
+.faq-section { padding: 6rem 2rem; text-align: center; }
+.faq-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.faq-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
+.faq-list { max-width: 700px; margin: 0 auto; text-align: left; }
+.faq-item { border-bottom: 1px solid rgba(255,255,255,0.05); }
+.faq-q { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 1.5rem 0; cursor: pointer; background: none; border: none; font-family: var(--sans); font-size: 1rem; font-weight: 400; color: var(--white); transition: color 0.25s; text-align: left; }
+.faq-q:hover { color: var(--accent-light); }
+.faq-icon { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; margin-left: 1rem; transition: transform 0.3s; }
+.faq-a { padding: 0 0 1.5rem; font-size: 0.9rem; line-height: 1.8; color: var(--white-dim); font-weight: 300; }
 
 .finale { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem; }
 .finale .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
@@ -757,12 +928,17 @@ footer { padding: 2.5rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); bac
 .foot-links a:hover { color: var(--white-dim); }
 
 @media (max-width:900px) {
+  .nav-links { display: none; }
+  .hamburger { display: flex; }
+  .mobile-menu { display: block; }
   .section { flex-direction: column !important; text-align: left !important; gap: 2rem; min-height: auto; padding: 5rem 1.5rem; }
   .section .number { font-size: 4rem; align-self: flex-start; }
   .section-visual { width: 100%; max-width: 360px; }
   .comp-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
-  .nav-links a:not(.nav-cta) { display: none; }
+}
+@media (max-width:767px) {
+  #three-canvas { display: none; }
 }
 @media (max-width:600px) {
   .price-grid { grid-template-columns: 1fr; }
