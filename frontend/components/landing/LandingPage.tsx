@@ -1,0 +1,772 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+import Link from 'next/link';
+import Script from 'next/script';
+
+export default function LandingPage() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const threeLoaded = useRef(false);
+
+  // Initialize Three.js scene after script loads
+  const initThree = () => {
+    if (threeLoaded.current || !canvasRef.current || typeof window === 'undefined') return;
+    const THREE = (window as any).THREE;
+    if (!THREE) return;
+    threeLoaded.current = true;
+
+    const canvas = canvasRef.current;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.4;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x0c0e13, 0.014);
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 120);
+    camera.position.z = 22;
+
+    // Lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const key = new THREE.DirectionalLight(0xc9944a, 1.0);
+    key.position.set(8, 12, 15);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x5bb8af, 0.4);
+    fill.position.set(-8, -5, -10);
+    scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xe8b06a, 0.6);
+    rim.position.set(0, 15, -5);
+    scene.add(rim);
+    const glow1 = new THREE.PointLight(0xc9944a, 2.5, 30);
+    glow1.position.set(6, 5, 8);
+    scene.add(glow1);
+    const glow2 = new THREE.PointLight(0x5bb8af, 1.2, 25);
+    glow2.position.set(-8, -3, 5);
+    scene.add(glow2);
+    const glow3 = new THREE.PointLight(0xe8b06a, 1.5, 20);
+    glow3.position.set(0, -8, 10);
+    scene.add(glow3);
+
+    // Doc texture generator
+    function makeDocTex(v: number) {
+      const c = document.createElement('canvas');
+      c.width = 128; c.height = 180;
+      const x = c.getContext('2d')!;
+      const bgs = ['#2a2f3e','#303648','#353c4e','#282d3a'];
+      x.fillStyle = bgs[v % bgs.length];
+      x.fillRect(0,0,128,180);
+      x.fillStyle = 'rgba(255,255,255,0.015)';
+      for(let i=0;i<200;i++) x.fillRect(Math.random()*128, Math.random()*180, 1, 1);
+      x.fillStyle = v%3===0 ? 'rgba(201,148,74,0.6)' : v%3===1 ? 'rgba(91,184,175,0.45)' : 'rgba(232,176,106,0.4)';
+      x.fillRect(12, 14, 40+Math.random()*35, 5);
+      x.fillStyle = 'rgba(240,237,230,0.2)';
+      x.fillRect(12, 26, 60+Math.random()*40, 3);
+      x.fillStyle = 'rgba(201,148,74,0.12)';
+      x.fillRect(12, 36, 104, 0.5);
+      x.fillStyle = 'rgba(240,237,230,0.13)';
+      let ly = 44;
+      const lc = 7 + Math.floor(Math.random()*5);
+      for(let i=0;i<lc;i++) x.fillRect(12, ly+i*11, 25+Math.random()*78, 2.5);
+      if(v%4===0){
+        x.strokeStyle='rgba(201,148,74,0.2)';x.lineWidth=0.8;
+        x.strokeRect(12,105,104,50);
+        x.beginPath();x.moveTo(12,122);x.lineTo(116,122);x.moveTo(12,138);x.lineTo(116,138);
+        x.moveTo(55,105);x.lineTo(55,155);x.moveTo(85,105);x.lineTo(85,155);x.stroke();
+        x.fillStyle='rgba(240,237,230,0.1)';
+        x.fillRect(16,110,25,3);x.fillRect(58,110,20,3);x.fillRect(88,110,18,3);
+        x.fillRect(16,126,30,3);x.fillRect(58,126,15,3);x.fillRect(88,126,22,3);
+      }
+      if(v%3===1){
+        x.fillStyle='rgba(201,148,74,0.12)';
+        x.beginPath();x.moveTo(128,0);x.lineTo(105,0);x.lineTo(128,23);x.closePath();x.fill();
+        x.strokeStyle='rgba(201,148,74,0.15)';x.lineWidth=0.5;
+        x.beginPath();x.moveTo(105,0);x.lineTo(128,23);x.stroke();
+      }
+      if(v%6===0){
+        x.strokeStyle='rgba(91,184,175,0.25)';x.lineWidth=1;
+        x.beginPath();x.arc(98,160,12,0,Math.PI*2);x.stroke();
+        x.fillStyle='rgba(91,184,175,0.1)';
+        x.beginPath();x.arc(98,160,12,0,Math.PI*2);x.fill();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = THREE.LinearFilter;
+      return tex;
+    }
+
+    // Create 3D documents
+    const DOC_COUNT = 70;
+    const docs: any[] = [];
+    const meshes: any[] = [];
+
+    for(let i=0; i<DOC_COUNT; i++){
+      const t = i/DOC_COUNT;
+      const isClose = i < 10;
+      const isMid = i < 30;
+      const scale = isClose ? 1.2+Math.random()*0.7 : isMid ? 0.5+Math.random()*0.5 : 0.25+Math.random()*0.35;
+      const w = scale;
+      const h = scale * (1.3 + Math.random()*0.25);
+      const d = 0.02 + scale*0.015;
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const tex = makeDocTex(i);
+      const faceOp = isClose ? 0.92 : isMid ? 0.7 : 0.45;
+      const faceMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.65, metalness: 0.08, transparent: true, opacity: faceOp });
+      const isAccent = i%4===0;
+      const isTeal = i%7===0;
+      const edgeCol = isAccent ? 0xc9944a : isTeal ? 0x5bb8af : 0x353c4e;
+      const emInt = isAccent ? 0.6 : isTeal ? 0.4 : 0.05;
+      const sideMat = new THREE.MeshStandardMaterial({ color: edgeCol, roughness: 0.4, metalness: 0.2, transparent: true, opacity: isClose ? 0.95 : 0.6, emissive: edgeCol, emissiveIntensity: emInt });
+      const mesh = new THREE.Mesh(geo, [sideMat,sideMat,sideMat,sideMat,faceMat,faceMat]);
+      const spiralAngle = t * Math.PI * 7 + (Math.random()-0.5)*1.2;
+      const spiralR = isClose ? 11+Math.random()*5 : isMid ? 13+Math.random()*7 : 16+Math.random()*12;
+      const ySpread = (Math.random()-0.5) * 55;
+      mesh.position.x = Math.cos(spiralAngle) * spiralR;
+      mesh.position.y = ySpread;
+      mesh.position.z = Math.sin(spiralAngle) * spiralR * 0.35 - 2;
+      mesh.rotation.x = (Math.random()-0.5)*0.6;
+      mesh.rotation.y = (Math.random()-0.5)*0.9;
+      mesh.rotation.z = (Math.random()-0.5)*0.4;
+      if(isAccent || isTeal || isClose){
+        const eg = new THREE.EdgesGeometry(geo);
+        const eCol = isAccent ? 0xc9944a : isTeal ? 0x5bb8af : 0xe8b06a;
+        const eOp = isClose ? 0.8 : 0.35;
+        const em = new THREE.LineBasicMaterial({color:eCol, transparent:true, opacity:eOp});
+        const el = new THREE.LineSegments(eg, em);
+        mesh.add(el);
+        mesh.userData.edgeLine = el;
+        mesh.userData.edgeBaseOp = eOp;
+      }
+      scene.add(mesh);
+      meshes.push(mesh);
+      docs.push({ mesh, baseY: mesh.position.y, spiralAngle, spiralR, orbitSpeed: 0.025+Math.random()*0.035, driftOff: Math.random()*Math.PI*2, driftSpd: 0.12+Math.random()*0.2, rotSpdX: (Math.random()-0.5)*0.003, rotSpdZ: (Math.random()-0.5)*0.002, mouseInf: isClose?0.4:isMid?0.2:0.08, isClose, isMid, baseRotX: mesh.rotation.x, baseRotY: mesh.rotation.y });
+    }
+
+    // Connecting lines
+    const MAX_CONN = 80;
+    const CONN_DIST = 5.5;
+    const lGeo = new THREE.BufferGeometry();
+    const lPos = new Float32Array(MAX_CONN * 6);
+    lGeo.setAttribute('position', new THREE.BufferAttribute(lPos, 3));
+    lGeo.setDrawRange(0,0);
+    const lMat = new THREE.LineBasicMaterial({color:0xc9944a, transparent:true, opacity:0.06});
+    const connLines = new THREE.LineSegments(lGeo, lMat);
+    scene.add(connLines);
+    const lGeo2 = new THREE.BufferGeometry();
+    const lPos2 = new Float32Array(MAX_CONN * 6);
+    lGeo2.setAttribute('position', new THREE.BufferAttribute(lPos2, 3));
+    lGeo2.setDrawRange(0,0);
+    const lMat2 = new THREE.LineBasicMaterial({color:0x5bb8af, transparent:true, opacity:0.04});
+    const connLines2 = new THREE.LineSegments(lGeo2, lMat2);
+    scene.add(connLines2);
+
+    // Particles
+    const PC = 150;
+    const pGeo = new THREE.BufferGeometry();
+    const pArr = new Float32Array(PC*3);
+    for(let i=0;i<PC;i++){ pArr[i*3]=(Math.random()-0.5)*45; pArr[i*3+1]=(Math.random()-0.5)*65; pArr[i*3+2]=(Math.random()-0.5)*25; }
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pArr, 3));
+    const pMat = new THREE.PointsMaterial({color:0xe8b06a, size:0.07, transparent:true, opacity:0.55, sizeAttenuation:true});
+    const particles = new THREE.Points(pGeo, pMat);
+    scene.add(particles);
+
+    // State
+    let scrollY=0, tScrollY=0, prevScroll=0, scrollVel=0;
+    let mX=0, mY=0, tMX=0, tMY=0;
+    const onScroll = () => { tScrollY = window.pageYOffset; };
+    const onMouse = (e: MouseEvent) => { tMX=(e.clientX/window.innerWidth-0.5)*2; tMY=(e.clientY/window.innerHeight-0.5)*2; };
+    const onResize = () => { camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); };
+    window.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('mousemove', onMouse, {passive:true});
+    window.addEventListener('resize', onResize);
+
+    const clock = new THREE.Clock();
+    let animId: number;
+    const projVec = new THREE.Vector3();
+
+    function animate(){
+      animId = requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      scrollY += (tScrollY-scrollY)*0.06;
+      mX += (tMX-mX)*0.05;
+      mY += (tMY-mY)*0.05;
+      scrollVel = Math.abs(scrollY-prevScroll);
+      prevScroll = scrollY;
+      const sN = scrollY*0.0008;
+      const sMult = 1 + Math.min(scrollVel*0.2, 5);
+
+      camera.position.x = mX*0.7;
+      camera.position.y = -mY*0.4 - sN*3;
+      camera.lookAt(mX*0.2, -sN*3, 0);
+
+      glow1.position.x = 6+Math.sin(t*0.3)*4;
+      glow1.position.y = 5+Math.cos(t*0.2)*3;
+      glow1.intensity = 2.5 + Math.sin(t*0.5)*0.5;
+      glow2.position.x = -8+Math.sin(t*0.25+2)*4;
+      glow3.position.y = -8+Math.sin(t*0.35)*3;
+
+      const CLEAR_X = 0.72, CLEAR_Y = 0.65, REPEL_STRENGTH = 8.0, FADE_ZONE = 0.2;
+
+      for(let i=0; i<docs.length; i++){
+        const dd = docs[i];
+        const m = dd.mesh;
+        const angle = dd.spiralAngle + t * dd.orbitSpeed * sMult * 0.25;
+        m.position.x = Math.cos(angle)*dd.spiralR + Math.sin(t*dd.driftSpd+dd.driftOff)*0.4;
+        m.position.z = Math.sin(angle)*dd.spiralR*0.35 - 2;
+        m.position.y = dd.baseY - sN*(5+dd.spiralR*0.3) + Math.sin(t*dd.driftSpd*0.7+dd.driftOff)*0.5;
+        m.position.x += mX * dd.mouseInf * 0.8;
+        m.position.y += -mY * dd.mouseInf * 0.3;
+
+        projVec.copy(m.position);
+        projVec.project(camera);
+        const ndcX = projVec.x;
+        const ndcY = projVec.y;
+        const normDist = Math.sqrt((ndcX*ndcX)/(CLEAR_X*CLEAR_X) + (ndcY*ndcY)/(CLEAR_Y*CLEAR_Y));
+        let fadeFactor = 1.0;
+
+        if(normDist < 1.0 + FADE_ZONE) {
+          if(normDist < 1.0) {
+            const force = (1.0 - normDist) * REPEL_STRENGTH;
+            const pushDirX = ndcX >= 0 ? 1 : -1;
+            const pushDirY = ndcY >= 0 ? 1 : -1;
+            m.position.x += pushDirX * force * 1.8;
+            m.position.y += pushDirY * force * 0.8;
+            m.position.z -= force * 1.5;
+          }
+          fadeFactor = normDist < 1.0 ? normDist * normDist * 0.3 : Math.min(1.0, (normDist - 1.0) / FADE_ZONE * 0.6 + 0.4);
+          const baseFaceOp = dd.isClose ? 0.92 : dd.isMid ? 0.7 : 0.45;
+          const baseSideOp = dd.isClose ? 0.95 : 0.6;
+          m.material[4].opacity = baseFaceOp * fadeFactor;
+          m.material[5].opacity = baseFaceOp * fadeFactor;
+          for(let s=0;s<4;s++) m.material[s].opacity = baseSideOp * fadeFactor;
+        } else {
+          const baseFaceOp = dd.isClose ? 0.92 : dd.isMid ? 0.7 : 0.45;
+          const baseSideOp = dd.isClose ? 0.95 : 0.6;
+          m.material[4].opacity = baseFaceOp;
+          m.material[5].opacity = baseFaceOp;
+          for(let s=0;s<4;s++) m.material[s].opacity = baseSideOp;
+        }
+
+        m.rotation.x += dd.rotSpdX * sMult;
+        m.rotation.z += dd.rotSpdZ * sMult;
+        const tiltStr = dd.isClose ? 0.2 : dd.isMid ? 0.1 : 0.04;
+        m.rotation.x += (-mY*tiltStr - m.rotation.x)*0.025;
+        m.rotation.y += (mX*tiltStr - m.rotation.y)*0.025;
+
+        if(m.userData.edgeLine){
+          const pulse = dd.isClose ? 0.15 : 0.08;
+          const edgeFade = (normDist < 1.0 + FADE_ZONE) ? fadeFactor : 1.0;
+          m.userData.edgeLine.material.opacity = (m.userData.edgeBaseOp + Math.sin(t*1.5+i)*pulse) * edgeFade;
+        }
+      }
+
+      // Connections
+      let li1=0, li2=0;
+      const p1=connLines.geometry.attributes.position.array;
+      const p2=connLines2.geometry.attributes.position.array;
+      for(let i=0; i<meshes.length; i++){
+        for(let j=i+1; j<meshes.length; j++){
+          if(li1>=MAX_CONN && li2>=MAX_CONN) break;
+          const a=meshes[i].position, b=meshes[j].position;
+          const dx=a.x-b.x, dy=a.y-b.y, dz=a.z-b.z;
+          const dist=Math.sqrt(dx*dx+dy*dy+dz*dz);
+          if(dist<CONN_DIST){
+            if(li1<MAX_CONN && (i+j)%2===0){
+              const idx=li1*6;
+              p1[idx]=a.x;p1[idx+1]=a.y;p1[idx+2]=a.z;
+              p1[idx+3]=b.x;p1[idx+4]=b.y;p1[idx+5]=b.z;
+              li1++;
+            } else if(li2<MAX_CONN){
+              const idx=li2*6;
+              p2[idx]=a.x;p2[idx+1]=a.y;p2[idx+2]=a.z;
+              p2[idx+3]=b.x;p2[idx+4]=b.y;p2[idx+5]=b.z;
+              li2++;
+            }
+          }
+        }
+      }
+      connLines.geometry.setDrawRange(0,li1*2);
+      connLines.geometry.attributes.position.needsUpdate=true;
+      lMat.opacity = 0.05+Math.sin(t*0.7)*0.025;
+      connLines2.geometry.setDrawRange(0,li2*2);
+      connLines2.geometry.attributes.position.needsUpdate=true;
+      lMat2.opacity = 0.03+Math.sin(t*0.9+1)*0.02;
+
+      // Particles
+      const pp = particles.geometry.attributes.position.array;
+      for(let i=0;i<PC;i++){
+        pp[i*3+1] -= 0.006*sMult;
+        if(pp[i*3+1]<-32) pp[i*3+1]=32;
+        pp[i*3] += Math.sin(t*0.4+i*0.3)*0.002;
+      }
+      particles.geometry.attributes.position.needsUpdate=true;
+      particles.position.y = -sN*4;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Return cleanup
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('mousemove', onMouse);
+      window.removeEventListener('resize', onResize);
+      renderer.dispose();
+    };
+  };
+
+  // Setup scroll nav, reveal animations
+  useEffect(() => {
+    // Nav scroll
+    const nav = navRef.current;
+    const handleScroll = () => {
+      nav?.classList.toggle('scrolled', window.scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll);
+
+    // Reveal animations
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('[data-reveal]').forEach((el) => obs.observe(el));
+
+    // Smooth scroll for hash links
+    const handleHashClick = (e: Event) => {
+      const anchor = (e.currentTarget as HTMLAnchorElement);
+      const href = anchor.getAttribute('href');
+      if (href?.startsWith('#')) {
+        e.preventDefault();
+        const target = document.querySelector(href);
+        target?.scrollIntoView({ behavior: 'smooth' });
+      }
+    };
+    const hashLinks = document.querySelectorAll('a[href^="#"]');
+    hashLinks.forEach((a) => a.addEventListener('click', handleHashClick));
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      obs.disconnect();
+      hashLinks.forEach((a) => a.removeEventListener('click', handleHashClick));
+    };
+  }, []);
+
+  // Three.js cleanup ref
+  const cleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => { cleanupRef.current?.(); };
+  }, []);
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: landingCSS }} />
+
+      <Script
+        src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+        strategy="afterInteractive"
+        onLoad={() => {
+          const cleanup = initThree();
+          if (cleanup) cleanupRef.current = cleanup;
+        }}
+      />
+
+      <canvas ref={canvasRef} id="three-canvas" />
+
+      <div className="page-content">
+        {/* Nav */}
+        <nav className="nav" ref={navRef}>
+          <div className="nav-inner">
+            <div className="nav-logo">Call<span>wen</span></div>
+            <div className="nav-links">
+              <a href="#features">Features</a>
+              <a href="#pricing">Pricing</a>
+              <a href="#founder">About</a>
+              <Link href="/sign-in" className="nav-cta">Get started</Link>
+            </div>
+          </div>
+        </nav>
+
+        {/* Hero */}
+        <section className="splash">
+          <div className="hero-badge"><span className="pulse" /> Built by a CPA, for CPAs</div>
+          <h1>Your documents,<br /><em>finally</em> answering<br />your questions.</h1>
+          <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get source-cited, confidence-scored answers in seconds.</p>
+          <div className="hero-buttons">
+            <Link href="/sign-in" className="btn btn-primary">
+              Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+            </Link>
+            <a href="#features" className="btn btn-ghost">See how it works</a>
+          </div>
+          <div className="rule" />
+          <div className="scroll-hint">Explore</div>
+        </section>
+
+        {/* Feature sections */}
+        <div className="sections" id="features">
+          <div className="section left" data-reveal>
+            <div className="number">01</div>
+            <div className="content">
+              <h2>Every document,<br /><em>one place</em></h2>
+              <p>Tax returns, engagement letters, meeting recordings, emails — drop them in and they&apos;re instantly indexed. Callwen reads PDFs, audio, video, and spreadsheets so you don&apos;t have to dig through folders ever again.</p>
+              <span className="tag">Upload · Index · Organize</span>
+            </div>
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-docs">
+                <div className="doc-stack">
+                  <div className="doc-page"><div className="lines"><span /><span /><span /><span /><span /></div></div>
+                  <div className="doc-page"><div className="lines"><span /><span /><span /><span /><span /></div></div>
+                  <div className="doc-page"><div className="lines"><span /><span /><span /><span /><span /></div></div>
+                </div>
+                <div className="doc-arrow">→</div>
+                <div className="doc-result">
+                  <svg viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="section right" data-reveal>
+            <div className="number">02</div>
+            <div className="content">
+              <h2>Ask questions,<br />get <em>real answers</em></h2>
+              <p>Not generic summaries. Callwen gives you source-cited responses with confidence scores and page references. When you tell a client &quot;the answer is on page 4,&quot; you know it&apos;s on page 4.</p>
+              <span className="tag">AI · Source citations · Confidence</span>
+            </div>
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-chat">
+                <div className="chat-bubble user">What was the Johnsons&apos; AGI for 2024?</div>
+                <div className="chat-bubble ai">
+                  Based on Form 1040, line 11, the AGI was <strong>$187,432</strong> — up 12% from 2023.
+                  <div className="chat-conf">• 94% confidence · Page 1</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="section left" data-reveal>
+            <div className="number">03</div>
+            <div className="content">
+              <h2>7216 compliance,<br /><em>built in</em></h2>
+              <p>Tax documents are auto-detected. Consent forms with mandatory IRS language are generated in one click. E-signatures, expiration tracking, and smart alerts.</p>
+              <span className="tag">IRC §7216 · Auto-detection · E-sign</span>
+            </div>
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-shield">
+                <div className="shield-icon">
+                  <svg viewBox="0 0 80 90">
+                    <path d="M40 5 L75 20 L75 50 C75 70 40 85 40 85 C40 85 5 70 5 50 L5 20 Z"/>
+                    <path d="M28 45 L36 53 L54 35" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div className="shield-badge">§7216 Compliant</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="section right" data-reveal>
+            <div className="number">04</div>
+            <div className="content">
+              <h2>Your firm,<br /><em>one workspace</em></h2>
+              <p>Assign team members to clients. Share documents without sharing logins. Role-based access means associates see what they need, and partners see everything.</p>
+              <span className="tag">Teams · Client allocation · Roles</span>
+            </div>
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-team">
+                <div className="team-avatar">SV</div>
+                <div className="team-avatar">JM</div>
+                <div className="team-avatar">KL</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Comparison */}
+        <div className="comparison-strip" data-reveal>
+          <div className="comparison-inner">
+            <p className="overline">Why Callwen</p>
+            <h2>What generic tools miss</h2>
+            <div className="comp-grid">
+              <div className="comp-cell header">Generic tools</div>
+              <div className="comp-cell header callwen">Callwen</div>
+              <div className="comp-cell"><div className="feat">AI document search</div><div className="val">No source citations</div></div>
+              <div className="comp-cell callwen"><div className="feat">AI document search</div><div className="val">Source-cited, confidence-scored</div></div>
+              <div className="comp-cell"><div className="feat">Tax document handling</div><div className="val">No awareness</div></div>
+              <div className="comp-cell callwen"><div className="feat">Tax document handling</div><div className="val">Auto-classification, 7216 consent</div></div>
+              <div className="comp-cell"><div className="feat">Meeting recordings</div><div className="val">Separate tool</div></div>
+              <div className="comp-cell callwen"><div className="feat">Meeting recordings</div><div className="val">Built-in transcription &amp; Q&amp;A</div></div>
+              <div className="comp-cell"><div className="feat">Email sync</div><div className="val">Separate tool</div></div>
+              <div className="comp-cell callwen"><div className="feat">Email sync</div><div className="val">Gmail, Outlook, Front built in</div></div>
+              <div className="comp-cell"><div className="feat">Who built it</div><div className="val">Engineers guessing</div></div>
+              <div className="comp-cell callwen"><div className="feat">Who built it</div><div className="val">A practicing CPA</div></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pricing */}
+        <section className="pricing" id="pricing">
+          <div className="pricing-inner">
+            <p className="overline" data-reveal>Pricing</p>
+            <h2 data-reveal>Plans that grow with your practice</h2>
+            <div className="price-grid" data-reveal>
+              <div className="p-card">
+                <div className="p-tier">Free</div>
+                <div className="p-price">$0 <span className="mo">/mo</span></div>
+                <div className="p-desc">Get started. No credit card.</div>
+                <ul className="p-list">
+                  <li>5 clients</li>
+                  <li>Unlimited documents</li>
+                  <li>50 AI queries/month</li>
+                  <li>GPT-4o-mini</li>
+                </ul>
+                <Link href="/sign-in" className="p-btn p-btn-ghost">Start free</Link>
+              </div>
+              <div className="p-card">
+                <div className="p-tier">Starter</div>
+                <div className="p-price">$99 <span className="mo">/mo</span></div>
+                <div className="p-desc">Solo practitioners getting organized.</div>
+                <ul className="p-list">
+                  <li>25 clients</li>
+                  <li>500 documents</li>
+                  <li>500 AI queries/month</li>
+                  <li>All integrations</li>
+                </ul>
+                <Link href="/sign-in" className="p-btn p-btn-ghost">Start trial</Link>
+              </div>
+              <div className="p-card featured">
+                <div className="p-tier">Professional</div>
+                <div className="p-price">$149 <span className="mo">/mo</span></div>
+                <div className="p-desc">Growing firms with 10+ clients.</div>
+                <ul className="p-list">
+                  <li>100 clients</li>
+                  <li>5,000 documents</li>
+                  <li>Claude deep analysis</li>
+                  <li>Smart alerts + compliance</li>
+                </ul>
+                <Link href="/sign-in" className="p-btn p-btn-primary">Start trial</Link>
+              </div>
+              <div className="p-card">
+                <div className="p-tier">Firm</div>
+                <div className="p-price">$349 <span className="mo">/mo</span></div>
+                <div className="p-desc">$349 base (3 seats) + $79/seat.</div>
+                <ul className="p-list">
+                  <li>Unlimited everything</li>
+                  <li>All AI models</li>
+                  <li>Dedicated onboarding</li>
+                  <li>Client allocation</li>
+                </ul>
+                <Link href="/sign-in" className="p-btn p-btn-ghost">Contact us</Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Founder */}
+        <div className="founder" id="founder" data-reveal>
+          <div className="founder-inner">
+            <div className="founder-avatar">SV</div>
+            <blockquote>&ldquo;I built Callwen because every tool I tried was built by engineers who&apos;d never prepared a tax return. I needed something that understood how a CPA actually works — by client, by document, by deadline.&rdquo;</blockquote>
+            <cite><strong>Samuel Vortiz</strong> Founder &amp; CPA</cite>
+          </div>
+        </div>
+
+        {/* Final CTA */}
+        <div className="finale">
+          <p className="overline" data-reveal>Ready?</p>
+          <h2 data-reveal>Stop searching.<br />Start <em>advising.</em></h2>
+          <p data-reveal>Free tier includes 5 clients and unlimited documents. No credit card required. Set up in under two minutes.</p>
+          <Link href="/sign-in" className="cta-btn" data-reveal>
+            Get started for free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </Link>
+          <p className="trust" data-reveal><span>★★★★★</span>&ensp; Built by a CPA, for CPAs</p>
+        </div>
+
+        {/* Footer */}
+        <footer>
+          <div className="foot-inner">
+            <div className="foot-copy">© 2026 Callwen. All rights reserved.</div>
+            <div className="foot-links">
+              <Link href="/privacy">Privacy</Link>
+              <Link href="/terms">Terms</Link>
+              <a href="mailto:support@callwen.com">Contact</a>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </>
+  );
+}
+
+/* ─── CSS ─── */
+const landingCSS = `
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg-deep: #0c0e13;--bg-mid: #12151c;--bg-surface: #181c25;--bg-card: #1e222e;
+  --accent: #c9944a;--accent-light: #e8b06a;--accent-glow: rgba(201,148,74,0.08);
+  --teal: #5bb8af;--teal-dim: rgba(91,184,175,0.15);
+  --white: #f0ede6;--white-dim: #8a8680;--white-faint: #4a4744;
+  --serif: 'Cormorant Garamond', Georgia, serif;
+  --sans: 'Outfit', -apple-system, sans-serif;
+}
+html { scroll-behavior: smooth; }
+body { background: var(--bg-deep); color: var(--white); font-family: var(--sans); font-weight: 300; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+::selection { background: var(--accent); color: var(--bg-deep); }
+#three-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.page-content { position: relative; z-index: 1; }
+
+.nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 20px 0; transition: all 0.5s cubic-bezier(0.4,0,0.2,1); }
+.nav.scrolled { background: rgba(12,14,19,0.88); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); padding: 14px 0; border-bottom: 1px solid rgba(201,148,74,0.08); }
+.nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; }
+.nav-logo { font-family: var(--serif); font-size: 1.5rem; font-weight: 600; color: var(--white); }
+.nav-logo span { color: var(--accent); }
+.nav-links { display: flex; align-items: center; gap: 2rem; }
+.nav-links a { font-size: 0.85rem; font-weight: 400; color: var(--white-dim); text-decoration: none; letter-spacing: 0.04em; transition: color 0.25s; }
+.nav-links a:hover { color: var(--white); }
+.nav-cta { padding: 10px 24px !important; background: var(--accent) !important; color: var(--bg-deep) !important; font-weight: 500 !important; border-radius: 6px; transition: all 0.25s !important; }
+.nav-cta:hover { background: var(--accent-light) !important; transform: translateY(-1px); }
+
+.splash { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; padding: 0 2rem; }
+.hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 18px; border-radius: 99px; font-size: 0.78rem; font-weight: 500; background: var(--accent-glow); color: var(--accent-light); border: 1px solid rgba(201,148,74,0.18); margin-bottom: 2.5rem; opacity: 0; animation: fadeUp 0.8s 0.3s forwards; backdrop-filter: blur(8px); }
+.hero-badge .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulseAnim 2s ease infinite; }
+@keyframes pulseAnim { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.6)} }
+.splash h1 { font-family: var(--serif); font-size: clamp(3rem,8vw,6.5rem); font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 0.8s 0.45s forwards; }
+.splash h1 em { font-style: italic; color: var(--accent-light); }
+.splash .subtitle { font-size: clamp(1rem,2vw,1.2rem); font-weight: 300; color: var(--white-dim); max-width: 520px; line-height: 1.7; margin: 0 auto; opacity: 0; animation: fadeUp 0.8s 0.6s forwards; }
+.hero-buttons { display: flex; gap: 12px; justify-content: center; margin-top: 2.5rem; opacity: 0; animation: fadeUp 0.8s 0.75s forwards; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 8px; font-family: var(--sans); font-size: 0.9rem; font-weight: 500; border: none; cursor: pointer; text-decoration: none; transition: all 0.25s ease; }
+.btn-primary { background: var(--accent); color: var(--bg-deep); }
+.btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); box-shadow: 0 8px 40px rgba(201,148,74,0.25); }
+.btn-ghost { background: rgba(255,255,255,0.04); color: var(--white); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(4px); }
+.btn-ghost:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); }
+.btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.splash .rule { width: 50px; height: 1px; background: var(--accent); margin: 2.5rem auto 0; opacity: 0; animation: fadeUp 0.8s 0.9s forwards; }
+.scroll-hint { position: absolute; bottom: 2.5rem; font-size: 0.7rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--white-faint); opacity: 0; animation: fadeUp 0.8s 1.1s forwards; }
+.scroll-hint::after { content: ''; display: block; width: 1px; height: 36px; background: var(--accent); margin: 0.6rem auto 0; animation: scrollPulse 2s ease-in-out infinite; }
+@keyframes scrollPulse { 0%,100%{opacity:0.2;transform:scaleY(0.5)} 50%{opacity:0.8;transform:scaleY(1)} }
+@keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+[data-reveal] { opacity: 0; transform: translateY(30px); transition: opacity 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1); }
+[data-reveal].visible { opacity: 1; transform: translateY(0); }
+
+.sections { max-width: 1200px; margin: 0 auto; }
+.section { min-height: 100vh; display: flex; align-items: center; justify-content: flex-start; gap: 4rem; padding: 6rem 2rem; }
+.section.right { flex-direction: row-reverse; text-align: right; }
+.section .number { font-family: var(--serif); font-size: clamp(5rem,10vw,9rem); font-weight: 700; color: var(--accent); opacity: 0.12; line-height: 1; flex-shrink: 0; }
+.section .content { max-width: 560px; }
+.section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3.2rem); font-weight: 400; margin-bottom: 1.5rem; line-height: 1.1; }
+.section h2 em { font-style: italic; color: var(--accent-light); }
+.section p { font-size: clamp(0.95rem,1.5vw,1.1rem); line-height: 1.8; color: var(--white-dim); font-weight: 300; }
+.section .tag { display: inline-block; margin-top: 1.5rem; font-size: 0.68rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--teal); border: 1px solid var(--teal-dim); padding: 0.5em 1.2em; border-radius: 3px; }
+
+.section-visual { flex-shrink: 0; width: 340px; height: 230px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.04); background: rgba(18,21,28,0.7); backdrop-filter: blur(12px); position: relative; overflow: hidden; }
+.section-visual::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(201,148,74,0.04) 0%, transparent 60%); }
+.vis-docs { display: flex; align-items: center; justify-content: center; height: 100%; padding: 30px; }
+.doc-stack { position: relative; width: 120px; height: 150px; }
+.doc-page { position: absolute; width: 100px; height: 130px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06); }
+.doc-page:nth-child(1) { background: var(--bg-card); top: 0; left: 0; transform: rotate(-6deg); }
+.doc-page:nth-child(2) { background: var(--bg-surface); top: 4px; left: 8px; transform: rotate(-2deg); }
+.doc-page:nth-child(3) { background: rgba(30,34,46,0.9); top: 8px; left: 16px; transform: rotate(2deg); border-color: rgba(201,148,74,0.2); }
+.doc-page .lines { padding: 12px; }
+.doc-page .lines span { display: block; height: 3px; border-radius: 1px; margin-bottom: 6px; opacity: 0.15; }
+.doc-page .lines span:nth-child(1) { width: 60%; background: var(--accent); opacity: 0.3; }
+.doc-page .lines span:nth-child(2) { width: 80%; background: var(--white); }
+.doc-page .lines span:nth-child(3) { width: 45%; background: var(--white); }
+.doc-page .lines span:nth-child(4) { width: 70%; background: var(--white); }
+.doc-page .lines span:nth-child(5) { width: 55%; background: var(--white); }
+.doc-arrow { position: absolute; right: -40px; top: 50%; transform: translateY(-50%); color: var(--accent); opacity: 0.5; font-size: 1.2rem; }
+.doc-result { position: absolute; right: -90px; top: 50%; transform: translateY(-50%); width: 70px; height: 70px; border-radius: 50%; background: var(--accent-glow); border: 1px solid rgba(201,148,74,0.2); display: flex; align-items: center; justify-content: center; }
+.doc-result svg { width: 24px; height: 24px; stroke: var(--accent); fill: none; stroke-width: 1.5; }
+.vis-chat { display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 24px; gap: 10px; }
+.chat-bubble { padding: 10px 14px; border-radius: 10px; font-size: 0.72rem; line-height: 1.5; max-width: 85%; }
+.chat-bubble.user { align-self: flex-end; background: var(--accent); color: var(--bg-deep); border-bottom-right-radius: 3px; font-weight: 500; }
+.chat-bubble.ai { align-self: flex-start; background: var(--bg-card); color: var(--white); border-bottom-left-radius: 3px; }
+.chat-conf { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 0.62rem; padding: 2px 6px; border-radius: 3px; background: var(--teal-dim); color: var(--teal); }
+.vis-shield { display: flex; align-items: center; justify-content: center; height: 100%; }
+.shield-icon { width: 80px; height: 90px; position: relative; }
+.shield-icon svg { width: 100%; height: 100%; stroke: var(--teal); fill: none; stroke-width: 1; opacity: 0.6; }
+.shield-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--teal); white-space: nowrap; opacity: 0.7; }
+.vis-team { display: flex; align-items: center; justify-content: center; height: 100%; gap: 12px; }
+.team-avatar { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 500; border: 2px solid rgba(18,21,28,0.8); }
+.team-avatar:nth-child(1) { background: rgba(201,148,74,0.2); color: var(--accent-light); margin-right: -8px; z-index: 3; }
+.team-avatar:nth-child(2) { background: rgba(91,184,175,0.2); color: var(--teal); margin-right: -8px; z-index: 2; }
+.team-avatar:nth-child(3) { background: rgba(139,123,245,0.2); color: #a99bf5; z-index: 1; }
+
+.comparison-strip { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); background: rgba(12,14,19,0.6); backdrop-filter: blur(8px); }
+.comparison-inner { max-width: 900px; margin: 0 auto; text-align: center; }
+.comparison-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.comparison-strip h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; line-height: 1.15; margin-bottom: 3.5rem; }
+.comp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
+.comp-cell { padding: 2rem 2.5rem; background: rgba(18,21,28,0.8); text-align: left; }
+.comp-cell.header { background: rgba(24,28,37,0.9); font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); padding: 1.2rem 2.5rem; }
+.comp-cell.header.callwen { color: var(--accent-light); }
+.comp-cell .feat { font-size: 0.9rem; color: var(--white-dim); margin-bottom: 0.3rem; }
+.comp-cell .val { font-size: 0.78rem; color: var(--white-faint); }
+.comp-cell.callwen .feat { color: var(--white); }
+.comp-cell.callwen .val { color: var(--accent); font-weight: 500; }
+
+.pricing { padding: 8rem 2rem; }
+.pricing-inner { max-width: 1100px; margin: 0 auto; text-align: center; }
+.pricing .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.pricing h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
+.price-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
+.p-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 2.5rem 2rem; text-align: left; display: flex; flex-direction: column; position: relative; }
+.p-card.featured { background: rgba(24,28,37,0.9); border-top: 2px solid var(--accent); }
+.p-card.featured::before { content: 'Most popular'; position: absolute; top: -2px; left: 50%; transform: translate(-50%,-100%); font-size: 0.65rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--bg-deep); background: var(--accent); padding: 4px 14px; border-radius: 4px 4px 0 0; }
+.p-tier { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); margin-bottom: 1rem; }
+.p-price { font-family: var(--serif); font-size: 2.8rem; font-weight: 600; margin-bottom: 0.3rem; }
+.p-price .mo { font-size: 0.9rem; font-weight: 300; color: var(--white-dim); font-family: var(--sans); }
+.p-desc { font-size: 0.82rem; color: var(--white-dim); margin-bottom: 1.8rem; line-height: 1.5; }
+.p-list { list-style: none; margin-bottom: 2rem; flex: 1; }
+.p-list li { font-size: 0.82rem; color: var(--white-dim); padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.03); position: relative; padding-left: 1.2rem; }
+.p-list li::before { content: '·'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+.p-btn { display: block; text-align: center; padding: 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 500; text-decoration: none; transition: all 0.25s; }
+.p-btn-primary { background: var(--accent); color: var(--bg-deep); }
+.p-btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); }
+.p-btn-ghost { background: rgba(255,255,255,0.04); color: var(--white); border: 1px solid rgba(255,255,255,0.08); }
+.p-btn-ghost:hover { background: rgba(255,255,255,0.08); }
+
+.founder { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.founder-inner { max-width: 700px; margin: 0 auto; text-align: center; }
+.founder-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--accent-glow); border: 2px solid rgba(201,148,74,0.2); display: flex; align-items: center; justify-content: center; margin: 0 auto 2rem; font-family: var(--serif); font-size: 1.3rem; color: var(--accent-light); }
+.founder blockquote { font-family: var(--serif); font-size: clamp(1.2rem,2.5vw,1.6rem); font-style: italic; line-height: 1.6; color: var(--white); margin-bottom: 1.5rem; opacity: 0.9; }
+.founder cite { font-style: normal; font-family: var(--sans); font-size: 0.85rem; color: var(--white-dim); }
+.founder cite strong { display: block; font-weight: 500; color: var(--white); margin-bottom: 2px; }
+
+.finale { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem; }
+.finale .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
+.finale h2 { font-family: var(--serif); font-size: clamp(2.5rem,6vw,4.5rem); font-weight: 400; line-height: 1.1; margin-bottom: 1.5rem; }
+.finale h2 em { font-style: italic; color: var(--accent-light); }
+.finale p { max-width: 480px; margin: 0 auto; font-size: 1.05rem; line-height: 1.7; color: var(--white-dim); font-weight: 300; }
+.finale .cta-btn { display: inline-flex; align-items: center; gap: 10px; margin-top: 2.5rem; padding: 16px 36px; font-family: var(--sans); font-size: 0.9rem; font-weight: 500; color: var(--bg-deep); background: var(--accent); border: none; border-radius: 8px; cursor: pointer; text-decoration: none; transition: all 0.3s ease; }
+.finale .cta-btn:hover { background: var(--accent-light); transform: translateY(-2px); box-shadow: 0 12px 48px rgba(201,148,74,0.25); }
+.finale .cta-btn svg { width: 16px; height: 16px; }
+.finale .trust { margin-top: 1.5rem; font-size: 0.78rem; color: var(--white-faint); }
+.finale .trust span { color: var(--accent); }
+
+footer { padding: 2.5rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); background: rgba(12,14,19,0.8); }
+.foot-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+.foot-copy { font-size: 0.78rem; color: var(--white-faint); }
+.foot-links { display: flex; gap: 1.5rem; }
+.foot-links a { font-size: 0.78rem; color: var(--white-faint); text-decoration: none; transition: color 0.2s; }
+.foot-links a:hover { color: var(--white-dim); }
+
+@media (max-width:900px) {
+  .section { flex-direction: column !important; text-align: left !important; gap: 2rem; min-height: auto; padding: 5rem 1.5rem; }
+  .section .number { font-size: 4rem; align-self: flex-start; }
+  .section-visual { width: 100%; max-width: 360px; }
+  .comp-grid { grid-template-columns: 1fr; }
+  .price-grid { grid-template-columns: 1fr 1fr; }
+  .nav-links a:not(.nav-cta) { display: none; }
+}
+@media (max-width:600px) {
+  .price-grid { grid-template-columns: 1fr; }
+  .hero-buttons { flex-direction: column; align-items: center; }
+  .foot-inner { flex-direction: column; gap: 1rem; text-align: center; }
+}
+`;

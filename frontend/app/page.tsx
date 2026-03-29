@@ -1,12 +1,13 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
+import LandingPage from '@/components/landing/LandingPage';
 
-export default async function HomePage() {
+export default async function Home() {
   const { userId } = await auth();
 
   if (userId) {
-    redirect("/dashboard");
-  } else {
-    redirect("/sign-in");
+    redirect('/dashboard');
   }
+
+  return <LandingPage />;
 }
