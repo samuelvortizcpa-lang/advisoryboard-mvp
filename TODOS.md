@@ -13,7 +13,7 @@ Last updated: 2026-03-28
 - [ ] H2: Upgrade Next.js 14 → 15.5.14+ (7 known CVEs including SSRF, request smuggling, DoS)
 - [x] H3: Briefs router auth — already fixed in Sprint 1; alerts router migrated to org-aware auth
 - [x] H4: Consent signing token brute-force — rate limiting + enumeration protection added
-- [ ] H5/H6: Add missing indexes on organization_members.user_id, org_id; client_access.client_id, user_id
+- [x] H5/H6: Add missing indexes — org_members/client_access (af15d3a) + 6 more perf indexes
 - [ ] H7: N+1 query in alerts_service.compute_alerts() — batch the per-client queries
 - [ ] H8: Silent exception swallowing in document backfill (`except Exception: pass`)
 
