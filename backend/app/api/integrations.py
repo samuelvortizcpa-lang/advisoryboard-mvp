@@ -398,14 +398,16 @@ async def front_connect_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Front API token",
             )
+        logger.error("Front API error: %s", exc.response.status_code)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Front API error: {exc.response.status_code}",
+            detail="Front API returned an error",
         )
     except httpx.RequestError as exc:
+        logger.error("Could not reach Front API: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not reach Front API: {exc}",
+            detail="Could not reach Front API",
         )
 
     # Store org_id on the connection

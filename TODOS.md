@@ -21,7 +21,7 @@ Last updated: 2026-03-28
 - [x] M1: Admin API key timing attack — use hmac.compare_digest()
 - [x] M2: JWT audience (aud) verification disabled
 - [x] M3: §7216 consent enforcement — AI processing blocked until consent obtained
-- [ ] M4: Localhost CORS origins in production
+- [x] M4: Localhost CORS origins in production
 - [x] M5: Unsanitized filename in Content-Disposition headers
 - [ ] M6: Client types not org-scoped
 - [ ] M7: Untyped org settings dict — no schema validation

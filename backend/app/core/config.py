@@ -116,11 +116,15 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         """
-        Combined CORS origin list: always includes localhost dev origins plus
-        any extra origins from the ALLOWED_ORIGINS env var.
+        Combined CORS origin list.
+
+        In development: includes localhost dev origins.
+        In production: only origins from ALLOWED_ORIGINS env var.
         """
-        dev = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"]
         extra = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        if self.environment == "production":
+            return extra
+        dev = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"]
         seen: set[str] = set()
         result: list[str] = []
         for origin in dev + extra:
