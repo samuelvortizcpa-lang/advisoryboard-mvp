@@ -241,6 +241,25 @@ async def process_document(db: Session, document: Document) -> None:
                 doc_label, cls_exc,
             )
 
+        # 1c. §7216 consent gate — skip embedding for tax docs without consent
+        client_obj = db.query(Client).filter(Client.id == document.client_id).first()
+        if (
+            client_obj
+            and client_obj.has_tax_documents
+            and client_obj.consent_status not in ("obtained", "acknowledged", "not_required")
+        ):
+            document.processed = False
+            document.processing_error = (
+                "Awaiting IRC §7216 consent — document will be processed "
+                "automatically when consent is obtained."
+            )
+            db.commit()
+            logger.info(
+                "RAG: skipping embedding for %s — consent status is %r",
+                doc_label, client_obj.consent_status,
+            )
+            return
+
         # 2. Chunk (use smaller chunks for financial documents)
         chunk_size, chunk_overlap = get_chunk_params(document.document_type)
         chunks = await asyncio.to_thread(chunk_text, text, chunk_size, chunk_overlap)

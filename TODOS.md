@@ -20,7 +20,7 @@ Last updated: 2026-03-28
 ### MEDIUM — Open
 - [ ] M1: Admin API key timing attack — use hmac.compare_digest()
 - [ ] M2: JWT audience (aud) verification disabled
-- [ ] M3: Consent status/type accepts arbitrary strings — §7216 compliance risk
+- [x] M3: §7216 consent enforcement — AI processing blocked until consent obtained
 - [ ] M4: Localhost CORS origins in production
 - [ ] M5: Unsanitized filename in Content-Disposition headers
 - [ ] M6: Client types not org-scoped

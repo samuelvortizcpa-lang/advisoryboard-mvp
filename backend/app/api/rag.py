@@ -57,6 +57,49 @@ def _require_client(db: Session, client_id: UUID, auth: AuthContext) -> Client:
 
 
 # ---------------------------------------------------------------------------
+# IRC §7216 consent enforcement
+# ---------------------------------------------------------------------------
+
+# Consent statuses that permit AI processing of tax data
+_CONSENT_ALLOWED = frozenset({"obtained", "acknowledged", "not_required"})
+
+
+def _require_consent_for_ai(client: Client, auth: AuthContext, db: Session) -> None:
+    """
+    Block AI processing when a client has tax documents and consent is
+    missing, pending, or expired.  Must be called AFTER _require_client
+    and BEFORE any embedding query or LLM API call.
+    """
+    if not client.has_tax_documents:
+        return
+
+    if client.consent_status in _CONSENT_ALLOWED:
+        # "obtained" could still be expired — verify expiration
+        if client.consent_status == "obtained":
+            from app.services.consent_service import get_consent_status
+            info = get_consent_status(client.id, auth.user_id, db)
+            if info.get("is_expired"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "IRC §7216 consent has expired for this client. "
+                        "Tax return data cannot be processed until consent is renewed. "
+                        "Please send a new consent form from the Compliance tab."
+                    ),
+                )
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "IRC §7216 consent required. This client has tax documents that "
+            "require signed consent before AI processing is permitted. "
+            "Please obtain consent from the Compliance tab."
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Pydantic schemas (local, route-level)
 # ---------------------------------------------------------------------------
 
@@ -264,7 +307,8 @@ async def semantic_search(
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> SearchResponse:
-    _require_client(db, client_id, auth)
+    client = _require_client(db, client_id, auth)
+    _require_consent_for_ai(client, auth, db)
 
     if not request.query.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Query cannot be empty.")
@@ -302,7 +346,8 @@ async def chat(
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ChatResponse:
-    _require_client(db, client_id, auth)
+    client = _require_client(db, client_id, auth)
+    _require_consent_for_ai(client, auth, db)
 
     if not request.question.strip():
         raise HTTPException(
@@ -401,7 +446,8 @@ async def chat_stream(
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> StreamingResponse:
-    _require_client(db, client_id, auth)
+    client = _require_client(db, client_id, auth)
+    _require_consent_for_ai(client, auth, db)
 
     if not request.question.strip():
         raise HTTPException(
@@ -445,7 +491,8 @@ async def compare_documents(
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> CompareResponse:
-    _require_client(db, client_id, auth)
+    client = _require_client(db, client_id, auth)
+    _require_consent_for_ai(client, auth, db)
 
     if len(request.document_ids) < 2:
         raise HTTPException(

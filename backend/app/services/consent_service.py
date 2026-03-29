@@ -286,6 +286,34 @@ def record_advisory_acknowledgment(
         client_id, user_id,
     )
 
+    # Reprocess any consent-blocked documents now that acknowledgment is recorded
+    try:
+        from app.models.document import Document
+        blocked_docs = (
+            db.query(Document)
+            .filter(
+                Document.client_id == client_id,
+                Document.processed == False,  # noqa: E712
+                Document.processing_error.ilike("%awaiting IRC §7216 consent%"),
+            )
+            .all()
+        )
+        if blocked_docs:
+            from app.services.rag_service import process_document_task
+            import asyncio
+            for doc in blocked_docs:
+                doc.processing_error = None
+                asyncio.get_event_loop().create_task(process_document_task(doc.id))
+            db.commit()
+            logger.info(
+                "Advisory ack: queued %d blocked document(s) for reprocessing (client=%s)",
+                len(blocked_docs), client_id,
+            )
+    except Exception as reprocess_exc:
+        logger.warning(
+            "Failed to queue consent-blocked docs for reprocessing: %s", reprocess_exc,
+        )
+
     return record
 
 
@@ -802,6 +830,34 @@ def complete_signing(
 
     db.commit()
     db.refresh(record)
+
+    # Reprocess any consent-blocked documents now that consent is obtained
+    try:
+        from app.models.document import Document
+        blocked_docs = (
+            db.query(Document)
+            .filter(
+                Document.client_id == record.client_id,
+                Document.processed == False,  # noqa: E712
+                Document.processing_error.ilike("%awaiting IRC §7216 consent%"),
+            )
+            .all()
+        )
+        if blocked_docs:
+            from app.services.rag_service import process_document_task
+            import asyncio
+            for doc in blocked_docs:
+                doc.processing_error = None
+                asyncio.get_event_loop().create_task(process_document_task(doc.id))
+            db.commit()
+            logger.info(
+                "Consent obtained: queued %d blocked document(s) for reprocessing (client=%s)",
+                len(blocked_docs), record.client_id,
+            )
+    except Exception as reprocess_exc:
+        logger.warning(
+            "Failed to queue consent-blocked docs for reprocessing: %s", reprocess_exc,
+        )
 
     # Generate signed PDF
     try:

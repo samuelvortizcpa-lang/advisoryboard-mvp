@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.client import Client
 from app.models.client_brief import ClientBrief
 from app.services.auth_context import AuthContext, check_client_access, get_auth
 
@@ -56,6 +57,12 @@ async def generate_brief(
     auth: AuthContext = Depends(get_auth),
 ) -> BriefResponse:
     check_client_access(auth, client_id, db)
+
+    # IRC §7216: block brief generation if consent is missing for tax data
+    from app.api.rag import _require_consent_for_ai
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if client:
+        _require_consent_for_ai(client, auth, db)
 
     from app.services.brief_generator import generate_brief as _generate
 
