@@ -1,3 +1,6 @@
+# gstack session data
+.context/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

@@ -114,7 +114,7 @@ advisoryboard-mvp-code/
 - Deploy status command: `make health`
 - Merge method: direct push to main
 - Project type: web app (SPA frontend + API backend)
-- Post-deploy health check: `curl -sf https://callwen.com/api/health && curl -sf https://callwen-backend-production.up.railway.app/health`
+- Post-deploy health check: `curl -sf https://callwen.com/api/health && curl -sf https://advisoryboard-mvp-production.up.railway.app/health`
 
 ### Deploy pipeline
 - Pre-merge: `make check` (lint + typecheck + test)
