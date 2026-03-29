@@ -73,7 +73,7 @@ const PRICING: {
     features: [
       "25 clients",
       "Unlimited documents",
-      "GPT-4o-mini only",
+      "Standard AI",
       "500MB storage",
     ],
   },
@@ -85,8 +85,8 @@ const PRICING: {
     features: [
       "100 clients",
       "Unlimited documents",
-      "100 strategic queries/mo",
-      "10 Opus queries/mo",
+      "100 AI queries/mo",
+      "10 deep analysis queries/mo",
       "5GB storage",
     ],
   },
@@ -98,8 +98,8 @@ const PRICING: {
     features: [
       "Unlimited clients",
       "Unlimited documents",
-      "500 strategic queries/mo",
-      "50 Opus queries/mo",
+      "500 AI queries/mo",
+      "50 deep analysis queries/mo",
       "25GB storage",
     ],
   },
@@ -336,7 +336,7 @@ export default function SubscriptionManagementPage() {
               />
               {(currentTier === "professional" || currentTier === "firm") && (
                 <UsageBar
-                  label="Opus Queries"
+                  label="Deep Analysis"
                   current={0}
                   limit={currentTier === "professional" ? 10 : 50}
                   suffix="this billing period"
@@ -600,7 +600,7 @@ export default function SubscriptionManagementPage() {
                   <tr className="border-b border-gray-100 text-xs font-medium uppercase tracking-wide text-gray-400">
                     <th className="px-5 py-3">User</th>
                     <th className="px-5 py-3">Tier</th>
-                    <th className="px-5 py-3">Strategic Queries</th>
+                    <th className="px-5 py-3">AI Queries</th>
                     <th className="px-5 py-3">Billing Period</th>
                     <th className="px-5 py-3">Actions</th>
                   </tr>

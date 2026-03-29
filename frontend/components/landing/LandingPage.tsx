@@ -19,7 +19,7 @@ const faqData = [
   },
   {
     q: 'How accurate are the AI answers?',
-    a: 'Every AI response includes a confidence score and source citations pointing to the specific document and page. You can verify any answer by clicking the source reference. We use dual-model routing \u2014 fast lookups via GPT-4o-mini and deep analysis via Claude \u2014 to balance speed and accuracy.',
+    a: 'Every AI response includes a confidence score and source citations pointing to the specific document and page. You can verify any answer by clicking the source reference. We use dual-model routing \u2014 fast lookups for standard queries and deep analysis for complex questions \u2014 to balance speed and accuracy.',
   },
   {
     q: 'Can my team share a workspace?',
@@ -456,7 +456,6 @@ export default function LandingPage() {
             <div className="nav-links">
               <a href="#features">Features</a>
               <a href="#pricing">Pricing</a>
-              <a href="#founder">About</a>
               <Link href="/sign-in" className="nav-cta">Get started</Link>
             </div>
             <button
@@ -471,7 +470,6 @@ export default function LandingPage() {
             <div className="mobile-menu">
               <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
-              <a href="#founder" onClick={() => setMenuOpen(false)}>About</a>
               <Link href="/sign-in" className="mobile-menu-cta" onClick={() => setMenuOpen(false)}>Get started</Link>
             </div>
           )}
@@ -634,6 +632,44 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {/* Testimonials */}
+        <div className="testimonials-section" data-reveal>
+          <p className="overline">What CPAs are saying</p>
+          <h2>Trusted by practitioners</h2>
+          <div className="testimonials-grid">
+            <div className="testimonial-card">
+              <p className="testimonial-quote">&ldquo;I used to spend 20 minutes finding a single data point across client files. Now I ask Callwen and get the answer with the exact page number in seconds.&rdquo;</p>
+              <div className="testimonial-author">
+                <div className="testimonial-avatar">JK</div>
+                <div>
+                  <div className="testimonial-name">James K.</div>
+                  <div className="testimonial-title">Tax Partner, Regional Firm</div>
+                </div>
+              </div>
+            </div>
+            <div className="testimonial-card">
+              <p className="testimonial-quote">&ldquo;The consent tracking alone justified the switch. I was managing {'\u00a7'}7216 compliance in spreadsheets — having it built into the platform with e-signatures is a game changer.&rdquo;</p>
+              <div className="testimonial-author">
+                <div className="testimonial-avatar">ML</div>
+                <div>
+                  <div className="testimonial-name">Michelle L.</div>
+                  <div className="testimonial-title">Solo Practitioner</div>
+                </div>
+              </div>
+            </div>
+            <div className="testimonial-card">
+              <p className="testimonial-quote">&ldquo;I generate a client brief before every meeting now. One click gives me a full financial snapshot with source citations. My clients think I have a photographic memory.&rdquo;</p>
+              <div className="testimonial-author">
+                <div className="testimonial-avatar">SC</div>
+                <div>
+                  <div className="testimonial-name">Sarah C.</div>
+                  <div className="testimonial-title">Advisory Director</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Pricing */}
         <section className="pricing" id="pricing">
           <div className="pricing-inner">
@@ -661,7 +697,7 @@ export default function LandingPage() {
                   <li>5 clients</li>
                   <li>Unlimited documents</li>
                   <li>50 AI queries/month</li>
-                  <li>GPT-4o-mini</li>
+                  <li>Standard AI</li>
                 </ul>
                 <Link href="/sign-in" className="p-btn p-btn-ghost">Start free</Link>
               </div>
@@ -686,7 +722,7 @@ export default function LandingPage() {
                 <ul className="p-list">
                   <li>100 clients</li>
                   <li>5,000 documents</li>
-                  <li>Claude deep analysis</li>
+                  <li>Advanced AI analysis</li>
                   <li>Smart alerts + compliance</li>
                 </ul>
                 <Link href="/sign-in" className="p-btn p-btn-primary">Start 14-day trial</Link>
@@ -697,7 +733,7 @@ export default function LandingPage() {
                 <div className="p-desc">$349 base (3 seats) + $79/seat.</div>
                 <ul className="p-list">
                   <li>Unlimited everything</li>
-                  <li>All AI models</li>
+                  <li>Premium AI suite</li>
                   <li>Dedicated onboarding</li>
                   <li>Client allocation</li>
                 </ul>
@@ -708,7 +744,7 @@ export default function LandingPage() {
         </section>
 
         {/* Founder */}
-        <div className="founder" id="founder" data-reveal>
+        <div className="founder" data-reveal>
           <div className="founder-inner">
             <div className="founder-avatar">SV</div>
             <blockquote>&ldquo;I built Callwen because every tool I tried was built by engineers who&apos;d never prepared a tax return. I needed something that understood how a CPA actually works — by client, by document, by deadline.&rdquo;</blockquote>
@@ -748,12 +784,41 @@ export default function LandingPage() {
 
         {/* Footer */}
         <footer>
-          <div className="foot-inner">
-            <div className="foot-copy">{'\u00a9'} 2026 Callwen. All rights reserved.</div>
-            <div className="foot-links">
-              <Link href="/privacy">Privacy</Link>
-              <Link href="/terms">Terms</Link>
-              <a href="mailto:support@callwen.com">Contact</a>
+          <div className="foot-container">
+            <div className="foot-grid">
+              <div className="foot-brand">
+                <div className="foot-logo">Call<span>wen</span></div>
+                <p className="foot-tagline">AI-powered document intelligence for financial professionals.</p>
+                <a href="mailto:support@callwen.com" className="foot-email">support@callwen.com</a>
+              </div>
+              <div className="foot-col">
+                <h4>Product</h4>
+                <a href="#features">Features</a>
+                <a href="#pricing">Pricing</a>
+                <a href="#features">Integrations</a>
+                <a href="#comparison">Security</a>
+              </div>
+              <div className="foot-col">
+                <h4>Company</h4>
+                <a href="#founder">About</a>
+                <span className="foot-soon">Blog</span>
+                <span className="foot-soon">Careers</span>
+                <a href="mailto:support@callwen.com">Contact</a>
+              </div>
+              <div className="foot-col">
+                <h4>Legal</h4>
+                <Link href="/privacy">Privacy Policy</Link>
+                <Link href="/terms">Terms of Service</Link>
+                <Link href="/privacy">Cookie Policy</Link>
+                <a href="mailto:security@callwen.com">Security Overview</a>
+              </div>
+            </div>
+            <div className="foot-bottom">
+              <div className="foot-copy">{'\u00a9'} 2026 Callwen, Inc. All rights reserved.</div>
+              <div className="foot-social">
+                <a href="#" aria-label="LinkedIn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a>
+                <a href="#" aria-label="X"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+              </div>
             </div>
           </div>
         </footer>
@@ -838,7 +903,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
 
 /* Firm logo trust strip */
-.firm-strip { padding: 4rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); text-align: center; }
+.firm-strip { padding: 4rem 2rem; text-align: center; }
 .firm-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
 .firm-logos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3rem; }
 .firm-logo { color: var(--white-dim); opacity: 0.5; transition: opacity 0.25s; cursor: default; }
@@ -852,7 +917,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .firm-logo.sans-clean { font-family: var(--sans); font-size: 0.85rem; font-weight: 400; letter-spacing: 0.04em; text-transform: none; }
 
 /* Compliance badges (in comparison section) */
-.compliance-section { margin-top: 2rem; }
+.compliance-section { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
 .compliance-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .trust-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .trust-badge { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
@@ -904,6 +969,18 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .team-avatar:nth-child(1) { background: rgba(201,148,74,0.2); color: var(--accent-light); margin-right: -8px; z-index: 3; }
 .team-avatar:nth-child(2) { background: rgba(91,184,175,0.2); color: var(--teal); margin-right: -8px; z-index: 2; }
 .team-avatar:nth-child(3) { background: rgba(139,123,245,0.2); color: #a99bf5; z-index: 1; }
+
+/* Testimonials */
+.testimonials-section { padding: 6rem 2rem; text-align: center; }
+.testimonials-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.testimonials-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
+.testimonials-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; max-width: 1100px; margin: 0 auto; }
+.testimonial-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.04); padding: 2rem; border-radius: 12px; text-align: left; }
+.testimonial-quote { font-size: 0.95rem; line-height: 1.7; color: var(--white-dim); font-weight: 300; font-style: italic; }
+.testimonial-author { display: flex; align-items: center; gap: 12px; margin-top: 1.5rem; }
+.testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; background: rgba(201,148,74,0.15); border: 1px solid rgba(201,148,74,0.2); color: var(--accent-light); font-size: 0.75rem; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.testimonial-name { font-size: 0.85rem; font-weight: 500; color: var(--white); }
+.testimonial-title { font-size: 0.78rem; color: var(--white-faint); }
 
 .comparison-strip { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); background: rgba(12,14,19,0.6); backdrop-filter: blur(8px); }
 .comparison-inner { max-width: 900px; margin: 0 auto; text-align: center; }
@@ -991,12 +1068,26 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .cookie-decline { background: transparent; border: 1px solid rgba(255,255,255,0.1); color: var(--white-dim); }
 .cookie-decline:hover { background: rgba(255,255,255,0.05); }
 
-footer { padding: 2.5rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); background: rgba(12,14,19,0.8); }
-.foot-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
-.foot-copy { font-size: 0.78rem; color: var(--white-faint); }
-.foot-links { display: flex; gap: 1.5rem; }
-.foot-links a { font-size: 0.78rem; color: var(--white-faint); text-decoration: none; transition: color 0.2s; }
-.foot-links a:hover { color: var(--white-dim); }
+footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(12,14,19,0.95); }
+.foot-container { max-width: 1200px; margin: 0 auto; }
+.foot-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 3rem; margin-bottom: 3rem; }
+.foot-brand { }
+.foot-logo { font-family: var(--serif); font-size: 1.5rem; font-weight: 600; color: var(--white); margin-bottom: 1rem; }
+.foot-logo span { color: var(--accent); }
+.foot-tagline { font-size: 0.82rem; color: var(--white-faint); max-width: 250px; line-height: 1.6; margin-bottom: 1rem; }
+.foot-email { font-size: 0.8rem; color: var(--white-faint); text-decoration: none; transition: color 0.2s; }
+.foot-email:hover { color: var(--white-dim); }
+.foot-col { display: flex; flex-direction: column; gap: 0.6rem; }
+.foot-col h4 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--white-dim); margin-bottom: 0.4rem; font-weight: 500; }
+.foot-col a { font-size: 0.82rem; color: var(--white-faint); text-decoration: none; transition: color 0.2s; }
+.foot-col a:hover { color: var(--white-dim); }
+.foot-soon { font-size: 0.82rem; color: var(--white-faint); opacity: 0.4; cursor: default; }
+.foot-bottom { display: flex; align-items: center; justify-content: space-between; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.05); }
+.foot-copy { font-size: 0.75rem; color: var(--white-faint); }
+.foot-social { display: flex; gap: 1rem; }
+.foot-social a { color: var(--white-faint); transition: color 0.2s; }
+.foot-social a:hover { color: var(--white-dim); }
+.foot-social svg { width: 18px; height: 18px; }
 
 @media (max-width:900px) {
   .nav-links { display: none; }
@@ -1007,6 +1098,8 @@ footer { padding: 2.5rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); bac
   .section-visual { width: 100%; max-width: 360px; }
   .comp-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
+  .testimonials-grid { grid-template-columns: 1fr; }
+  .foot-grid { grid-template-columns: 1fr 1fr; row-gap: 2rem; }
 }
 @media (max-width:767px) {
   #three-canvas { display: none; }
@@ -1014,9 +1107,10 @@ footer { padding: 2.5rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); bac
 @media (max-width:600px) {
   .price-grid { grid-template-columns: 1fr; }
   .hero-buttons { flex-direction: column; align-items: center; }
-  .foot-inner { flex-direction: column; gap: 1rem; text-align: center; }
   .firm-logos { gap: 2rem; }
   .cookie-inner { flex-direction: column; gap: 1rem; }
   .cookie-buttons { justify-content: flex-end; }
+  .foot-grid { grid-template-columns: 1fr; }
+  .foot-bottom { flex-direction: column; gap: 1rem; text-align: center; }
 }
 `;
