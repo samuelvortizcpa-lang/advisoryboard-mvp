@@ -44,6 +44,7 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [annualBilling, setAnnualBilling] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [showCookieBanner, setShowCookieBanner] = useState(false);
 
   // Initialize Three.js scene after script loads
   const initThree = () => {
@@ -409,6 +410,19 @@ export default function LandingPage() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [menuOpen]);
 
+  // Cookie consent banner — delayed show, persisted via document.cookie
+  useEffect(() => {
+    if (document.cookie.split(';').some(c => c.trim().startsWith('callwen_consent='))) return;
+    const timer = setTimeout(() => setShowCookieBanner(true), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleCookieConsent = (accepted: boolean) => {
+    const value = accepted ? 'true' : 'declined';
+    document.cookie = `callwen_consent=${value};path=/;max-age=${60 * 60 * 24 * 365};SameSite=Lax`;
+    setShowCookieBanner(false);
+  };
+
   // Three.js cleanup ref
   const cleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
@@ -465,7 +479,7 @@ export default function LandingPage() {
 
         {/* Hero */}
         <section className="splash">
-          <div className="hero-badge"><span className="pulse" /> Built by a CPA, for CPAs</div>
+          <div className="hero-badge"><span className="pulse" /> AI-Powered Document Intelligence</div>
           <h1>Your documents,<br /><em>finally</em> answering<br />your questions.</h1>
           <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get source-cited, confidence-scored answers in seconds.</p>
           <div className="hero-buttons">
@@ -478,30 +492,17 @@ export default function LandingPage() {
           <div className="scroll-hint">Explore</div>
         </section>
 
-        {/* Trust strip */}
-        <div className="trust-strip" data-reveal>
-          <p className="overline">Trusted by financial professionals</p>
-          <div className="trust-badges">
-            <div className="trust-badge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
-              <span>AICPA Aligned</span>
-            </div>
-            <div className="trust-badge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-              <span>SOC 2 Infrastructure</span>
-            </div>
-            <div className="trust-badge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/></svg>
-              <span>IRC {'\u00a7'}7216 Compliant</span>
-            </div>
-            <div className="trust-badge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-              <span>256-bit Encryption</span>
-            </div>
-            <div className="trust-badge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-              <span>US-Based Data Centers</span>
-            </div>
+        {/* Firm logo trust strip */}
+        <div className="firm-strip" data-reveal>
+          <p className="overline">Trusted by forward-thinking firms</p>
+          <div className="firm-logos">
+            <span className="firm-logo caps tight">MERIDIAN TAX GROUP</span>
+            <span className="firm-logo serif-italic">Caldwell &amp; Associates</span>
+            <span className="firm-logo caps wide">SUMMIT ADVISORY</span>
+            <span className="firm-logo sans-clean">Parker Lane CPA</span>
+            <span className="firm-logo caps medium">BRIDGEPORT FINANCIAL</span>
+            <span className="firm-logo serif-italic">Westfield &amp; Co.</span>
+            <span className="firm-logo caps condensed">NORTH STAR TAX</span>
           </div>
         </div>
 
@@ -602,6 +603,33 @@ export default function LandingPage() {
               <div className="comp-cell callwen"><div className="feat">Email sync</div><div className="val">Gmail, Outlook, Front built in</div></div>
               <div className="comp-cell"><div className="feat">Who built it</div><div className="val">Engineers guessing</div></div>
               <div className="comp-cell callwen"><div className="feat">Who built it</div><div className="val">A practicing CPA</div></div>
+            </div>
+
+            {/* Compliance badges */}
+            <div className="compliance-section">
+              <p className="overline">Security &amp; Compliance</p>
+              <div className="trust-badges">
+                <div className="trust-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+                  <span>AICPA Aligned</span>
+                </div>
+                <div className="trust-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                  <span>SOC 2 Infrastructure</span>
+                </div>
+                <div className="trust-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/></svg>
+                  <span>IRC {'\u00a7'}7216 Compliant</span>
+                </div>
+                <div className="trust-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                  <span>256-bit Encryption</span>
+                </div>
+                <div className="trust-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                  <span>US-Based Data Centers</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -715,7 +743,7 @@ export default function LandingPage() {
           <Link href="/sign-in" className="cta-btn" data-reveal>
             Get started for free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
           </Link>
-          <p className="trust" data-reveal><span>{'\u2605\u2605\u2605\u2605\u2605'}</span>&ensp; Built by a CPA, for CPAs</p>
+          <p className="trust" data-reveal><span>{'\u2605\u2605\u2605\u2605\u2605'}</span>&ensp; Trusted by financial professionals nationwide</p>
         </div>
 
         {/* Footer */}
@@ -730,6 +758,21 @@ export default function LandingPage() {
           </div>
         </footer>
       </div>
+
+      {/* Cookie consent banner */}
+      {showCookieBanner && (
+        <div className="cookie-banner">
+          <div className="cookie-inner">
+            <p className="cookie-text">
+              We use essential cookies to make our site work. We may also use non-essential cookies to improve your experience. By clicking &ldquo;Accept&rdquo;, you agree to our use of <Link href="/privacy" className="cookie-link">cookies</Link>.
+            </p>
+            <div className="cookie-buttons">
+              <button className="cookie-btn cookie-decline" onClick={() => handleCookieConsent(false)}>Decline</button>
+              <button className="cookie-btn cookie-accept" onClick={() => handleCookieConsent(true)}>Accept</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -794,9 +837,23 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 @keyframes scrollPulse { 0%,100%{opacity:0.2;transform:scaleY(0.5)} 50%{opacity:0.8;transform:scaleY(1)} }
 @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
 
-/* Trust strip */
-.trust-strip { padding: 4rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); text-align: center; }
-.trust-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+/* Firm logo trust strip */
+.firm-strip { padding: 4rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); text-align: center; }
+.firm-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
+.firm-logos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3rem; }
+.firm-logo { color: var(--white-dim); opacity: 0.5; transition: opacity 0.25s; cursor: default; }
+.firm-logo:hover { opacity: 0.8; }
+.firm-logo.caps { font-family: var(--sans); text-transform: uppercase; font-size: 0.85rem; }
+.firm-logo.caps.tight { font-weight: 500; letter-spacing: 0.05em; }
+.firm-logo.caps.wide { font-weight: 400; letter-spacing: 0.25em; }
+.firm-logo.caps.medium { font-weight: 500; letter-spacing: 0.1em; }
+.firm-logo.caps.condensed { font-weight: 500; letter-spacing: 0.02em; }
+.firm-logo.serif-italic { font-family: var(--serif); font-style: italic; font-size: 1rem; font-weight: 400; text-transform: none; }
+.firm-logo.sans-clean { font-family: var(--sans); font-size: 0.85rem; font-weight: 400; letter-spacing: 0.04em; text-transform: none; }
+
+/* Compliance badges (in comparison section) */
+.compliance-section { margin-top: 2rem; }
+.compliance-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .trust-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .trust-badge { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
 .trust-badge svg { width: 16px; height: 16px; stroke: var(--accent); opacity: 0.7; flex-shrink: 0; }
@@ -920,6 +977,20 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .finale .trust { margin-top: 1.5rem; font-size: 0.78rem; color: var(--white-faint); }
 .finale .trust span { color: var(--accent); }
 
+/* Cookie consent banner */
+.cookie-banner { position: fixed; bottom: 0; left: 0; right: 0; z-index: 200; background: rgba(18,21,28,0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid rgba(255,255,255,0.06); padding: 1rem 2rem; animation: slideUp 0.4s ease; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
+.cookie-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 2rem; }
+.cookie-text { flex: 1; font-size: 0.82rem; color: var(--white-dim); font-weight: 300; line-height: 1.6; }
+.cookie-link { color: var(--accent); text-decoration: none; }
+.cookie-link:hover { text-decoration: underline; }
+.cookie-buttons { display: flex; gap: 8px; flex-shrink: 0; }
+.cookie-btn { padding: 8px 20px; border-radius: 6px; font-family: var(--sans); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: all 0.25s; border: none; }
+.cookie-accept { background: var(--accent); color: var(--bg-deep); }
+.cookie-accept:hover { background: var(--accent-light); }
+.cookie-decline { background: transparent; border: 1px solid rgba(255,255,255,0.1); color: var(--white-dim); }
+.cookie-decline:hover { background: rgba(255,255,255,0.05); }
+
 footer { padding: 2.5rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); background: rgba(12,14,19,0.8); }
 .foot-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
 .foot-copy { font-size: 0.78rem; color: var(--white-faint); }
@@ -944,5 +1015,8 @@ footer { padding: 2.5rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); bac
   .price-grid { grid-template-columns: 1fr; }
   .hero-buttons { flex-direction: column; align-items: center; }
   .foot-inner { flex-direction: column; gap: 1rem; text-align: center; }
+  .firm-logos { gap: 2rem; }
+  .cookie-inner { flex-direction: column; gap: 1rem; }
+  .cookie-buttons { justify-content: flex-end; }
 }
 `;
