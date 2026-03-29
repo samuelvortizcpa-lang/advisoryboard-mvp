@@ -9,6 +9,8 @@ Routes:
 """
 
 import logging
+import time
+from collections import defaultdict
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -25,6 +27,37 @@ logger = logging.getLogger(__name__)
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# Failed token lookup tracker (anti-enumeration)
+# ---------------------------------------------------------------------------
+_FAILED_WINDOW = 600  # 10 minutes
+_FAILED_MAX = 5
+
+_failed_lookups: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_enumeration_block(ip: str) -> None:
+    """Block IPs with too many failed token lookups."""
+    now = time.monotonic()
+    timestamps = _failed_lookups.get(ip)
+    if not timestamps:
+        return
+    # Prune old entries
+    fresh = [t for t in timestamps if now - t < _FAILED_WINDOW]
+    if fresh:
+        _failed_lookups[ip] = fresh
+    else:
+        del _failed_lookups[ip]
+        return
+    if len(fresh) >= _FAILED_MAX:
+        logger.warning("Token enumeration blocked for IP %s (%d failures)", ip, len(fresh))
+        raise HTTPException(status_code=429, detail="Too many failed attempts")
+
+
+def _record_failed_lookup(ip: str) -> None:
+    """Record a failed token lookup for enumeration tracking."""
+    _failed_lookups[ip].append(time.monotonic())
 
 
 # ---------------------------------------------------------------------------
@@ -106,13 +139,22 @@ def _check_token(token: str, db: Session) -> tuple[ClientConsent | None, bool, b
     response_model=SigningFormResponse,
     summary="Validate a signing token and return form data",
 )
+@limiter.limit("10/minute")
 async def get_signing_form(
+    request: Request,
     token: str,
     db: Session = Depends(get_db),
 ) -> SigningFormResponse:
+    ip = request.client.host if request.client else "unknown"
+    _check_enumeration_block(ip)
+
     consent, expired, already_signed = _check_token(token, db)
 
     if consent is None:
+        if not expired and not already_signed:
+            # Token not found at all — potential enumeration
+            _record_failed_lookup(ip)
+            logger.info("Failed token lookup from %s", ip)
         return SigningFormResponse(
             valid=False,
             expired=expired,

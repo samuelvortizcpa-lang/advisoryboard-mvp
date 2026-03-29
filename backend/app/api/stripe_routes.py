@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.consent_public import limiter
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.processed_webhook_event import ProcessedWebhookEvent
@@ -150,6 +151,7 @@ async def create_portal(
 
 
 @router.post("/webhook", summary="Stripe webhook handler")
+@limiter.limit("30/minute")
 async def stripe_webhook(request: Request):
     """Handle Stripe webhook events. No auth — verified by signature."""
     settings = get_settings()
