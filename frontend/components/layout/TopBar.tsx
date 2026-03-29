@@ -135,7 +135,7 @@ export default function TopBar() {
       </nav>
 
       {/* Right: Clerk user menu */}
-      <UserButton afterSignOutUrl="/" />
+      <UserButton />
     </header>
   );
 }

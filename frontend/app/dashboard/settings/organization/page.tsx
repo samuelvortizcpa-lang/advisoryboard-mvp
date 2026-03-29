@@ -36,7 +36,6 @@ function fmtDate(iso: string | null) {
 
 export default function OrganizationSettingsPage() {
   const { getToken } = useAuth();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { orgs, activeOrg, setActiveOrg, isLoading: orgLoading } = useOrg();
 
   // Data state

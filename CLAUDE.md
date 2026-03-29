@@ -17,7 +17,7 @@ Callwen is an AI-powered document intelligence platform for CPA firms. Users upl
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS 3 |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 3 |
 | Auth | Clerk (JWT RS256, custom proxy domain at `clerk.callwen.com`) |
 | Backend | FastAPI, Python 3.13, Uvicorn |
 | Database | PostgreSQL + pgvector (vector similarity search) |

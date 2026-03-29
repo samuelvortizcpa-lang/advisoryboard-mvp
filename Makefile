@@ -24,7 +24,7 @@ check: lint typecheck test
 
 lint:
 	@echo "→ Frontend lint..."
-	cd frontend && npx next lint --quiet
+	cd frontend && npm run lint
 	@echo "  Frontend lint passed."
 
 typecheck:

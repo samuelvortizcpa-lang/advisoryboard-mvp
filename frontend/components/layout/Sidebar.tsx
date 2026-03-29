@@ -33,8 +33,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { getToken } = useAuth();
   const { user } = useUser();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { activeOrg, orgs, isPersonalOrg, isAdmin } = useOrg();
+  const { activeOrg, isPersonalOrg, isAdmin } = useOrg();
   const [myClientCount, setMyClientCount] = useState<number | null>(null);
 
   const loadMyClientCount = useCallback(async () => {
@@ -132,7 +131,7 @@ function NavItem({
   pathname,
   badge,
 }: {
-  item: { href: string; label: string; Icon: () => JSX.Element; exact?: boolean };
+  item: { href: string; label: string; Icon: () => React.JSX.Element; exact?: boolean };
   pathname: string;
   badge?: number;
 }) {

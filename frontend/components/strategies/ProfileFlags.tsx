@@ -12,7 +12,7 @@ interface Props {
   onFlagsChange: (flags: ProfileFlags) => void;
 }
 
-const FLAG_CONFIG: { key: keyof ProfileFlags; label: string; icon: () => JSX.Element }[] = [
+const FLAG_CONFIG: { key: keyof ProfileFlags; label: string; icon: () => React.JSX.Element }[] = [
   { key: "has_business_entity", label: "Business Entity", icon: BuildingIcon },
   { key: "has_real_estate", label: "Real Estate", icon: HomeIcon },
   { key: "is_real_estate_professional", label: "RE Professional", icon: CrownIcon },

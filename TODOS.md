@@ -10,7 +10,7 @@ Last updated: 2026-03-28
 - [x] C3: Stripe webhook error handling — return 500 on failure (fixed in af15d3a)
 
 ### HIGH — Open
-- [ ] H2: Upgrade Next.js 14 → 15.5.14+ (7 known CVEs including SSRF, request smuggling, DoS)
+- [x] H2: Upgrade Next.js 14 → 16 + React 19 + Clerk v7 + Sentry v10 (7 known CVEs fixed)
 - [x] H3: Briefs router auth — already fixed in Sprint 1; alerts router migrated to org-aware auth
 - [x] H4: Consent signing token brute-force — rate limiting + enumeration protection added
 - [x] H5/H6: Add missing indexes — org_members/client_access (af15d3a) + 6 more perf indexes
@@ -47,6 +47,6 @@ Last updated: 2026-03-28
 - [ ] E2E tests with Playwright
 
 ## Infrastructure
-- [ ] Next.js 14 → 15 upgrade (see H2 above)
+- [x] Next.js 14 → 16 upgrade (see H2 above)
 - [ ] Admin dashboard expansion (user management, analytics, audit logs)
 - [ ] Remove unused backend deps: boto3, google-genai

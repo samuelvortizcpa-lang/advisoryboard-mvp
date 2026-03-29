@@ -602,6 +602,7 @@ export default function AuthLayout({
                   e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.4), 0 0 60px rgba(201,148,74,0.04)';
                 }}
               >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/dashboard-preview.png"
                   alt="Callwen dashboard preview"
