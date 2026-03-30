@@ -83,3 +83,28 @@ def notify(event_type: str, message: str, metadata: dict | None = None) -> None:
         loop.create_task(send_notification(event_type, message, metadata))
     except RuntimeError:
         pass  # No running event loop — skip silently
+
+
+def notify_support_ticket(ticket: object) -> None:
+    """
+    Send a Slack notification for a new support ticket.
+
+    Accepts a SupportTicket model instance (typed as object to avoid circular
+    imports). Extracts fields via attribute access.
+    """
+    category = getattr(ticket, "category", "general")
+    subject = getattr(ticket, "subject", "")
+    user_name = getattr(ticket, "user_name", None) or "Unknown"
+    user_email = getattr(ticket, "user_email", None) or "N/A"
+    page_url = getattr(ticket, "page_url", None) or "N/A"
+
+    category_label = category.replace("_", " ").title()
+    message = f"\U0001f3ab *New Support Ticket*\n*{subject}*"
+
+    metadata = {
+        "category": category_label,
+        "from": f"{user_name} ({user_email})",
+        "page": page_url,
+    }
+
+    notify("support_ticket", message, metadata)

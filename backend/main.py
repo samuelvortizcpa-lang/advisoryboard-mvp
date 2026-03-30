@@ -34,6 +34,7 @@ from app.api.client_assignments import router as client_assignments_router
 from app.api.strategies import router as strategies_router
 from app.api.strategy_dashboard import router as strategy_dashboard_router
 from app.api.audit import router as audit_router
+from app.api.support import router as support_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -199,3 +200,4 @@ app.include_router(client_assignments_router, prefix="/api", tags=["client-assig
 app.include_router(strategies_router,          prefix="/api", tags=["tax-strategies"])
 app.include_router(strategy_dashboard_router,  prefix="/api", tags=["strategy-dashboard"])
 app.include_router(audit_router,               prefix="/api", tags=["audit"])
+app.include_router(support_router,             prefix="/api", tags=["support"])
