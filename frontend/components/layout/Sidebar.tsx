@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClientAssignmentsApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import OrgSwitcher from "@/components/layout/OrgSwitcher";
+import HelpFeedbackButton from "@/components/support/HelpFeedbackButton";
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
@@ -105,6 +106,11 @@ export default function Sidebar() {
           <NavItem key={item.href} item={item} pathname={pathname} />
         ))}
       </nav>
+
+      {/* ── Help & Feedback ──────────────────────────────────────────────── */}
+      <div className="mt-2 border-t border-gray-200 pt-2 dark:border-gray-800">
+        <HelpFeedbackButton />
+      </div>
 
       {/* ── Org switcher ────────────────────────────────────────────────── */}
       <OrgSwitcher />
