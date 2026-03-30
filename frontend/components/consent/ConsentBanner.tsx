@@ -7,6 +7,7 @@ import {
   ConsentStatus,
   createConsentApi,
 } from "@/lib/api";
+import HelpTooltip from "@/components/ui/HelpTooltip";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -304,8 +305,9 @@ export default function ConsentBanner({
           <div className="flex items-start gap-3">
             <HelpCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-blue-800">
+              <p className="flex items-center gap-1 text-sm font-semibold text-blue-800">
                 Tax Documents Detected
+                <HelpTooltip content="IRC Section 7216 requires written consent before sharing tax return information with AI systems. Green means consent is obtained." position="right" maxWidth={260} />
               </p>
               <p className="mt-1 text-sm text-blue-700">
                 You&apos;ve uploaded tax return documents for this client. To

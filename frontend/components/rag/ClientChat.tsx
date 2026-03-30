@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { RagSource, RagStatus, createRagApi } from "@/lib/api";
+import HelpTooltip from "@/components/ui/HelpTooltip";
 import MarkdownContent from "./MarkdownContent";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -376,6 +377,7 @@ export default function ClientChat({ clientId, documentCount }: Props) {
         <div className="border-t border-gray-100">
           <div className="flex items-center gap-1 px-3 pt-2">
             <span className="mr-1 text-[10px] text-gray-400">Model:</span>
+            <HelpTooltip content="Auto picks the best model per question. Quick uses GPT-4o-mini for fast lookups. Deep uses Claude for complex analysis. Opus uses the most powerful model for nuanced strategic work." position="top" maxWidth={280} />
             {([
               { key: "auto" as const, label: "Auto", icon: "\u2728", tip: "Auto-route based on question type" },
               { key: "fast" as const, label: "Quick", icon: "\u26A1", tip: "Fast lookups using GPT-4o-mini" },
@@ -493,6 +495,7 @@ function ConfidenceBadge({ tier, score }: { tier: string; score: number }) {
     <span className={`inline-flex items-center gap-1.5 rounded-full border ${config.borderColor} ${config.bgColor} px-2 py-0.5 text-xs font-medium ${config.textColor}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${config.color}`} />
       {config.label} · {Math.round(score)}%
+      <HelpTooltip content="How confident the AI is in its answer based on the relevance of your uploaded documents. Higher confidence means better source material was found." position="right" maxWidth={260} />
     </span>
   );
 }

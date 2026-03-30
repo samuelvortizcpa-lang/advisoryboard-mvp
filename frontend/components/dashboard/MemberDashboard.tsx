@@ -6,6 +6,7 @@ import type { DashboardSummary } from "@/lib/api";
 import StatCard from "@/components/ui/StatCard";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
+import HelpTooltip from "@/components/ui/HelpTooltip";
 
 import {
   type TimeRange,
@@ -114,6 +115,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
           context={`of ${stats.ai_queries.limit}`}
           contextType={queryPct > 80 ? "warning" : "muted"}
           accentColor="border-l-purple-500"
+          labelExtra={<HelpTooltip content="Total AI questions asked across all clients this billing period." />}
         />
       </div>
 
@@ -123,7 +125,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
           <AreaChartCard title="My activity" data={chartData} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
         </div>
         <div className="lg:col-span-2">
-          <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" />
+          <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" titleExtra={<HelpTooltip content="Shows how your AI queries are routed: factual lookups, multi-document synthesis, or strategic advisory analysis." />} />
         </div>
       </div>
 

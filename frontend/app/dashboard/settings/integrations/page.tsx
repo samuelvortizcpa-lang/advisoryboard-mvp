@@ -13,6 +13,7 @@ import {
   createClientsApi,
   createIntegrationsApi,
 } from "@/lib/api";
+import HelpTooltip from "@/components/ui/HelpTooltip";
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -945,8 +946,9 @@ export default function IntegrationsSettingsPage() {
       <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900">
+            <h2 className="flex items-center gap-1 text-sm font-semibold text-gray-900">
               Email Routing Rules
+              <HelpTooltip content="Routing rules automatically match incoming emails to the right client based on sender or recipient email addresses." position="bottom" />
             </h2>
             <p className="mt-0.5 text-xs text-gray-500">
               Map email addresses to clients so synced emails land in the right

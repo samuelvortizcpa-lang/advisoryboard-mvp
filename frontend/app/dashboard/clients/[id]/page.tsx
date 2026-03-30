@@ -40,6 +40,7 @@ import ConsentBanner from "@/components/consent/ConsentBanner";
 import ProfileFlagsRow from "@/components/strategies/ProfileFlags";
 import StrategyChecklist from "@/components/strategies/StrategyChecklist";
 import Timeline from "@/components/timeline/Timeline";
+import HelpTooltip from "@/components/ui/HelpTooltip";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -946,7 +947,10 @@ function ClientDetailContent() {
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-base font-semibold text-gray-900">Documents</h2>
                   {documents.length >= 2 && (
-                    <span className="text-xs text-gray-400">Select 2+ to compare</span>
+                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                      Select 2+ to compare
+                      <HelpTooltip content="Select two or more documents to compare side-by-side. The AI highlights key differences, changes, and notable findings." position="left" maxWidth={240} />
+                    </span>
                   )}
                 </div>
 

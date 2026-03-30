@@ -13,6 +13,7 @@ import DonutChartCard from "@/components/ui/DonutChartCard";
 import SectionCard from "@/components/ui/SectionCard";
 import MemberRow from "@/components/ui/MemberRow";
 
+import HelpTooltip from "@/components/ui/HelpTooltip";
 import {
   type TimeRange,
   DIST_COLORS,
@@ -118,6 +119,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
           context={`of ${stats.ai_queries.limit}`}
           contextType={queryPct > 80 ? "warning" : "muted"}
           accentColor="border-l-purple-500"
+          labelExtra={<HelpTooltip content="Total AI questions asked across all clients this billing period." />}
         />
       </div>
 
@@ -127,7 +129,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
           <AreaChartCard title="Activity" data={chartData} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
         </div>
         <div className="lg:col-span-2">
-          <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" />
+          <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" titleExtra={<HelpTooltip content="Shows how your AI queries are routed: factual lookups, multi-document synthesis, or strategic advisory analysis." />} />
         </div>
       </div>
 

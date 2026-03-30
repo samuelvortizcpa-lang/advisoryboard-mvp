@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 export interface DonutChartItem {
@@ -14,6 +15,7 @@ export interface DonutChartCardProps {
   centerLabel?: string;
   centerValue?: string | number;
   height?: number;
+  titleExtra?: ReactNode;
 }
 
 export default function DonutChartCard({
@@ -22,10 +24,11 @@ export default function DonutChartCard({
   centerLabel,
   centerValue,
   height = 240,
+  titleExtra,
 }: DonutChartCardProps) {
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
-      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <h3 className="flex items-center gap-1 text-sm font-semibold text-gray-900">{title}{titleExtra}</h3>
 
       {/* Chart with center label */}
       <div className="relative mt-3" style={{ height }}>

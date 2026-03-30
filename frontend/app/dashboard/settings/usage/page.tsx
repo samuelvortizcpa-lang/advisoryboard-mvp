@@ -12,6 +12,7 @@ import {
   ClientUsageItem,
   UsageHistoryResponse,
 } from "@/lib/api";
+import HelpTooltip from "@/components/ui/HelpTooltip";
 
 // ─── Formatting helpers ─────────────────────────────────────────────────────
 
@@ -265,7 +266,7 @@ export default function UsageAnalyticsPage() {
         {/* ── Summary Cards ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Total Queries" value={fmtTokens(summary.total_queries)} />
-          <SummaryCard label="Total Cost" value={fmtCost(summary.total_cost)} />
+          <SummaryCard label="Total Cost" value={fmtCost(summary.total_cost)} labelExtra={<HelpTooltip content="Your AI cost is based on the models used. Quick queries cost less, while Deep and Opus queries use more powerful (and more expensive) models." position="bottom" maxWidth={260} />} />
           <SummaryCard label="Avg Cost / Query" value={fmtCost(avgCost, 4)} />
           <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
             <p className="text-xs font-medium text-gray-500">Strategic Queries</p>
@@ -545,10 +546,10 @@ export default function UsageAnalyticsPage() {
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function SummaryCard({ label, value, labelExtra }: { label: string; value: string; labelExtra?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="flex items-center gap-1 text-xs font-medium text-gray-500">{label}{labelExtra}</p>
       <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
     </div>
   );
