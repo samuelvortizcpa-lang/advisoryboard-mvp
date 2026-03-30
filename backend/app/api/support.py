@@ -228,7 +228,7 @@ def _send_support_email(ticket: SupportTicket) -> None:
 
         send_params: dict = {
             "from": settings.resend_from_email,
-            "to": ["support@myadvisoryboard.space"],
+            "to": ["info@callwen.com"],
             "subject": f"[Callwen Support] {category_label}: {ticket.subject}",
             "html": html,
         }
