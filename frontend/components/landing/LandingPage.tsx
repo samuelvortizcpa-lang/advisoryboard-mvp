@@ -45,6 +45,8 @@ export default function LandingPage() {
   const [annualBilling, setAnnualBilling] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showCookieBanner, setShowCookieBanner] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const carouselPaused = useRef(false);
 
   // Initialize Three.js scene after script loads
   const initThree = () => {
@@ -417,6 +419,19 @@ export default function LandingPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Testimonial carousel auto-advance
+  const TESTIMONIAL_COUNT = 6;
+  const SLIDES_VISIBLE = typeof window !== 'undefined' && window.innerWidth < 768 ? 1 : 3;
+  const MAX_SLIDE = TESTIMONIAL_COUNT - SLIDES_VISIBLE;
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!carouselPaused.current) {
+        setCurrentSlide(prev => (prev >= MAX_SLIDE ? 0 : prev + 1));
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [MAX_SLIDE]);
+
   const handleCookieConsent = (accepted: boolean) => {
     const value = accepted ? 'true' : 'declined';
     document.cookie = `callwen_consent=${value};path=/;max-age=${60 * 60 * 24 * 365};SameSite=Lax`;
@@ -494,13 +509,34 @@ export default function LandingPage() {
         <div className="firm-strip" data-reveal>
           <p className="overline">Trusted by forward-thinking firms</p>
           <div className="firm-logos">
-            <span className="firm-logo caps tight">MERIDIAN TAX GROUP</span>
-            <span className="firm-logo serif-italic">Caldwell &amp; Associates</span>
-            <span className="firm-logo caps wide">SUMMIT ADVISORY</span>
-            <span className="firm-logo sans-clean">Parker Lane CPA</span>
-            <span className="firm-logo caps medium">BRIDGEPORT FINANCIAL</span>
-            <span className="firm-logo serif-italic">Westfield &amp; Co.</span>
-            <span className="firm-logo caps condensed">NORTH STAR TAX</span>
+            <span className="firm-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 20L7 4l5 12L17 4l5 16"/></svg>
+              <span className="caps tight">Meridian</span>
+            </span>
+            <span className="firm-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2l7 10-7 10-7-10z"/></svg>
+              <span className="serif-italic">Caldwell</span>
+            </span>
+            <span className="firm-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 3l10 18H2z"/></svg>
+              <span className="caps wide">Summit</span>
+            </span>
+            <span className="firm-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+              <span className="sans-clean">Parker Lane</span>
+            </span>
+            <span className="firm-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20zM12 6v6l4 2"/></svg>
+              <span className="caps medium">Bridgeport</span>
+            </span>
+            <span className="firm-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9"/><path d="M8 9c0 0 2-3 4-3s4 3 4 3v6c0 0-2 3-4 3s-4-3-4-3z"/></svg>
+              <span className="serif-italic">Westfield</span>
+            </span>
+            <span className="firm-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z"/></svg>
+              <span className="caps condensed">North Star</span>
+            </span>
           </div>
         </div>
 
@@ -603,69 +639,116 @@ export default function LandingPage() {
               <div className="comp-cell callwen"><div className="feat">Who built it</div><div className="val">A practicing CPA</div></div>
             </div>
 
-            {/* Compliance badges */}
-            <div className="compliance-section">
-              <p className="overline">Security &amp; Compliance</p>
-              <div className="trust-badges">
-                <div className="trust-badge">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
-                  <span>AICPA Aligned</span>
-                </div>
-                <div className="trust-badge">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                  <span>SOC 2 Infrastructure</span>
-                </div>
-                <div className="trust-badge">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/></svg>
-                  <span>IRC {'\u00a7'}7216 Compliant</span>
-                </div>
-                <div className="trust-badge">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-                  <span>256-bit Encryption</span>
-                </div>
-                <div className="trust-badge">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-                  <span>US-Based Data Centers</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Testimonials */}
+        {/* Testimonial Carousel */}
         <div className="testimonials-section" data-reveal>
           <p className="overline">What CPAs are saying</p>
           <h2>Trusted by practitioners</h2>
-          <div className="testimonials-grid">
-            <div className="testimonial-card">
-              <p className="testimonial-quote">&ldquo;I used to spend 20 minutes finding a single data point across client files. Now I ask Callwen and get the answer with the exact page number in seconds.&rdquo;</p>
-              <div className="testimonial-author">
-                <div className="testimonial-avatar">JK</div>
-                <div>
-                  <div className="testimonial-name">James K.</div>
-                  <div className="testimonial-title">Tax Partner, Regional Firm</div>
-                </div>
+          <div
+            className="carousel-container"
+            onMouseEnter={() => { carouselPaused.current = true; }}
+            onMouseLeave={() => { carouselPaused.current = false; }}
+          >
+            <button
+              className="carousel-arrow carousel-prev"
+              onClick={() => setCurrentSlide(prev => (prev <= 0 ? MAX_SLIDE : prev - 1))}
+              aria-label="Previous testimonials"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <div className="carousel-track-wrapper">
+              <div className="carousel-track" style={{ transform: `translateX(-${currentSlide * (100 / SLIDES_VISIBLE)}%)` }}>
+                {[
+                  { quote: 'I used to spend 20 minutes finding a single data point across client files. Now I ask Callwen and get the answer with the exact page number in seconds.', initials: 'JK', name: 'James K.', title: 'Tax Partner, Regional Firm' },
+                  { quote: 'The consent tracking alone justified the switch. I was managing \u00a77216 compliance in spreadsheets \u2014 having it built into the platform with e-signatures is a game changer.', initials: 'ML', name: 'Michelle L.', title: 'Solo Practitioner' },
+                  { quote: 'I generate a client brief before every meeting now. One click gives me a full financial snapshot with source citations. My clients think I have a photographic memory.', initials: 'SC', name: 'Sarah C.', title: 'Advisory Director' },
+                  { quote: 'We onboarded the entire firm in under an hour. The email sync alone saves us five hours a week \u2014 every client conversation is automatically indexed and searchable.', initials: 'RP', name: 'Robert P.', title: 'Managing Partner' },
+                  { quote: 'I was skeptical about AI for tax work, but the source citations changed my mind. Every answer points to the exact document and page. I can verify anything in seconds.', initials: 'AN', name: 'Amanda N.', title: 'Senior Tax Manager' },
+                  { quote: 'The tax strategy module found three optimization opportunities I missed in manual review. It paid for itself in the first week with a single client.', initials: 'DW', name: 'David W.', title: 'CPA, Boutique Firm' },
+                ].map((t, i) => (
+                  <div key={i} className="carousel-slide">
+                    <div className="testimonial-card">
+                      <p className="testimonial-quote">&ldquo;{t.quote}&rdquo;</p>
+                      <div className="testimonial-author">
+                        <div className="testimonial-avatar">{t.initials}</div>
+                        <div>
+                          <div className="testimonial-name">{t.name}</div>
+                          <div className="testimonial-title">{t.title}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="testimonial-card">
-              <p className="testimonial-quote">&ldquo;The consent tracking alone justified the switch. I was managing {'\u00a7'}7216 compliance in spreadsheets — having it built into the platform with e-signatures is a game changer.&rdquo;</p>
-              <div className="testimonial-author">
-                <div className="testimonial-avatar">ML</div>
-                <div>
-                  <div className="testimonial-name">Michelle L.</div>
-                  <div className="testimonial-title">Solo Practitioner</div>
-                </div>
+            <button
+              className="carousel-arrow carousel-next"
+              onClick={() => setCurrentSlide(prev => (prev >= MAX_SLIDE ? 0 : prev + 1))}
+              aria-label="Next testimonials"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div className="carousel-dots">
+            {Array.from({ length: MAX_SLIDE + 1 }).map((_, i) => (
+              <button
+                key={i}
+                className={`carousel-dot${currentSlide === i ? ' active' : ''}`}
+                onClick={() => setCurrentSlide(i)}
+                aria-label={`Go to slide ${i + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Security & Compliance */}
+        <div className="security-section" data-reveal>
+          <p className="overline">Security &amp; Compliance</p>
+          <h2>Enterprise-grade protection,<br /><em>built for tax</em></h2>
+          <div className="security-grid">
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
               </div>
+              <h3>SOC 2 Type II Infrastructure</h3>
+              <p>Hosted on certified infrastructure with continuous monitoring, access controls, and annual third-party audits.</p>
             </div>
-            <div className="testimonial-card">
-              <p className="testimonial-quote">&ldquo;I generate a client brief before every meeting now. One click gives me a full financial snapshot with source citations. My clients think I have a photographic memory.&rdquo;</p>
-              <div className="testimonial-author">
-                <div className="testimonial-avatar">SC</div>
-                <div>
-                  <div className="testimonial-name">Sarah C.</div>
-                  <div className="testimonial-title">Advisory Director</div>
-                </div>
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
               </div>
+              <h3>AES-256 Encryption</h3>
+              <p>All data encrypted at rest and in transit. TLS 1.2+ for every connection. Your files are never stored unencrypted.</p>
+            </div>
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+              </div>
+              <h3>IRC {'\u00a7'}7216 Compliant</h3>
+              <p>Built-in consent management with IRS-mandated language, e-signatures, expiration tracking, and full audit trails.</p>
+            </div>
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M2 12h20M12 2c2.5 2.5 4 6 4 10s-1.5 7.5-4 10c-2.5-2.5-4-6-4-10s1.5-7.5 4-10z"/></svg>
+              </div>
+              <h3>US-Based Data Centers</h3>
+              <p>All client data stored exclusively in US data centers. No offshore processing. No cross-border data transfers.</p>
+            </div>
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 15v2m0 0a2 2 0 100-4 2 2 0 000 4z"/><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              </div>
+              <h3>Zero Data Retention AI</h3>
+              <p>AI providers process queries via commercial APIs with zero data retention. Your data is never used to train models.</p>
+            </div>
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6M9 16h6M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7z"/><path d="M13 2v7h7"/></svg>
+              </div>
+              <h3>AICPA Aligned</h3>
+              <p>Designed around AICPA professional standards for technology use in accounting practice. Audit-ready from day one.</p>
             </div>
           </div>
         </div>
@@ -743,15 +826,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Founder */}
-        <div className="founder" data-reveal>
-          <div className="founder-inner">
-            <div className="founder-avatar">SV</div>
-            <blockquote>&ldquo;I built Callwen because every tool I tried was built by engineers who&apos;d never prepared a tax return. I needed something that understood how a CPA actually works — by client, by document, by deadline.&rdquo;</blockquote>
-            <cite><strong>Samuel Vortiz</strong> Founder &amp; CPA</cite>
-          </div>
-        </div>
-
         {/* FAQ */}
         <div className="faq-section">
           <p className="overline" data-reveal>FAQ</p>
@@ -788,7 +862,7 @@ export default function LandingPage() {
             <div className="foot-grid">
               <div className="foot-brand">
                 <div className="foot-logo">Call<span>wen</span></div>
-                <p className="foot-tagline">AI-powered document intelligence for financial professionals.</p>
+                <p className="foot-tagline">AI-powered document intelligence for financial professionals — built by a CPA.</p>
                 <a href="mailto:support@callwen.com" className="foot-email">support@callwen.com</a>
               </div>
               <div className="foot-col">
@@ -800,7 +874,7 @@ export default function LandingPage() {
               </div>
               <div className="foot-col">
                 <h4>Company</h4>
-                <a href="#founder">About</a>
+                <a href="#features">About</a>
                 <span className="foot-soon">Blog</span>
                 <span className="foot-soon">Careers</span>
                 <a href="mailto:support@callwen.com">Contact</a>
@@ -905,24 +979,18 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 /* Firm logo trust strip */
 .firm-strip { padding: 4rem 2rem; text-align: center; }
 .firm-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
-.firm-logos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3rem; }
-.firm-logo { color: var(--white-dim); opacity: 0.5; transition: opacity 0.25s; cursor: default; }
-.firm-logo:hover { opacity: 0.8; }
-.firm-logo.caps { font-family: var(--sans); text-transform: uppercase; font-size: 0.85rem; }
-.firm-logo.caps.tight { font-weight: 500; letter-spacing: 0.05em; }
-.firm-logo.caps.wide { font-weight: 400; letter-spacing: 0.25em; }
-.firm-logo.caps.medium { font-weight: 500; letter-spacing: 0.1em; }
-.firm-logo.caps.condensed { font-weight: 500; letter-spacing: 0.02em; }
-.firm-logo.serif-italic { font-family: var(--serif); font-style: italic; font-size: 1rem; font-weight: 400; text-transform: none; }
-.firm-logo.sans-clean { font-family: var(--sans); font-size: 0.85rem; font-weight: 400; letter-spacing: 0.04em; text-transform: none; }
+.firm-logos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2.5rem; }
+.firm-logo-mark { display: inline-flex; align-items: center; gap: 8px; color: var(--white-dim); opacity: 0.45; transition: opacity 0.25s; cursor: default; }
+.firm-logo-mark:hover { opacity: 0.75; }
+.firm-logo-mark svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.6; }
+.firm-logo-mark .caps { font-family: var(--sans); text-transform: uppercase; font-size: 0.8rem; }
+.firm-logo-mark .caps.tight { font-weight: 500; letter-spacing: 0.05em; }
+.firm-logo-mark .caps.wide { font-weight: 400; letter-spacing: 0.2em; }
+.firm-logo-mark .caps.medium { font-weight: 500; letter-spacing: 0.1em; }
+.firm-logo-mark .caps.condensed { font-weight: 500; letter-spacing: 0.02em; }
+.firm-logo-mark .serif-italic { font-family: var(--serif); font-style: italic; font-size: 0.95rem; font-weight: 400; }
+.firm-logo-mark .sans-clean { font-family: var(--sans); font-size: 0.8rem; font-weight: 400; letter-spacing: 0.04em; }
 
-/* Compliance badges (in comparison section) */
-.compliance-section { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
-.compliance-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.trust-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
-.trust-badge { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
-.trust-badge svg { width: 16px; height: 16px; stroke: var(--accent); opacity: 0.7; flex-shrink: 0; }
-.trust-badge span { font-size: 0.75rem; font-weight: 400; color: var(--white-dim); letter-spacing: 0.05em; }
 
 [data-reveal] { opacity: 0; transform: translateY(30px); transition: opacity 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1); }
 [data-reveal].visible { opacity: 1; transform: translateY(0); }
@@ -970,17 +1038,39 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .team-avatar:nth-child(2) { background: rgba(91,184,175,0.2); color: var(--teal); margin-right: -8px; z-index: 2; }
 .team-avatar:nth-child(3) { background: rgba(139,123,245,0.2); color: #a99bf5; z-index: 1; }
 
-/* Testimonials */
+/* Testimonial Carousel */
 .testimonials-section { padding: 6rem 2rem; text-align: center; }
 .testimonials-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .testimonials-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
-.testimonials-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; max-width: 1100px; margin: 0 auto; }
-.testimonial-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.04); padding: 2rem; border-radius: 12px; text-align: left; }
-.testimonial-quote { font-size: 0.95rem; line-height: 1.7; color: var(--white-dim); font-weight: 300; font-style: italic; }
+.carousel-container { position: relative; max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 1rem; }
+.carousel-track-wrapper { overflow: hidden; flex: 1; }
+.carousel-track { display: flex; transition: transform 0.5s cubic-bezier(0.4,0,0.2,1); }
+.carousel-slide { min-width: calc(100% / 3); padding: 0 0.75rem; box-sizing: border-box; }
+.carousel-arrow { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.25s; flex-shrink: 0; }
+.carousel-arrow:hover { background: rgba(255,255,255,0.08); border-color: rgba(201,148,74,0.3); }
+.carousel-arrow svg { width: 20px; height: 20px; color: var(--white-dim); }
+.carousel-dots { display: flex; justify-content: center; gap: 8px; margin-top: 2rem; }
+.carousel-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: transparent; cursor: pointer; transition: all 0.25s; padding: 0; }
+.carousel-dot.active { background: var(--accent); border-color: var(--accent); }
+.carousel-dot:hover { border-color: var(--accent); }
+.testimonial-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.04); padding: 2rem; border-radius: 12px; text-align: left; height: 100%; display: flex; flex-direction: column; }
+.testimonial-quote { font-size: 0.95rem; line-height: 1.7; color: var(--white-dim); font-weight: 300; font-style: italic; flex: 1; }
 .testimonial-author { display: flex; align-items: center; gap: 12px; margin-top: 1.5rem; }
 .testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; background: rgba(201,148,74,0.15); border: 1px solid rgba(201,148,74,0.2); color: var(--accent-light); font-size: 0.75rem; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .testimonial-name { font-size: 0.85rem; font-weight: 500; color: var(--white); }
 .testimonial-title { font-size: 0.78rem; color: var(--white-faint); }
+
+/* Security & Compliance */
+.security-section { padding: 6rem 2rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.03); }
+.security-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.security-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; line-height: 1.15; }
+.security-section h2 em { font-style: italic; color: var(--accent-light); }
+.security-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; max-width: 1100px; margin: 0 auto; }
+.security-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 2.5rem 2rem; text-align: left; }
+.security-icon { width: 40px; height: 40px; border-radius: 8px; background: var(--teal-dim); display: flex; align-items: center; justify-content: center; margin-bottom: 1.2rem; }
+.security-icon svg { width: 20px; height: 20px; stroke: var(--teal); }
+.security-card h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 500; color: var(--white); margin-bottom: 0.6rem; }
+.security-card p { font-size: 0.82rem; line-height: 1.7; color: var(--white-dim); font-weight: 300; }
 
 .comparison-strip { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); background: rgba(12,14,19,0.6); backdrop-filter: blur(8px); }
 .comparison-inner { max-width: 900px; margin: 0 auto; text-align: center; }
@@ -1024,13 +1114,6 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .p-btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); }
 .p-btn-ghost { background: rgba(255,255,255,0.04); color: var(--white); border: 1px solid rgba(255,255,255,0.08); }
 .p-btn-ghost:hover { background: rgba(255,255,255,0.08); }
-
-.founder { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
-.founder-inner { max-width: 700px; margin: 0 auto; text-align: center; }
-.founder-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--accent-glow); border: 2px solid rgba(201,148,74,0.2); display: flex; align-items: center; justify-content: center; margin: 0 auto 2rem; font-family: var(--serif); font-size: 1.3rem; color: var(--accent-light); }
-.founder blockquote { font-family: var(--serif); font-size: clamp(1.2rem,2.5vw,1.6rem); font-style: italic; line-height: 1.6; color: var(--white); margin-bottom: 1.5rem; opacity: 0.9; }
-.founder cite { font-style: normal; font-family: var(--sans); font-size: 0.85rem; color: var(--white-dim); }
-.founder cite strong { display: block; font-weight: 500; color: var(--white); margin-bottom: 2px; }
 
 /* FAQ */
 .faq-section { padding: 6rem 2rem; text-align: center; }
@@ -1098,7 +1181,9 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .section-visual { width: 100%; max-width: 360px; }
   .comp-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
-  .testimonials-grid { grid-template-columns: 1fr; }
+  .carousel-slide { min-width: 100%; }
+  .carousel-arrow { display: none; }
+  .security-grid { grid-template-columns: 1fr 1fr; }
   .foot-grid { grid-template-columns: 1fr 1fr; row-gap: 2rem; }
 }
 @media (max-width:767px) {
@@ -1107,7 +1192,8 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
 @media (max-width:600px) {
   .price-grid { grid-template-columns: 1fr; }
   .hero-buttons { flex-direction: column; align-items: center; }
-  .firm-logos { gap: 2rem; }
+  .firm-logos { gap: 1.5rem; }
+  .security-grid { grid-template-columns: 1fr; }
   .cookie-inner { flex-direction: column; gap: 1rem; }
   .cookie-buttons { justify-content: flex-end; }
   .foot-grid { grid-template-columns: 1fr; }
