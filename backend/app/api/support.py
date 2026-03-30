@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.support_ticket import SupportTicket
+from app.models.user import User
 from app.services.notification_service import notify_support_ticket
 
 logger = logging.getLogger(__name__)
@@ -262,9 +263,17 @@ async def create_ticket(
 
     user_id = current_user["user_id"]
     user_email = current_user.get("email")
-    first = current_user.get("first_name") or ""
-    last = current_user.get("last_name") or ""
-    user_name = f"{first} {last}".strip() or None
+
+    # Clerk session JWTs don't include first_name/last_name — look up
+    # the local users table which caches those from Clerk's Backend API.
+    db_user = db.query(User).filter(User.clerk_id == user_id).first()
+    if db_user:
+        first = db_user.first_name or ""
+        last = db_user.last_name or ""
+        user_name = f"{first} {last}".strip() or None
+        user_email = user_email or db_user.email
+    else:
+        user_name = None
 
     ticket_id = uuid.uuid4()
 
