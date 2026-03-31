@@ -269,8 +269,10 @@ async def draft_email(
             additional_context=body.additional_context,
             db=db,
         )
-    except Exception as e:
-        logger.error("AI draft failed for client %s: %s", client_id, e)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("AI draft failed for client %s", client_id)
         raise HTTPException(
             status_code=502,
             detail="Failed to generate AI draft. Please try again.",

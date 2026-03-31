@@ -59,6 +59,7 @@ export default function SendEmailModal({
   const [additionalContext, setAdditionalContext] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [aiDrafted, setAiDrafted] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   // Email form state
   const [to, setTo] = useState(clientEmail || "");
@@ -127,6 +128,7 @@ export default function SendEmailModal({
   async function handleGenerateDraft() {
     if (!purpose.trim()) return;
     setDrafting(true);
+    setDraftError(null);
     try {
       const draft = await createCommunicationsApi(getToken).draftWithAI(clientId, {
         purpose: purpose.trim(),
@@ -143,7 +145,9 @@ export default function SendEmailModal({
 
       setShowEditor(true);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to generate draft", "error");
+      const msg = err instanceof Error ? err.message : "Failed to generate draft. Please try again.";
+      setDraftError(msg);
+      showToast(msg, "error");
     } finally {
       setDrafting(false);
     }
@@ -392,6 +396,9 @@ export default function SendEmailModal({
                       </>
                     )}
                   </button>
+                  {draftError && (
+                    <p className="text-sm text-red-600">{draftError}</p>
+                  )}
                 </div>
               )}
             </>

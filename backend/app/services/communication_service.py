@@ -433,7 +433,7 @@ _SUBJECT_SYSTEM_PROMPT = (
 async def draft_email_with_ai(
     user_id: str,
     client_id: uuid.UUID,
-    email_purpose: str,
+    purpose: str,
     db: Session,
     additional_context: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -546,7 +546,7 @@ async def draft_email_with_ai(
 
     # --- Build user message ---
     context_parts = [
-        f"PURPOSE: {email_purpose}",
+        f"PURPOSE: {purpose}",
         "",
         "CLIENT INFORMATION:",
         f"  Name: {client.name}",
