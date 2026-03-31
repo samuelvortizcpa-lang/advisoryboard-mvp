@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Alert, createAlertsApi } from "@/lib/api";
+import { Alert, createAlertsApi, createCommunicationsApi } from "@/lib/api";
 
 const SEVERITY_CONFIG: Record<string, { border: string; bg: string; icon: string; iconBg: string; label: string }> = {
   critical: {
@@ -37,6 +37,7 @@ export default function AlertsList() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissing, setDismissing] = useState<string | null>(null);
+  const [resolving, setResolving] = useState<string | null>(null);
 
   useEffect(() => {
     createAlertsApi(getToken)
@@ -58,9 +59,23 @@ export default function AlertsList() {
     }
   }
 
+  async function handleResolve(alert: Alert) {
+    setResolving(alert.id);
+    try {
+      await createCommunicationsApi(getToken).resolveFollowUp(alert.id);
+      setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+    } catch {
+      // non-fatal
+    } finally {
+      setResolving(null);
+    }
+  }
+
   function handleNavigate(alert: Alert) {
     const tab = alert.type === "consent_needed" || alert.type === "consent_expiring"
       ? "overview"
+      : alert.type === "follow_up_due"
+      ? "timeline"
       : "actions";
     router.push(`/dashboard/clients/${alert.client_id}?tab=${tab}`);
   }
@@ -157,15 +172,27 @@ export default function AlertsList() {
                 </p>
               </div>
 
-              {/* Dismiss */}
-              <button
-                onClick={() => handleDismiss(alert)}
-                disabled={isDismissing}
-                title="Dismiss alert"
-                className="mt-1 shrink-0 rounded-md p-1 text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-500 disabled:opacity-40"
-              >
-                {isDismissing ? <SmallSpinner /> : <XIcon />}
-              </button>
+              {/* Actions */}
+              <div className="flex shrink-0 items-center gap-1">
+                {alert.type === "follow_up_due" && (
+                  <button
+                    onClick={() => handleResolve(alert)}
+                    disabled={resolving === alert.id}
+                    title="Client responded — mark resolved"
+                    className="rounded-md px-2 py-1 text-[11px] font-medium text-green-600 transition-colors hover:bg-green-50 disabled:opacity-40"
+                  >
+                    {resolving === alert.id ? <SmallSpinner /> : "Resolved"}
+                  </button>
+                )}
+                <button
+                  onClick={() => handleDismiss(alert)}
+                  disabled={isDismissing}
+                  title="Dismiss alert"
+                  className="mt-1 shrink-0 rounded-md p-1 text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-500 disabled:opacity-40"
+                >
+                  {isDismissing ? <SmallSpinner /> : <XIcon />}
+                </button>
+              </div>
             </li>
           );
         })}
@@ -227,6 +254,15 @@ function SmallSpinner() {
 }
 
 function SeverityIcon({ severity, alertType }: { severity: string; alertType?: string }) {
+  // Mail icon for follow-up due alerts
+  if (alertType === "follow_up_due") {
+    return (
+      <svg className="h-3.5 w-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+      </svg>
+    );
+  }
+
   // Shield icon for consent-related alerts
   if (alertType === "consent_needed" || alertType === "consent_expiring") {
     const color = alertType === "consent_needed" ? "text-amber-600" : "text-blue-600";

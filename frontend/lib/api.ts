@@ -923,7 +923,7 @@ export function createConsentApi(getToken: GetToken, orgId?: string) {
 // ─── Alert types ───────────────────────────────────────────────────────────────
 
 export type AlertSeverity = "critical" | "warning" | "info";
-export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document" | "consent_needed" | "consent_expiring" | "preparer_determination_needed";
+export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document" | "consent_needed" | "consent_expiring" | "preparer_determination_needed" | "follow_up_due";
 
 export interface Alert {
   id: string;
@@ -1071,7 +1071,21 @@ export interface ActionItemTimelineItem {
   source_doc: string | null;
 }
 
-export type TimelineItem = DocumentTimelineItem | ActionItemTimelineItem;
+export interface CommunicationTimelineItem {
+  type: "communication";
+  id: string;
+  date: string;
+  title: string;
+  subtitle: string;
+  icon_hint: string;
+  metadata: {
+    communication_id: string;
+    ai_drafted: boolean;
+    template_name?: string;
+  } | null;
+}
+
+export type TimelineItem = DocumentTimelineItem | ActionItemTimelineItem | CommunicationTimelineItem;
 
 export interface TimelineResponse {
   items: TimelineItem[];
@@ -1903,6 +1917,165 @@ export function createStrategyDashboardApi(getToken: GetToken, orgId?: string) {
 
     fetchAlerts: (year: number) =>
       f<UnreviewedAlert[]>(`/strategy-dashboard/alerts?year=${year}`),
+  };
+}
+
+// ─── Communication types ─────────────────────────────────────────────────────
+
+export interface ClientCommunication {
+  id: string;
+  client_id: string;
+  user_id: string;
+  communication_type: string;
+  subject: string;
+  body_html: string;
+  body_text: string | null;
+  recipient_email: string;
+  recipient_name: string | null;
+  template_id: string | null;
+  status: string;
+  resend_message_id: string | null;
+  metadata: Record<string, unknown> | null;
+  sent_at: string;
+  created_at: string;
+}
+
+export interface EmailTemplate {
+  id: string;
+  user_id: string | null;
+  name: string;
+  subject_template: string;
+  body_template: string;
+  template_type: string;
+  is_default: boolean;
+  is_active: boolean;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FollowUpReminder {
+  id: string;
+  communication_id: string;
+  client_id: string;
+  user_id: string;
+  remind_at: string;
+  status: string;
+  triggered_at: string | null;
+  created_at: string;
+}
+
+export interface CommunicationSendRequest {
+  subject: string;
+  body_html: string;
+  recipient_email: string;
+  recipient_name?: string;
+  template_id?: string;
+  follow_up_days?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CommunicationSendResponse {
+  communication: ClientCommunication;
+  follow_up: FollowUpReminder | null;
+}
+
+export interface DraftEmailRequest {
+  purpose: string;
+  additional_context?: string;
+}
+
+export interface DraftEmailResponse {
+  subject: string;
+  body_html: string;
+  body_text: string;
+  ai_drafted: boolean;
+}
+
+export interface RenderTemplateRequest {
+  template_id: string;
+  extra_vars?: Record<string, string>;
+}
+
+export interface RenderedTemplate {
+  subject: string;
+  body_html: string;
+}
+
+export interface SchedulingUrlResponse {
+  scheduling_url: string | null;
+}
+
+// ─── Communications API factory ──────────────────────────────────────────────
+
+export function createCommunicationsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    sendEmail(clientId: string, data: CommunicationSendRequest) {
+      return f<CommunicationSendResponse>(`/clients/${clientId}/communications/send`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    getHistory(clientId: string, limit = 20) {
+      return f<ClientCommunication[]>(`/clients/${clientId}/communications?limit=${limit}`);
+    },
+
+    getLastCommunication(clientId: string) {
+      return f<ClientCommunication | null>(`/clients/${clientId}/communications/last`);
+    },
+
+    renderTemplate(clientId: string, data: RenderTemplateRequest) {
+      return f<RenderedTemplate>(`/clients/${clientId}/communications/render-template`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    draftWithAI(clientId: string, data: DraftEmailRequest) {
+      return f<DraftEmailResponse>(`/clients/${clientId}/communications/draft`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    getTemplates() {
+      return f<EmailTemplate[]>("/communications/templates");
+    },
+
+    createTemplate(data: { name: string; subject_template: string; body_template: string; template_type: string }) {
+      return f<EmailTemplate>("/communications/templates", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateTemplate(id: string, data: Partial<{ name: string; subject_template: string; body_template: string; template_type: string }>) {
+      return f<EmailTemplate>(`/communications/templates/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteTemplate(id: string) {
+      return f<void>(`/communications/templates/${id}`, { method: "DELETE" });
+    },
+
+    resolveFollowUp(id: string) {
+      return f<FollowUpReminder>(`/follow-up-reminders/${id}/resolve`, { method: "POST" });
+    },
+
+    dismissFollowUp(id: string) {
+      return f<FollowUpReminder>(`/follow-up-reminders/${id}/dismiss`, { method: "POST" });
+    },
+
+    updateSchedulingUrl(url: string | null) {
+      return f<SchedulingUrlResponse>("/users/me/scheduling-url", {
+        method: "PATCH",
+        body: JSON.stringify({ scheduling_url: url }),
+      });
+    },
   };
 }
 

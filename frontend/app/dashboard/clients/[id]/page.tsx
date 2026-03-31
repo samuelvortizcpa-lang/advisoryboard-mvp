@@ -25,9 +25,11 @@ import {
   createOrganizationsApi,
   createRagApi,
   createStrategiesApi,
+  createCommunicationsApi,
 } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import ActionItemList from "@/components/action-items/ActionItemList";
+import SendEmailModal from "@/components/communications/SendEmailModal";
 import DeadlineWidget from "@/components/action-items/DeadlineWidget";
 import BriefPanel from "@/components/briefs/BriefPanel";
 import DocumentList from "@/components/documents/DocumentList";
@@ -123,6 +125,10 @@ function ClientDetailContent() {
   const [saving, setSaving] = useState(false);
   const [clientTypes, setClientTypes] = useState<ClientType[]>([]);
 
+  // ── Email modal state ───────────────────────────────────────────────────────
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [lastContacted, setLastContacted] = useState<string | null | undefined>(undefined);
+
   // ── Delete state ────────────────────────────────────────────────────────────
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -149,6 +155,7 @@ function ClientDetailContent() {
 
   // ── Shared refresh key ──────────────────────────────────────────────────────
   const [actionItemsRefreshKey, setActionItemsRefreshKey] = useState(0);
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
 
   // ── Organization / team access state ────────────────────────────────────────
   const { activeOrg, isAdmin: isOrgAdmin } = useOrg();
@@ -252,6 +259,12 @@ function ClientDetailContent() {
         }
       })
       .catch(() => setLastChatDate(null));
+
+    // Overview: last contacted date
+    createCommunicationsApi(getToken)
+      .getLastCommunication(id)
+      .then((comm) => setLastContacted(comm?.sent_at ?? null))
+      .catch(() => setLastContacted(null));
   }, [id, getToken]);
 
   // Load team access data when org is available
@@ -703,6 +716,17 @@ function ClientDetailContent() {
               </div>
               <div className="flex shrink-0 gap-2">
                 <button
+                  onClick={() => setShowEmailModal(true)}
+                  disabled={!client.email}
+                  title={!client.email ? "Add a client email address to send emails" : `Email ${client.name}`}
+                  className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                  </svg>
+                  Email
+                </button>
+                <button
                   onClick={handleGenerateBrief}
                   disabled={briefLoading}
                   className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -909,6 +933,16 @@ function ClientDetailContent() {
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                   <dl className="divide-y divide-gray-100">
                     <DetailRow label="Email" value={client.email} />
+                    <DetailRow
+                      label="Last Contacted"
+                      value={
+                        lastContacted === undefined
+                          ? "..."
+                          : lastContacted
+                          ? formatRelativeTime(lastContacted)
+                          : "No emails sent yet"
+                      }
+                    />
                     <DetailRow label="Business" value={client.business_name} />
                     <DetailRow label="Entity Type" value={client.entity_type} />
                     <DetailRow label="Industry" value={client.industry} />
@@ -1079,7 +1113,7 @@ function ClientDetailContent() {
                 <CalendarView clientId={id} refreshKey={actionItemsRefreshKey} />
                 <Timeline
                   clientId={id}
-                  refreshKey={actionItemsRefreshKey}
+                  refreshKey={actionItemsRefreshKey + timelineRefreshKey}
                   onDocumentClick={() => navigateToTab("documents")}
                   onActionItemClick={() => navigateToTab("actions")}
                 />
@@ -1296,6 +1330,23 @@ function ClientDetailContent() {
       {/* ── Brief slide-over panel ─────────────────────────────────────────── */}
       {showBriefPanel && brief && (
         <BriefPanel brief={brief} onClose={() => setShowBriefPanel(false)} />
+      )}
+
+      {/* ── Send email slide-over ──────────────────────────────────────────── */}
+      {showEmailModal && client && (
+        <SendEmailModal
+          clientId={id}
+          clientName={client.name}
+          clientEmail={client.email}
+          onClose={() => setShowEmailModal(false)}
+          onSent={() => {
+            setTimelineRefreshKey((k) => k + 1);
+            createCommunicationsApi(getToken)
+              .getLastCommunication(id)
+              .then((comm) => setLastContacted(comm?.sent_at ?? null))
+              .catch(() => {});
+          }}
+        />
       )}
 
       {/* ── Delete confirmation modal ─────────────────────────────────────── */}

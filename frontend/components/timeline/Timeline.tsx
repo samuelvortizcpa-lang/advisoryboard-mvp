@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import {
   ActionItemTimelineItem,
+  CommunicationTimelineItem,
   DocumentTimelineItem,
   TimelineItem,
   createTimelineApi,
@@ -12,7 +13,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type FilterType = "all" | "document" | "action_item";
+type FilterType = "all" | "document" | "action_item" | "communication";
 
 interface TimelineProps {
   clientId: string;
@@ -125,6 +126,14 @@ function CheckIcon() {
   );
 }
 
+function MailIcon() {
+  return (
+    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+    </svg>
+  );
+}
+
 // ─── Badge sub-components ─────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<string, string> = {
@@ -220,6 +229,37 @@ function ActionItemCard({
   );
 }
 
+function CommunicationCard({ item }: { item: CommunicationTimelineItem }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <button onClick={() => setExpanded(!expanded)} className="w-full text-left">
+      <div className="rounded-lg border border-gray-200 px-3 py-2.5 transition hover:border-green-200 hover:bg-green-50/40">
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-sm font-medium text-gray-900">{item.title}</p>
+          {item.metadata?.ai_drafted && (
+            <span className="inline-flex items-center rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+              AI
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-xs text-gray-500">
+          {item.subtitle}
+          {item.metadata?.template_name && (
+            <span className="ml-1.5 text-gray-400">
+              · {item.metadata.template_name}
+            </span>
+          )}
+        </p>
+        {expanded && item.title && (
+          <p className="mt-2 text-xs text-gray-400 leading-relaxed border-t border-gray-100 pt-2">
+            Click to view full email in communications history
+          </p>
+        )}
+      </div>
+    </button>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function Timeline({
@@ -284,6 +324,7 @@ export default function Timeline({
               { value: "all" as FilterType, label: "All" },
               { value: "document" as FilterType, label: "Documents" },
               { value: "action_item" as FilterType, label: "Actions" },
+              { value: "communication" as FilterType, label: "Emails" },
             ] as const
           ).map(({ value, label }) => (
             <button
@@ -356,11 +397,15 @@ export default function Timeline({
                           className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-white ring-2 ring-white ${
                             item.type === "document"
                               ? "bg-blue-500"
+                              : item.type === "communication"
+                              ? "bg-green-500"
                               : "bg-purple-500"
                           }`}
                         >
                           {item.type === "document" ? (
                             <DocIcon />
+                          ) : item.type === "communication" ? (
+                            <MailIcon />
                           ) : (
                             <CheckIcon />
                           )}
@@ -374,6 +419,8 @@ export default function Timeline({
                           <span className="text-xs text-gray-400">
                             {item.type === "document"
                               ? "Document uploaded"
+                              : item.type === "communication"
+                              ? "Email sent"
                               : "Action item created"}
                           </span>
                           <span
@@ -390,6 +437,8 @@ export default function Timeline({
                             item={item}
                             onClick={() => onDocumentClick?.(item.id)}
                           />
+                        ) : item.type === "communication" ? (
+                          <CommunicationCard item={item} />
                         ) : (
                           <ActionItemCard
                             item={item}
