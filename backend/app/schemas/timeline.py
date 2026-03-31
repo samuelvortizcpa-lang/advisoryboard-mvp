@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -29,8 +29,20 @@ class ActionItemTimelineItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CommunicationTimelineItem(BaseModel):
+    type: Literal["communication"] = "communication"
+    id: UUID
+    date: datetime
+    title: str
+    subtitle: str
+    icon_hint: str = "email"
+    metadata: Optional[Dict[str, Any]] = None
+
+    model_config = {"from_attributes": True}
+
+
 TimelineItem = Annotated[
-    Union[DocumentTimelineItem, ActionItemTimelineItem],
+    Union[DocumentTimelineItem, ActionItemTimelineItem, CommunicationTimelineItem],
     Field(discriminator="type"),
 ]
 

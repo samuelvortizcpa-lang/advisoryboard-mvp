@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.dismissed_alert import DismissedAlert
+from app.models.follow_up_reminder import FollowUpReminder
 from app.services.alerts_service import compute_alerts, compute_summary, invalidate_alerts_cache
 from app.services.auth_context import AuthContext, get_auth
 
@@ -126,6 +127,20 @@ async def dismiss_alert(
             related_id=related_uuid,
         )
         db.add(dismissed)
+
+        # When dismissing a follow_up_due alert, also mark the reminder as dismissed
+        if request.alert_type == "follow_up_due":
+            reminder = (
+                db.query(FollowUpReminder)
+                .filter(
+                    FollowUpReminder.communication_id == related_uuid,
+                    FollowUpReminder.user_id == auth.user_id,
+                )
+                .first()
+            )
+            if reminder:
+                reminder.status = "dismissed"
+
         db.commit()
         invalidate_alerts_cache(auth.org_id, auth.user_id)
 

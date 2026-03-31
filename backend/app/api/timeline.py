@@ -2,7 +2,7 @@
 Timeline API router.
 
 Endpoints:
-  GET /clients/{client_id}/timeline   chronological list of documents + action items
+  GET /clients/{client_id}/timeline   chronological list of documents, action items + communications
 """
 
 from datetime import date
@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db
 from app.models.action_item import ActionItem
 from app.models.client import Client
+from app.models.client_communication import ClientCommunication
 from app.models.document import Document
 from app.schemas.timeline import (
     ActionItemTimelineItem,
+    CommunicationTimelineItem,
     DocumentTimelineItem,
     TimelineItem,
     TimelineResponse,
@@ -34,7 +36,7 @@ router = APIRouter()
 )
 async def get_client_timeline(
     client_id: UUID,
-    types: Optional[List[str]] = Query(default=None),  # ["document", "action_item"]
+    types: Optional[List[str]] = Query(default=None),  # ["document", "action_item", "communication"]
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     limit: int = Query(default=50, ge=1, le=200),
@@ -46,6 +48,7 @@ async def get_client_timeline(
 
     include_documents = not types or "document" in types
     include_action_items = not types or "action_item" in types
+    include_communications = not types or "communication" in types
 
     items: List[TimelineItem] = []
 
@@ -99,6 +102,40 @@ async def get_client_timeline(
                     status=ai.status,
                     priority=ai.priority,
                     source_doc=ai.document.filename if ai.document else None,
+                )
+            )
+
+    # Fetch communications
+    if include_communications:
+        comm_query = (
+            db.query(ClientCommunication)
+            .filter(ClientCommunication.client_id == client_id)
+            .options(joinedload(ClientCommunication.template))
+            .order_by(ClientCommunication.sent_at.desc())
+        )
+        if start_date:
+            comm_query = comm_query.filter(ClientCommunication.sent_at >= start_date)
+        if end_date:
+            comm_query = comm_query.filter(ClientCommunication.sent_at <= end_date)
+        for comm in comm_query.limit(fetch_limit).all():
+            meta = {
+                "communication_id": str(comm.id),
+                "ai_drafted": bool(
+                    comm.metadata_ and comm.metadata_.get("ai_drafted")
+                ),
+            }
+            if comm.template and comm.template.name:
+                meta["template_name"] = comm.template.name
+
+            items.append(
+                CommunicationTimelineItem(
+                    type="communication",
+                    id=comm.id,
+                    date=comm.sent_at,
+                    title=f"Email sent: {comm.subject}",
+                    subtitle=f"To {comm.recipient_name or comm.recipient_email}",
+                    icon_hint="email",
+                    metadata=meta,
                 )
             )
 

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.client_communication import ClientCommunication
 from app.models.follow_up_reminder import FollowUpReminder
 from app.models.user import User
 from app.schemas.communication import (
@@ -276,6 +277,98 @@ async def draft_email(
         )
 
     return DraftEmailResponse(**draft)
+
+
+# ---------------------------------------------------------------------------
+# Follow-up reminders
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/follow-up-reminders/{reminder_id}/resolve",
+    response_model=FollowUpReminderResponse,
+)
+async def resolve_follow_up(
+    reminder_id: UUID,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> FollowUpReminderResponse:
+    """Mark a follow-up reminder as resolved (client responded)."""
+    reminder = (
+        db.query(FollowUpReminder)
+        .filter(
+            FollowUpReminder.id == reminder_id,
+            FollowUpReminder.user_id == auth.user_id,
+        )
+        .first()
+    )
+    if not reminder:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+
+    reminder.status = "resolved"
+    reminder.triggered_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(reminder)
+    return FollowUpReminderResponse.model_validate(reminder)
+
+
+@router.post(
+    "/follow-up-reminders/{reminder_id}/dismiss",
+    response_model=FollowUpReminderResponse,
+)
+async def dismiss_follow_up(
+    reminder_id: UUID,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> FollowUpReminderResponse:
+    """Dismiss a follow-up reminder."""
+    reminder = (
+        db.query(FollowUpReminder)
+        .filter(
+            FollowUpReminder.id == reminder_id,
+            FollowUpReminder.user_id == auth.user_id,
+        )
+        .first()
+    )
+    if not reminder:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+
+    reminder.status = "dismissed"
+    reminder.triggered_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(reminder)
+    return FollowUpReminderResponse.model_validate(reminder)
+
+
+# ---------------------------------------------------------------------------
+# Last communication
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/clients/{client_id}/communications/last",
+    response_model=Optional[CommunicationResponse],
+)
+async def get_last_communication(
+    client_id: UUID,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> Optional[CommunicationResponse]:
+    """Return the most recent communication sent to this client."""
+    check_client_access(auth, client_id, db)
+
+    comm = (
+        db.query(ClientCommunication)
+        .filter(
+            ClientCommunication.client_id == client_id,
+            ClientCommunication.user_id == auth.user_id,
+        )
+        .order_by(ClientCommunication.sent_at.desc())
+        .first()
+    )
+    if not comm:
+        return None
+    return CommunicationResponse.model_validate(comm)
 
 
 # ---------------------------------------------------------------------------

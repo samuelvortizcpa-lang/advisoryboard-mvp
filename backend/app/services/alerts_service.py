@@ -9,6 +9,7 @@ Alert types:
 - preparer_determination_needed: tax docs uploaded, preparer relationship not yet set
 - consent_needed:                preparer confirmed, full §7216 consent required
 - consent_expiring:              §7216 consent expires within 30 days
+- follow_up_due:                 follow-up reminder whose remind_at has passed
 """
 
 from __future__ import annotations
@@ -26,8 +27,10 @@ from app.models.action_item import ActionItem
 from app.models.chat_message import ChatMessage
 from app.models.client import Client
 from app.models.client_consent import ClientConsent
+from app.models.client_communication import ClientCommunication
 from app.models.dismissed_alert import DismissedAlert
 from app.models.document import Document
+from app.models.follow_up_reminder import FollowUpReminder
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +292,57 @@ def _compute_alerts_uncached(
             "related_id": str(cid),
             "created_at": datetime.now(timezone.utc).date().isoformat(),
         })
+
+    # ── Q9: Follow-up reminders that are due ──────────────────────────────
+    now = datetime.now(timezone.utc)
+    due_reminders = (
+        db.query(FollowUpReminder)
+        .filter(
+            FollowUpReminder.client_id.in_(client_ids),
+            FollowUpReminder.user_id == clerk_user_id,
+            FollowUpReminder.status == "pending",
+            FollowUpReminder.remind_at <= now,
+        )
+        .limit(100)
+        .all()
+    )
+    for reminder in due_reminders:
+        if ("follow_up_due", reminder.communication_id) in dismissed:
+            continue
+
+        # Fetch the communication for subject and sent_at
+        comm = (
+            db.query(ClientCommunication)
+            .filter(ClientCommunication.id == reminder.communication_id)
+            .first()
+        )
+        if not comm:
+            continue
+
+        # Mark as triggered
+        reminder.status = "triggered"
+        reminder.triggered_at = now
+
+        cname = client_names.get(reminder.client_id, "Unknown")
+        sent_date = comm.sent_at.strftime("%b %d") if comm.sent_at else "unknown date"
+        subject_preview = (comm.subject or "")[:80]
+
+        alerts.append({
+            "id": str(reminder.id),
+            "type": "follow_up_due",
+            "severity": "warning",
+            "client_id": str(reminder.client_id),
+            "client_name": cname,
+            "message": (
+                f"Follow-up due: You emailed {cname} about "
+                f"\"{subject_preview}\" on {sent_date} with no response"
+            ),
+            "related_id": str(reminder.communication_id),
+            "created_at": reminder.remind_at.isoformat(),
+        })
+
+    if due_reminders:
+        db.commit()
 
     # Sort: critical first, then warning, then info; within same severity by date
     alerts.sort(key=lambda a: (SEVERITY_ORDER.get(a["severity"], 99), a["created_at"]))
