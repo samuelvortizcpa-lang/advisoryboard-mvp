@@ -27,6 +27,9 @@ from app.models.client_assignment import ClientAssignment
 from app.models.tax_strategy import TaxStrategy
 from app.models.client_strategy_status import ClientStrategyStatus
 from app.models.audit_log import AuditLog
+from app.models.email_template import EmailTemplate
+from app.models.client_communication import ClientCommunication
+from app.models.follow_up_reminder import FollowUpReminder
 
 __all__ = [
     "User",
@@ -57,4 +60,7 @@ __all__ = [
     "TaxStrategy",
     "ClientStrategyStatus",
     "AuditLog",
+    "EmailTemplate",
+    "ClientCommunication",
+    "FollowUpReminder",
 ]
