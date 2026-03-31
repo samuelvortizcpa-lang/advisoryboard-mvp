@@ -17,6 +17,8 @@ from app.schemas.communication import (
     CommunicationResponse,
     CommunicationSendRequest,
     CommunicationSendResponse,
+    DraftEmailRequest,
+    DraftEmailResponse,
     FollowUpReminderResponse,
     RenderTemplateRequest,
     RenderedTemplate,
@@ -238,6 +240,42 @@ async def delete_template(
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# AI Draft
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/clients/{client_id}/communications/draft",
+    response_model=DraftEmailResponse,
+)
+async def draft_email(
+    client_id: UUID,
+    body: DraftEmailRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> DraftEmailResponse:
+    """Generate an AI-drafted email for a client using contextual awareness."""
+    check_client_access(auth, client_id, db)
+
+    try:
+        draft = await communication_service.draft_email_with_ai(
+            user_id=auth.user_id,
+            client_id=client_id,
+            purpose=body.purpose,
+            additional_context=body.additional_context,
+            db=db,
+        )
+    except Exception as e:
+        logger.error("AI draft failed for client %s: %s", client_id, e)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate AI draft. Please try again.",
+        )
+
+    return DraftEmailResponse(**draft)
 
 
 # ---------------------------------------------------------------------------

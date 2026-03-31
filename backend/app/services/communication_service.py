@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.action_item import ActionItem
+from app.models.chat_message import ChatMessage
 from app.models.client import Client
 from app.models.client_communication import ClientCommunication
 from app.models.document import Document
@@ -404,6 +405,310 @@ def increment_template_usage(template_id: uuid.UUID, db: Session) -> None:
     if template:
         template.usage_count = (template.usage_count or 0) + 1
         db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 9. AI-drafted email
+# ---------------------------------------------------------------------------
+
+_DRAFT_SYSTEM_PROMPT = (
+    "You are an email drafting assistant for a CPA/financial advisor. "
+    "Draft a professional, warm, and concise client email. The email should:\n"
+    "- Be 100-200 words (short and actionable)\n"
+    "- Use a warm but professional tone appropriate for a CPA-client relationship\n"
+    "- Reference specific details from the client context when relevant\n"
+    "- Include a clear call-to-action (schedule meeting, send documents, confirm, etc.)\n"
+    "- Not include a subject line (that will be generated separately)\n"
+    "- Not include a greeting or sign-off (those will be added by the template wrapper)\n"
+    "- If a scheduling link is available, mention it naturally\n"
+    "Return ONLY the email body text. No markdown formatting, no extra commentary."
+)
+
+_SUBJECT_SYSTEM_PROMPT = (
+    "Given this email body, generate a professional email subject line. "
+    "5-10 words. Include the client name. Return ONLY the subject line."
+)
+
+
+async def draft_email_with_ai(
+    user_id: str,
+    client_id: uuid.UUID,
+    email_purpose: str,
+    db: Session,
+    additional_context: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Use GPT-4o to draft a contextual email based on the client's actual data.
+
+    Returns {"subject": ..., "body_html": ..., "body_text": ..., "ai_drafted": True}.
+    """
+    from openai import AsyncOpenAI
+
+    settings = get_settings()
+    openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    # --- Gather context ---
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if client is None:
+        raise ValueError("Client not found")
+
+    db_user = db.query(User).filter(User.clerk_id == user_id).first()
+
+    preparer_name = "Your advisor"
+    preparer_firm = ""
+    scheduling_url = ""
+    if db_user:
+        parts = [db_user.first_name or "", db_user.last_name or ""]
+        preparer_name = " ".join(p for p in parts if p).strip() or "Your advisor"
+        scheduling_url = db_user.scheduling_url or ""
+
+        member = (
+            db.query(OrganizationMember)
+            .filter(
+                OrganizationMember.user_id == user_id,
+                OrganizationMember.is_active.is_(True),
+            )
+            .first()
+        )
+        if member:
+            org = db.query(Organization).filter(Organization.id == member.org_id).first()
+            if org and org.org_type != "personal":
+                preparer_firm = org.name
+
+    # Client type label
+    client_type_label = ""
+    if client.client_type:
+        client_type_label = client.client_type.name
+
+    # Last 5 chat messages
+    recent_chats = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.client_id == client_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    recent_chats.reverse()  # chronological order
+    chat_context = ""
+    if recent_chats:
+        lines = []
+        for msg in recent_chats:
+            role = "CPA" if msg.role == "user" else "AI"
+            # Truncate long messages
+            content = msg.content[:300] + "..." if len(msg.content) > 300 else msg.content
+            lines.append(f"  {role}: {content}")
+        chat_context = "\n".join(lines)
+
+    # Top 5 pending action items
+    pending_items = (
+        db.query(ActionItem)
+        .filter(
+            ActionItem.client_id == client_id,
+            ActionItem.status == "pending",
+        )
+        .order_by(ActionItem.due_date.asc().nulls_last())
+        .limit(5)
+        .all()
+    )
+    action_items_text = ""
+    if pending_items:
+        lines = []
+        for item in pending_items:
+            due = f" (due {item.due_date.strftime('%b %d, %Y')})" if item.due_date else ""
+            priority = f" [{item.priority}]" if item.priority else ""
+            lines.append(f"  - {item.text}{due}{priority}")
+        action_items_text = "\n".join(lines)
+
+    # Most recent communication
+    last_comm = (
+        db.query(ClientCommunication)
+        .filter(
+            ClientCommunication.client_id == client_id,
+            ClientCommunication.status == "sent",
+        )
+        .order_by(ClientCommunication.sent_at.desc())
+        .first()
+    )
+    last_comm_text = ""
+    if last_comm:
+        last_comm_text = (
+            f"Subject: {last_comm.subject}\n"
+            f"  Sent: {last_comm.sent_at.strftime('%B %d, %Y')}"
+        )
+
+    # Document count
+    doc_count = (
+        db.query(func.count(Document.id))
+        .filter(Document.client_id == client_id)
+        .scalar()
+        or 0
+    )
+
+    # --- Build user message ---
+    context_parts = [
+        f"PURPOSE: {email_purpose}",
+        "",
+        "CLIENT INFORMATION:",
+        f"  Name: {client.name}",
+    ]
+    if client.business_name:
+        context_parts.append(f"  Business: {client.business_name}")
+    if client.entity_type:
+        context_parts.append(f"  Entity Type: {client.entity_type}")
+    if client_type_label:
+        context_parts.append(f"  Engagement Type: {client_type_label}")
+    if client.email:
+        context_parts.append(f"  Email: {client.email}")
+    context_parts.append(f"  Documents on file: {doc_count}")
+
+    context_parts.append("")
+    context_parts.append("ADVISOR INFORMATION:")
+    context_parts.append(f"  Name: {preparer_name}")
+    if preparer_firm:
+        context_parts.append(f"  Firm: {preparer_firm}")
+    if scheduling_url:
+        context_parts.append(f"  Scheduling link: {scheduling_url}")
+
+    if action_items_text:
+        context_parts.append("")
+        context_parts.append("PENDING ACTION ITEMS:")
+        context_parts.append(action_items_text)
+
+    if chat_context:
+        context_parts.append("")
+        context_parts.append("RECENT CONVERSATION (last 5 messages):")
+        context_parts.append(chat_context)
+
+    if last_comm_text:
+        context_parts.append("")
+        context_parts.append("MOST RECENT EMAIL SENT:")
+        context_parts.append(f"  {last_comm_text}")
+
+    if additional_context:
+        context_parts.append("")
+        context_parts.append(f"ADDITIONAL INSTRUCTIONS: {additional_context}")
+
+    user_message = "\n".join(context_parts)
+
+    # --- Call GPT-4o for body ---
+    body_response = await openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": _DRAFT_SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        temperature=0.7,
+        max_tokens=500,
+    )
+    ai_body = body_response.choices[0].message.content.strip()
+
+    # --- Call GPT-4o for subject line ---
+    subject_response = await openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": _SUBJECT_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Client name: {client.name}\n\nEmail body:\n{ai_body}",
+            },
+        ],
+        temperature=0.5,
+        max_tokens=30,
+    )
+    ai_subject = subject_response.choices[0].message.content.strip().strip('"')
+
+    # --- Wrap in HTML template ---
+    body_html = _build_email_html(
+        client_name=client.name,
+        body_text=ai_body,
+        preparer_name=preparer_name,
+        preparer_firm=preparer_firm,
+        scheduling_url=scheduling_url,
+    )
+
+    body_text_plain = (
+        f"Hi {client.name},\n\n"
+        f"{ai_body}\n\n"
+        f"Best regards,\n{preparer_name}"
+        + (f"\n{preparer_firm}" if preparer_firm else "")
+    )
+
+    return {
+        "subject": ai_subject,
+        "body_html": body_html,
+        "body_text": body_text_plain,
+        "ai_drafted": True,
+    }
+
+
+def _build_email_html(
+    client_name: str,
+    body_text: str,
+    preparer_name: str,
+    preparer_firm: str,
+    scheduling_url: str,
+) -> str:
+    """Wrap AI-drafted body in the standard Callwen email template."""
+    # Convert plain text paragraphs to HTML
+    paragraphs = body_text.split("\n\n")
+    body_paragraphs = ""
+    for p in paragraphs:
+        p = p.strip()
+        if not p:
+            continue
+        escaped = html.escape(p).replace("\n", "<br>")
+        body_paragraphs += (
+            f'  <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">'
+            f"{escaped}</p>\n"
+        )
+
+    scheduling_block = ""
+    if scheduling_url:
+        scheduling_block = f"""\
+  <table cellpadding="0" cellspacing="0" style="margin:16px 0 24px;">
+  <tr><td style="background:#1e40af;border-radius:6px;">
+    <a href="{html.escape(scheduling_url)}"
+       style="display:inline-block;padding:12px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">
+      Book a Time
+    </a>
+  </td></tr>
+  </table>
+"""
+
+    firm_line = f"<br>{html.escape(preparer_firm)}" if preparer_firm else ""
+
+    return f"""\
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f7f7f7;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f7f7;padding:40px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+<tr><td style="background:#1e40af;padding:28px 40px;">
+  <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">{html.escape(preparer_name)}</h1>
+</td></tr>
+<tr><td style="padding:32px 40px;">
+  <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+    Hi {html.escape(client_name)},
+  </p>
+{body_paragraphs}\
+{scheduling_block}\
+  <p style="margin:24px 0 0;color:#374151;font-size:15px;line-height:1.6;">
+    Best regards,<br>
+    <strong>{html.escape(preparer_name)}</strong>{firm_line}
+  </p>
+</td></tr>
+<tr><td style="padding:24px 40px;border-top:1px solid #e5e7eb;background:#f9fafb;">
+  <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.5;">
+    Sent by {html.escape(preparer_name)} via Callwen. If you have questions, reply directly to this email.
+  </p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
 
 
 # ---------------------------------------------------------------------------

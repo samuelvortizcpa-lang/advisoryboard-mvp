@@ -109,6 +109,23 @@ class TemplateResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# AI Draft
+# ---------------------------------------------------------------------------
+
+
+class DraftEmailRequest(BaseModel):
+    purpose: str = Field(..., max_length=500)
+    additional_context: Optional[str] = Field(None, max_length=2000)
+
+
+class DraftEmailResponse(BaseModel):
+    subject: str
+    body_html: str
+    body_text: str
+    ai_drafted: bool = True
+
+
+# ---------------------------------------------------------------------------
 # Scheduling URL
 # ---------------------------------------------------------------------------
 
