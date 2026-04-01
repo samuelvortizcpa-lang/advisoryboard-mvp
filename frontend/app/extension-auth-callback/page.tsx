@@ -7,14 +7,11 @@ import { useEffect, useState } from "react";
  * Extension auth callback page.
  *
  * Flow:
- * 1. Extension opens /sign-in?redirect_url=/extension-auth-callback
- * 2. User signs in via Clerk
- * 3. Clerk redirects here (because of redirect_url)
- * 4. This page gets JWT from Clerk, puts it in the URL
- * 5. Service worker detects the URL, extracts token, closes the tab
- *
- * If the user arrives unauthenticated (e.g. direct visit), we redirect
- * to sign-in with redirect_url back to this page.
+ * 1. Extension opens /extension-auth-callback directly
+ * 2a. If signed in: page gets JWT from Clerk, puts it in the URL as ?token=JWT
+ * 2b. If not signed in: redirects to /sign-in?redirect_url=/extension-auth-callback
+ *     → user signs in → Clerk redirects back here → goes to 2a
+ * 3. Service worker detects the URL with ?token=, extracts token, closes the tab
  */
 export default function ExtensionAuthCallback() {
   const { isLoaded, isSignedIn, getToken } = useAuth();

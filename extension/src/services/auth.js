@@ -2,9 +2,10 @@
  * Clerk authentication for the extension.
  *
  * The extension can't run Clerk's JS SDK directly. Instead it opens a tab to
- * Callwen's sign-in page with ?extension=true. After sign-in the web app
- * redirects to /extension-auth-callback?token=<jwt>. The service worker
- * listens for that URL, extracts the token, and stores it.
+ * /extension-auth-callback. If the user is already signed in, the page gets
+ * a JWT from Clerk and appends ?token=<jwt> to the URL. If not signed in,
+ * the page redirects to /sign-in which returns here after auth. The service
+ * worker listens for the callback URL, extracts the token, and stores it.
  */
 
 import { CONFIG } from '../utils/config.js';
@@ -64,7 +65,7 @@ export async function signIn() {
     chrome.tabs.onUpdated.addListener(listener);
 
     // Open sign-in page
-    chrome.tabs.create({ url: `${CONFIG.APP_URL}/sign-in?redirect_url=/extension-auth-callback` })
+    chrome.tabs.create({ url: `${CONFIG.APP_URL}/extension-auth-callback` })
       .then(tab => { authTabId = tab.id; })
       .catch(err => settle(null, err));
   });
