@@ -86,19 +86,17 @@ async function request(path, options = {}) {
 // ---------------------------------------------------------------------------
 
 export async function getClients() {
-  const clients = await request('/clients');
-  // Cache names + IDs for offline display in the popup
-  if (Array.isArray(clients)) {
-    const light = clients.map(c => ({
-      id: c.id,
-      name: c.name || c.business_name || 'Unnamed',
-      business_name: c.business_name || '',
-      email: c.email || '',
-    }));
-    await setCachedClients(light);
-    return light;
-  }
-  return clients;
+  const data = await request('/clients');
+  // Backend returns { items: [...], total, skip, limit }
+  const clients = Array.isArray(data) ? data : (data.items || []);
+  const light = clients.map(c => ({
+    id: c.id,
+    name: c.name || c.business_name || 'Unnamed',
+    business_name: c.business_name || '',
+    email: c.email || '',
+  }));
+  await setCachedClients(light);
+  return light;
 }
 
 // ---------------------------------------------------------------------------
