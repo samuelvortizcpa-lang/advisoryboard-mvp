@@ -39,22 +39,13 @@ export async function signOut() {
 }
 
 // ---------------------------------------------------------------------------
-// Auth check — verifies the stored token is still valid
+// Auth check — token exists in storage (no API call)
+// Expired tokens are caught by the API client's 401 handler which clears storage.
 // ---------------------------------------------------------------------------
 
 export async function isAuthenticated() {
   const token = await getAuthToken();
-  if (!token) return false;
-
-  try {
-    const res = await fetch(`${CONFIG.API_BASE_URL}/api/users/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return res.ok;
-  } catch {
-    // Network error — can't verify, but token exists
-    return false;
-  }
+  return !!token;
 }
 
 // ---------------------------------------------------------------------------
