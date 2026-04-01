@@ -9,7 +9,8 @@ import { CONFIG } from '../utils/config.js';
 import { isAuthenticated, signIn, signOut } from '../services/auth.js';
 import {
   getExtensionConfig, getClients, captureContent, matchClient,
-  getRecentCaptures, ERROR_CODES,
+  getRecentCaptures, getMonitoringRules, createMonitoringRule,
+  updateMonitoringRule, deleteMonitoringRule, ERROR_CODES,
 } from '../services/api.js';
 import {
   captureTextSelection, captureFullPage, captureFileUrl,
@@ -45,10 +46,24 @@ const usageSection = document.getElementById('usage-section');
 const usageText = document.getElementById('usage-text');
 const upgradeLink = document.getElementById('upgrade-link');
 const progressBar = document.getElementById('progress-bar');
-const recentSection = document.getElementById('recent-section');
-const recentToggle = document.getElementById('recent-toggle');
 const recentList = document.getElementById('recent-list');
+const recentEmpty = document.getElementById('recent-empty');
 const viewAllLink = document.getElementById('view-all-link');
+const quickRuleLink = document.getElementById('quick-rule-link');
+const createRuleFromMatch = document.getElementById('create-rule-from-match');
+const rulesListEl = document.getElementById('rules-list');
+const rulesForm = document.getElementById('rules-form');
+const rulesFormCancel = document.getElementById('rules-form-cancel');
+const ruleNameInput = document.getElementById('rule-name');
+const ruleTypeSelect = document.getElementById('rule-type');
+const rulePatternInput = document.getElementById('rule-pattern');
+const ruleClientSelect = document.getElementById('rule-client');
+const ruleSaveBtn = document.getElementById('rule-save-btn');
+const ruleSaveText = document.getElementById('rule-save-text');
+const ruleSaveSpinner = document.getElementById('rule-save-spinner');
+const addRuleBtn = document.getElementById('add-rule-btn');
+const rulesAddSection = document.getElementById('rules-add-section');
+const rulesGate = document.getElementById('rules-gate');
 
 // ---------------------------------------------------------------------------
 // State
@@ -63,6 +78,8 @@ let recentClientIds = [];    // last 5 used client IDs
 let autoMatchResult = null;  // { client_id, client_name, match_method, confidence }
 let selectedClientId = '';
 let parsedContent = null;    // { content, metadata, email_data, capture_type, document_tag }
+let monitoringRules = [];    // loaded rules list
+let activePanel = 'capture'; // capture | rules | recent
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
@@ -281,8 +298,11 @@ function selectClient(clientId, clientName) {
     const method = autoMatchResult.match_method || 'match';
     autoMatchBadge.textContent = `Auto-matched via ${method}`;
     autoMatchBadge.className = `match-badge ${conf}`;
+    // Show quick rule creation link
+    quickRuleLink.classList.remove('hidden');
   } else {
     autoMatchBadge.classList.add('hidden');
+    quickRuleLink.classList.add('hidden');
   }
 
   // Highlight in list
@@ -519,13 +539,26 @@ function showParserBadge(response) {
 // Recent captures list
 // ---------------------------------------------------------------------------
 
+let recentLoaded = false;
+
 async function loadRecentCaptures() {
+  if (recentLoaded) return;
+
   try {
     const captures = await getRecentCaptures();
     const items = Array.isArray(captures) ? captures : (captures?.captures || []);
-    if (items.length === 0) return;
 
-    const recent = items.slice(0, 3);
+    if (items.length === 0) {
+      recentList.classList.add('hidden');
+      recentEmpty.classList.remove('hidden');
+      return;
+    }
+
+    recentLoaded = true;
+    recentEmpty.classList.add('hidden');
+    recentList.classList.remove('hidden');
+
+    const recent = items.slice(0, 10);
     recentList.innerHTML = recent.map(c => {
       const domain = c.source_url ? extractDomain(c.source_url) : '';
       const time = c.created_at ? formatRelativeTime(c.created_at) : '';
@@ -537,9 +570,6 @@ async function loadRecentCaptures() {
         </div>
       </div>`;
     }).join('');
-
-    recentSection.classList.remove('hidden');
-    viewAllLink.classList.remove('hidden');
   } catch {
     // Non-critical
   }
@@ -870,13 +900,316 @@ function handleApiError(err) {
 }
 
 // ---------------------------------------------------------------------------
-// Recent captures toggle
+// Main tab switching (Capture / Rules / Recent)
 // ---------------------------------------------------------------------------
 
-recentToggle.addEventListener('click', () => {
-  const isOpen = recentToggle.classList.toggle('open');
-  recentList.classList.toggle('hidden', !isOpen);
-  viewAllLink.classList.toggle('hidden', !isOpen);
+document.querySelectorAll('.main-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const panel = tab.dataset.panel;
+    switchPanel(panel);
+  });
+});
+
+function switchPanel(panel) {
+  activePanel = panel;
+
+  document.querySelectorAll('.main-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.panel === panel);
+  });
+
+  document.getElementById('panel-capture').classList.toggle('hidden', panel !== 'capture');
+  document.getElementById('panel-rules').classList.toggle('hidden', panel !== 'rules');
+  document.getElementById('panel-recent').classList.toggle('hidden', panel !== 'recent');
+
+  // Load data on first visit
+  if (panel === 'rules') loadRules();
+  if (panel === 'recent') loadRecentCaptures();
+}
+
+// ---------------------------------------------------------------------------
+// Monitoring rules CRUD
+// ---------------------------------------------------------------------------
+
+let rulesLoaded = false;
+
+async function loadRules() {
+  // Check if monitoring is available on this tier
+  if (extensionConfig && extensionConfig.monitoring_enabled === false) {
+    rulesListEl.classList.add('hidden');
+    rulesAddSection.classList.add('hidden');
+    rulesForm.classList.add('hidden');
+    rulesGate.classList.remove('hidden');
+    return;
+  }
+
+  rulesGate.classList.add('hidden');
+
+  if (rulesLoaded) return;
+
+  try {
+    const result = await getMonitoringRules();
+    monitoringRules = Array.isArray(result) ? result : (result?.rules || []);
+    rulesLoaded = true;
+    renderRules();
+  } catch (err) {
+    if (err.code === ERROR_CODES.TIER_UPGRADE) {
+      rulesListEl.classList.add('hidden');
+      rulesAddSection.classList.add('hidden');
+      rulesForm.classList.add('hidden');
+      rulesGate.classList.remove('hidden');
+    } else {
+      rulesListEl.innerHTML = '<div class="rules-empty"><p>Failed to load rules.</p></div>';
+    }
+  }
+}
+
+function renderRules() {
+  if (monitoringRules.length === 0) {
+    rulesListEl.innerHTML = '<div class="rules-empty"><p>No monitoring rules yet.</p><p style="font-size:11px;color:#475569;">Rules auto-capture pages matching your patterns.</p></div>';
+    rulesAddSection.classList.remove('hidden');
+    return;
+  }
+
+  rulesAddSection.classList.remove('hidden');
+
+  const html = monitoringRules.map(rule => {
+    const icon = getRuleTypeIcon(rule.rule_type || rule.type);
+    const clientName = rule.client_name || getClientName(rule.client_id) || 'Unknown';
+    const isActive = rule.is_active !== false;
+    const pattern = rule.pattern || '';
+
+    return `<div class="rule-item" data-rule-id="${rule.id}">
+      <div class="rule-type-icon">${icon}</div>
+      <div class="rule-info">
+        <div class="rule-name">${escapeHtml(rule.name || 'Unnamed rule')}</div>
+        <div class="rule-detail">${escapeHtml(pattern)} → ${escapeHtml(clientName)}</div>
+      </div>
+      <div class="rule-actions">
+        <button class="toggle${isActive ? ' on' : ''}" data-action="toggle" data-rule-id="${rule.id}" title="${isActive ? 'Disable' : 'Enable'}"></button>
+        <button class="rule-delete" data-action="delete" data-rule-id="${rule.id}" title="Delete rule">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+          </svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  rulesListEl.innerHTML = html;
+
+  // Attach handlers
+  rulesListEl.querySelectorAll('[data-action="toggle"]').forEach(btn => {
+    btn.addEventListener('click', () => handleToggleRule(btn.dataset.ruleId));
+  });
+
+  rulesListEl.querySelectorAll('[data-action="delete"]').forEach(btn => {
+    btn.addEventListener('click', () => handleDeleteRule(btn.dataset.ruleId));
+  });
+}
+
+function getRuleTypeIcon(type) {
+  switch (type) {
+    case 'domain': return '\u{1F310}';
+    case 'url_contains': return '\u{1F517}';
+    case 'email_from': return '\u{1F4E7}';
+    case 'page_title': return '\u{1F4C4}';
+    default: return '\u{1F50D}';
+  }
+}
+
+async function handleToggleRule(ruleId) {
+  const rule = monitoringRules.find(r => r.id === ruleId);
+  if (!rule) return;
+
+  const newState = rule.is_active === false ? true : false;
+
+  // Optimistic UI update
+  rule.is_active = newState;
+  const toggleBtn = rulesListEl.querySelector(`[data-action="toggle"][data-rule-id="${ruleId}"]`);
+  if (toggleBtn) toggleBtn.classList.toggle('on', newState);
+
+  try {
+    await updateMonitoringRule(ruleId, { is_active: newState });
+  } catch {
+    // Revert
+    rule.is_active = !newState;
+    if (toggleBtn) toggleBtn.classList.toggle('on', !newState);
+  }
+}
+
+async function handleDeleteRule(ruleId) {
+  const rule = monitoringRules.find(r => r.id === ruleId);
+  const ruleName = rule?.name || 'this rule';
+
+  // Show confirmation dialog
+  const confirmed = await showConfirmDialog(`Delete "${ruleName}"? This cannot be undone.`);
+  if (!confirmed) return;
+
+  try {
+    await deleteMonitoringRule(ruleId);
+    monitoringRules = monitoringRules.filter(r => r.id !== ruleId);
+    renderRules();
+  } catch (err) {
+    handleApiError(err);
+  }
+}
+
+function showConfirmDialog(message) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `<div class="confirm-dialog">
+      <p>${escapeHtml(message)}</p>
+      <div class="confirm-actions">
+        <button class="btn-ghost" data-confirm="cancel">Cancel</button>
+        <button class="btn-danger" data-confirm="ok">Delete</button>
+      </div>
+    </div>`;
+
+    document.body.appendChild(overlay);
+
+    const cleanup = (result) => {
+      overlay.remove();
+      resolve(result);
+    };
+
+    overlay.querySelector('[data-confirm="cancel"]').addEventListener('click', () => cleanup(false));
+    overlay.querySelector('[data-confirm="ok"]').addEventListener('click', () => cleanup(true));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+  });
+}
+
+// --- Add rule form ---
+
+addRuleBtn.addEventListener('click', () => {
+  showRulesForm();
+});
+
+rulesFormCancel.addEventListener('click', () => {
+  hideRulesForm();
+});
+
+function showRulesForm(prefill = {}) {
+  rulesForm.classList.remove('hidden');
+  rulesAddSection.classList.add('hidden');
+
+  // Populate client dropdown
+  const clientOptions = allClients.map(c =>
+    `<option value="${c.id}">${escapeHtml(c.name || 'Unnamed')}</option>`
+  ).join('');
+  ruleClientSelect.innerHTML = `<option value="">Select a client...</option>${clientOptions}`;
+
+  // Apply prefill
+  ruleNameInput.value = prefill.name || '';
+  ruleTypeSelect.value = prefill.rule_type || 'domain';
+  rulePatternInput.value = prefill.pattern || '';
+  if (prefill.client_id) ruleClientSelect.value = prefill.client_id;
+
+  updatePatternPlaceholder();
+  validateRuleForm();
+
+  setTimeout(() => ruleNameInput.focus(), 10);
+}
+
+function hideRulesForm() {
+  rulesForm.classList.add('hidden');
+  rulesAddSection.classList.remove('hidden');
+  ruleNameInput.value = '';
+  rulePatternInput.value = '';
+  ruleClientSelect.value = '';
+}
+
+// Dynamic placeholder for pattern input
+ruleTypeSelect.addEventListener('change', updatePatternPlaceholder);
+
+function updatePatternPlaceholder() {
+  const placeholders = {
+    domain: 'e.g., acmecorp.com',
+    url_contains: 'e.g., /invoices/',
+    email_from: 'e.g., cfo@acmecorp.com',
+    page_title: 'e.g., Profit & Loss',
+  };
+  rulePatternInput.placeholder = placeholders[ruleTypeSelect.value] || 'Enter pattern...';
+}
+
+// Form validation
+ruleNameInput.addEventListener('input', validateRuleForm);
+rulePatternInput.addEventListener('input', validateRuleForm);
+ruleClientSelect.addEventListener('change', validateRuleForm);
+
+function validateRuleForm() {
+  const valid = ruleNameInput.value.trim() &&
+                rulePatternInput.value.trim() &&
+                ruleClientSelect.value;
+  ruleSaveBtn.disabled = !valid;
+}
+
+// Save rule
+ruleSaveBtn.addEventListener('click', handleSaveRule);
+
+async function handleSaveRule() {
+  const name = ruleNameInput.value.trim();
+  const ruleType = ruleTypeSelect.value;
+  const pattern = rulePatternInput.value.trim();
+  const clientId = ruleClientSelect.value;
+
+  if (!name || !pattern || !clientId) return;
+
+  ruleSaveBtn.disabled = true;
+  ruleSaveText.classList.add('hidden');
+  ruleSaveSpinner.classList.remove('hidden');
+
+  try {
+    const newRule = await createMonitoringRule({
+      name,
+      rule_type: ruleType,
+      pattern,
+      client_id: clientId,
+    });
+
+    // Add to local list
+    if (newRule) {
+      monitoringRules.push(newRule);
+    } else {
+      // Reload from server
+      rulesLoaded = false;
+      await loadRules();
+    }
+
+    hideRulesForm();
+    renderRules();
+  } catch (err) {
+    handleApiError(err);
+  } finally {
+    ruleSaveBtn.disabled = false;
+    ruleSaveText.classList.remove('hidden');
+    ruleSaveSpinner.classList.add('hidden');
+  }
+}
+
+// --- Quick rule creation from auto-match ---
+
+createRuleFromMatch.addEventListener('click', (e) => {
+  e.preventDefault();
+  switchPanel('rules');
+
+  // Prefill from current auto-match and page context
+  const prefill = {
+    client_id: autoMatchResult?.client_id || selectedClientId || '',
+  };
+
+  if (activeTab?.url) {
+    try {
+      const domain = new URL(activeTab.url).hostname;
+      prefill.rule_type = 'domain';
+      prefill.pattern = domain;
+      prefill.name = `Capture from ${domain}`;
+    } catch {}
+  }
+
+  showRulesForm(prefill);
 });
 
 // ---------------------------------------------------------------------------

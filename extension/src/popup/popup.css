@@ -694,3 +694,351 @@ a:hover { text-decoration: underline; }
   font-weight: 500;
   text-align: center;
 }
+
+/* ---------------------------------------------------------------------------
+   Main navigation tabs (Capture / Rules / Recent)
+   --------------------------------------------------------------------------- */
+
+.main-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid #2d3748;
+  background: #1a1f2e;
+}
+
+.main-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.main-tab:hover {
+  color: #94a3b8;
+}
+
+.main-tab.active {
+  color: #14b8a6;
+  border-bottom-color: #14b8a6;
+}
+
+.main-tab svg {
+  opacity: 0.7;
+}
+
+.main-tab.active svg {
+  opacity: 1;
+  stroke: #14b8a6;
+}
+
+/* Panels (shown/hidden by main tabs) */
+.panel {
+  min-height: 200px;
+}
+
+.panel.hidden {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Quick rule creation link
+   --------------------------------------------------------------------------- */
+
+.quick-rule-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.quick-rule-link svg {
+  stroke: #14b8a6;
+  flex-shrink: 0;
+}
+
+.quick-rule-link a {
+  color: #14b8a6;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+   Rules panel
+   --------------------------------------------------------------------------- */
+
+.rules-list-section {
+  padding: 0;
+}
+
+.rules-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.rules-loading {
+  padding: 24px 16px;
+  text-align: center;
+  color: #475569;
+  font-size: 12px;
+}
+
+.rules-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: #475569;
+  font-size: 12px;
+}
+
+.rules-empty p {
+  margin-bottom: 4px;
+}
+
+/* Individual rule item */
+.rule-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.rule-item:last-child {
+  border-bottom: none;
+}
+
+.rule-type-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(20, 184, 166, 0.08);
+  color: #14b8a6;
+  font-size: 13px;
+}
+
+.rule-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rule-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rule-detail {
+  font-size: 11px;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.rule-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Toggle switch */
+.toggle {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  background: #2d3748;
+  border-radius: 9px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  padding: 0;
+}
+
+.toggle.on {
+  background: #14b8a6;
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: #e2e8f0;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.toggle.on::after {
+  transform: translateX(14px);
+}
+
+/* Delete button in rules */
+.rule-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.rule-delete:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+/* Rules form */
+.rules-form {
+  border-top: 1px solid #2d3748;
+}
+
+.rules-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 0;
+}
+
+.rules-form-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.rule-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #e2e8f0;
+  background: #1a1f2e;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.rule-input:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.15);
+}
+
+.rule-input::placeholder {
+  color: #475569;
+}
+
+/* Add rule button section */
+.rules-add-section {
+  padding: 12px 16px;
+}
+
+/* Paid tier gate */
+.rules-gate {
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.rules-gate svg {
+  margin-bottom: 8px;
+}
+
+.rules-gate p {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+/* Recent panel section */
+.recent-panel-section {
+  padding: 8px 16px 0;
+}
+
+/* Confirmation dialog overlay */
+.confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-dialog {
+  background: #1a1f2e;
+  border: 1px solid #2d3748;
+  border-radius: 10px;
+  padding: 20px;
+  width: 300px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.confirm-dialog p {
+  font-size: 13px;
+  color: #e2e8f0;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-ghost {
+  padding: 8px 14px;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.btn-danger {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #ef4444;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}

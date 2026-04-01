@@ -178,6 +178,13 @@ export async function createMonitoringRule(ruleData) {
   });
 }
 
+export async function updateMonitoringRule(ruleId, updates) {
+  return request(`/extension/monitoring-rules/${ruleId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
 export async function deleteMonitoringRule(ruleId) {
   return request(`/extension/monitoring-rules/${ruleId}`, {
     method: 'DELETE',

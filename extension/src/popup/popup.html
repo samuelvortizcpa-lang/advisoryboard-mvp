@@ -51,102 +51,214 @@
         </div>
       </header>
 
-      <!-- Capture mode tabs -->
-      <div class="capture-tabs">
-        <button class="tab active" data-mode="text" title="Capture selected text">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <!-- Main navigation tabs (Capture / Rules / Recent) -->
+      <div class="main-tabs">
+        <button class="main-tab active" data-panel="capture">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3"/>
           </svg>
-          <span>Text</span>
+          Capture
         </button>
-        <button class="tab" data-mode="page" title="Capture full page">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+        <button class="main-tab" data-panel="rules">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
           </svg>
-          <span>Page</span>
+          Rules
         </button>
-        <button class="tab" data-mode="file" title="Capture file URL">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+        <button class="main-tab" data-panel="recent">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span>File</span>
-        </button>
-        <button class="tab" data-mode="screenshot" title="Capture screenshot">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
-          </svg>
-          <span>Screenshot</span>
+          Recent
         </button>
       </div>
 
-      <!-- Client selector -->
-      <div class="section">
-        <label class="label">Client</label>
-        <div id="client-picker" class="client-picker">
-          <button id="client-picker-btn" class="client-picker-btn" type="button">
-            <span id="client-picker-text" class="client-picker-text">Select a client...</span>
-            <span id="auto-match-badge" class="match-badge hidden"></span>
-            <svg class="client-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      <!-- ============================================================= -->
+      <!-- CAPTURE PANEL -->
+      <!-- ============================================================= -->
+      <div id="panel-capture" class="panel">
+
+        <!-- Capture mode tabs -->
+        <div class="capture-tabs">
+          <button class="tab active" data-mode="text" title="Capture selected text">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3"/>
+            </svg>
+            <span>Text</span>
           </button>
-          <div id="client-dropdown" class="client-dropdown hidden">
-            <div class="client-search-wrap">
-              <input id="client-search" class="client-search" type="text" placeholder="Search clients..." autocomplete="off">
+          <button class="tab" data-mode="page" title="Capture full page">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span>Page</span>
+          </button>
+          <button class="tab" data-mode="file" title="Capture file URL">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+            </svg>
+            <span>File</span>
+          </button>
+          <button class="tab" data-mode="screenshot" title="Capture screenshot">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <span>Screenshot</span>
+          </button>
+        </div>
+
+        <!-- Client selector -->
+        <div class="section">
+          <label class="label">Client</label>
+          <div id="client-picker" class="client-picker">
+            <button id="client-picker-btn" class="client-picker-btn" type="button">
+              <span id="client-picker-text" class="client-picker-text">Select a client...</span>
+              <span id="auto-match-badge" class="match-badge hidden"></span>
+              <svg class="client-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div id="client-dropdown" class="client-dropdown hidden">
+              <div class="client-search-wrap">
+                <input id="client-search" class="client-search" type="text" placeholder="Search clients..." autocomplete="off">
+              </div>
+              <div id="client-list" class="client-list"></div>
             </div>
-            <div id="client-list" class="client-list"></div>
+          </div>
+          <input id="client-select" type="hidden" value="">
+        </div>
+
+        <!-- Quick rule creation link (shown after auto-match) -->
+        <div id="quick-rule-link" class="quick-rule-link hidden">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          <a href="#" id="create-rule-from-match">Auto-capture pages like this</a>
+        </div>
+
+        <!-- Document tag selector -->
+        <div class="section">
+          <label class="label">Document type</label>
+          <select id="tag-select" class="select">
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <!-- Content preview -->
+        <div id="content-preview" class="content-preview hidden">
+          <div class="preview-label">Preview</div>
+          <div id="preview-body" class="preview-body"></div>
+        </div>
+
+        <!-- Capture button -->
+        <div class="capture-action">
+          <button id="capture-btn" class="btn btn-accent btn-full" disabled>
+            <span id="capture-btn-text">Select a client to capture</span>
+            <span id="capture-spinner" class="spinner hidden"></span>
+            <svg id="capture-check" class="check-icon hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Status messages -->
+        <div id="status" class="status hidden"></div>
+
+        <!-- Usage bar -->
+        <div id="usage-section" class="usage-section hidden">
+          <div class="usage-header">
+            <span id="usage-text" class="usage-text"></span>
+            <a id="upgrade-link" class="upgrade-link hidden" href="https://callwen.com/dashboard/settings" target="_blank">Upgrade</a>
+          </div>
+          <div class="progress-track">
+            <div id="progress-bar" class="progress-bar"></div>
           </div>
         </div>
-        <input id="client-select" type="hidden" value="">
+
       </div>
 
-      <!-- Document tag selector -->
-      <div class="section">
-        <label class="label">Document type</label>
-        <select id="tag-select" class="select">
-          <option value="other">Other</option>
-        </select>
-      </div>
+      <!-- ============================================================= -->
+      <!-- RULES PANEL -->
+      <!-- ============================================================= -->
+      <div id="panel-rules" class="panel hidden">
 
-      <!-- Content preview -->
-      <div id="content-preview" class="content-preview hidden">
-        <div class="preview-label">Preview</div>
-        <div id="preview-body" class="preview-body"></div>
-      </div>
-
-      <!-- Capture button -->
-      <div class="capture-action">
-        <button id="capture-btn" class="btn btn-accent btn-full" disabled>
-          <span id="capture-btn-text">Select a client to capture</span>
-          <span id="capture-spinner" class="spinner hidden"></span>
-          <svg id="capture-check" class="check-icon hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Status messages -->
-      <div id="status" class="status hidden"></div>
-
-      <!-- Usage bar -->
-      <div id="usage-section" class="usage-section hidden">
-        <div class="usage-header">
-          <span id="usage-text" class="usage-text"></span>
-          <a id="upgrade-link" class="upgrade-link hidden" href="https://callwen.com/dashboard/settings" target="_blank">Upgrade</a>
+        <!-- Rules list -->
+        <div id="rules-list-section" class="rules-list-section">
+          <div id="rules-list" class="rules-list">
+            <div class="rules-loading">Loading rules...</div>
+          </div>
         </div>
-        <div class="progress-track">
-          <div id="progress-bar" class="progress-bar"></div>
+
+        <!-- Add rule form -->
+        <div id="rules-form" class="rules-form hidden">
+          <div class="rules-form-header">
+            <span class="rules-form-title">New monitoring rule</span>
+            <button id="rules-form-cancel" class="btn-icon" title="Cancel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div class="section">
+            <label class="label">Rule name</label>
+            <input id="rule-name" class="rule-input" type="text" placeholder="e.g., Client emails from Acme Corp" autocomplete="off">
+          </div>
+          <div class="section">
+            <label class="label">Match type</label>
+            <select id="rule-type" class="select">
+              <option value="domain">Domain match</option>
+              <option value="url_contains">URL contains</option>
+              <option value="email_from">Email from address</option>
+              <option value="page_title">Page title contains</option>
+            </select>
+          </div>
+          <div class="section">
+            <label class="label">Pattern</label>
+            <input id="rule-pattern" class="rule-input" type="text" placeholder="e.g., acmecorp.com" autocomplete="off">
+          </div>
+          <div class="section">
+            <label class="label">Client</label>
+            <select id="rule-client" class="select">
+              <option value="">Select a client...</option>
+            </select>
+          </div>
+          <div class="capture-action">
+            <button id="rule-save-btn" class="btn btn-accent btn-full" disabled>
+              <span id="rule-save-text">Save rule</span>
+              <span id="rule-save-spinner" class="spinner hidden"></span>
+            </button>
+          </div>
         </div>
+
+        <!-- Add rule button (when form is hidden) -->
+        <div id="rules-add-section" class="rules-add-section">
+          <button id="add-rule-btn" class="btn btn-accent btn-full">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add monitoring rule
+          </button>
+        </div>
+
+        <!-- Paid tier gate -->
+        <div id="rules-gate" class="rules-gate hidden">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+          <p>Monitoring rules are available on paid plans.</p>
+          <a class="btn btn-accent" href="https://callwen.com/dashboard/settings" target="_blank">Upgrade</a>
+        </div>
+
       </div>
 
-      <!-- Recent captures -->
-      <div id="recent-section" class="recent-section hidden">
-        <button id="recent-toggle" class="recent-toggle">
-          <span>Recent captures</span>
-          <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </button>
-        <div id="recent-list" class="recent-list hidden"></div>
-        <a class="recent-view-all hidden" id="view-all-link" href="https://callwen.com/dashboard" target="_blank">View all in Callwen &rarr;</a>
+      <!-- ============================================================= -->
+      <!-- RECENT PANEL -->
+      <!-- ============================================================= -->
+      <div id="panel-recent" class="panel hidden">
+        <div id="recent-section" class="recent-panel-section">
+          <div id="recent-list" class="recent-list"></div>
+          <div id="recent-empty" class="rules-empty hidden">
+            <p>No recent captures yet.</p>
+          </div>
+        </div>
+        <a class="recent-view-all" id="view-all-link" href="https://callwen.com/dashboard" target="_blank">View all in Callwen &rarr;</a>
       </div>
 
     </div>
