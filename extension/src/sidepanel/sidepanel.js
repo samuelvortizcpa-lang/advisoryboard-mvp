@@ -57,6 +57,7 @@ const footerTierBadge = document.getElementById('footer-tier-badge');
 const footerProgressTrack = document.getElementById('footer-progress-track');
 const footerProgressBar = document.getElementById('footer-progress-bar');
 const footerUpgrade = document.getElementById('footer-upgrade');
+const parserBadgeBar = document.getElementById('parser-badge-bar');
 const recentSection = document.getElementById('recent-section');
 const recentToggleBtn = document.getElementById('recent-toggle');
 const recentListEl = document.getElementById('recent-list');
@@ -117,6 +118,9 @@ let parsedContent = null;
 let monitoringRules = [];
 let activePanel = 'capture';
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
+
+// Parser badge state
+let dismissedBadgeTabId = null; // tab ID where user dismissed the badge
 
 // Chat-specific state
 let chatSelectedClientId = '';
@@ -583,70 +587,154 @@ async function detectSelectedText() {
 
 async function detectParsedContent() {
   if (!activeTab?.id) return;
+
+  // Full parser detection via content script (for capture data)
   try {
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'GET_PARSED_CONTENT' });
-    if (!response?.parsed) return;
-
-    parsedContent = response;
-
-    if (response.document_tag) {
-      const option = tagSelect.querySelector(`option[value="${response.document_tag}"]`);
-      if (option) tagSelect.value = response.document_tag;
+    if (response?.parsed) {
+      parsedContent = response;
+      if (response.document_tag) {
+        const option = tagSelect.querySelector(`option[value="${response.document_tag}"]`);
+        if (option) tagSelect.value = response.document_tag;
+      }
+      if (response.capture_type) {
+        setMode(response.capture_type === 'text_selection' ? 'text' : 'page');
+      }
+      updatePreview();
     }
-
-    if (response.capture_type) {
-      setMode(response.capture_type === 'text_selection' ? 'text' : 'page');
-    }
-
-    showParserBadge(response);
-    updatePreview();
   } catch { /* content script not available */ }
+
+  // Lightweight badge detection via executeScript (works even without content script)
+  await detectParserBadge();
 }
 
-function showParserBadge(response) {
-  const existing = document.getElementById('parser-badge');
-  if (existing) existing.remove();
-  const existingWarn = document.getElementById('tax-warning');
-  if (existingWarn) existingWarn.remove();
+async function detectParserBadge() {
+  // Tier gate: parsers are a paid feature
+  if (extensionConfig && !extensionConfig.parsers) return;
 
-  let icon = '';
-  let label = '';
+  if (!activeTab?.id || !activeTab?.url) return;
 
-  if (response.parser === 'gmail') {
-    icon = '\u{1F4E7}';
-    label = 'Gmail email detected';
-  } else if (response.parser === 'quickbooks') {
-    if (response.qbo_page_type === 'report') {
-      icon = '\u{1F4CA}';
-      label = 'QuickBooks report detected';
-    } else {
-      icon = '\u{1F4B0}';
-      label = 'QuickBooks transaction detected';
-    }
-  } else if (response.parser === 'tax_software') {
-    icon = '\u{1F3DB}';
-    label = 'Tax return data detected \u{2014} sensitive info auto-masked';
-  } else {
+  // Skip if user dismissed badge on this tab
+  if (dismissedBadgeTabId === activeTab.id) return;
+
+  // Skip restricted URLs
+  const url = activeTab.url;
+  if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('about:')) {
+    clearParserBadge();
     return;
   }
 
-  const badge = document.createElement('div');
-  badge.id = 'parser-badge';
-  badge.className = 'parser-badge';
-  badge.innerHTML = `<span class="parser-badge-icon">${icon}</span> ${label}`;
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: activeTab.id },
+      func: () => {
+        const host = location.hostname;
 
-  const tabsEl = document.querySelector('.capture-tabs');
-  if (tabsEl) {
-    tabsEl.parentNode.insertBefore(badge, tabsEl.nextSibling);
+        // Gmail
+        if (host === 'mail.google.com') {
+          // Check for an open email (subject line in main content)
+          const subject = document.querySelector('h2[data-thread-perm-id], h2.hP, div[role="main"] h2');
+          if (subject) {
+            return { detected: true, platform: 'gmail', label: 'Gmail email detected', icon: '\u{1F4E7}', document_tag_suggestion: 'correspondence' };
+          }
+          return { detected: false };
+        }
+
+        // QuickBooks Online
+        if (host.includes('qbo.intuit.com') || host.includes('quickbooks.intuit.com')) {
+          // Check for report vs transaction
+          const reportHeader = document.querySelector('[data-testid="report-header"], .report-header, #reportContainer');
+          if (reportHeader) {
+            return { detected: true, platform: 'quickbooks', label: 'QuickBooks report detected', icon: '\u{1F4CA}', document_tag_suggestion: 'financial_statement' };
+          }
+          const txn = document.querySelector('[data-testid="transaction-form"], .txn-detail, form[name*="transaction"]');
+          if (txn) {
+            return { detected: true, platform: 'quickbooks', label: 'QuickBooks transaction detected', icon: '\u{1F4B0}', document_tag_suggestion: 'financial_statement' };
+          }
+          return { detected: false };
+        }
+
+        // Tax software
+        const taxHosts = ['drakesoftware.com', 'lacerte.intuit.com', 'cs.thomsonreuters.com', 'proseries.intuit.com', 'pro.taxact.com'];
+        if (taxHosts.some(h => host.includes(h))) {
+          return { detected: true, platform: 'tax', label: 'Tax return data detected', icon: '\u{1F3DB}', document_tag_suggestion: 'tax_document' };
+        }
+
+        return { detected: false };
+      },
+    });
+
+    const result = results?.[0]?.result;
+    if (result?.detected) {
+      showParserBadge(result);
+    } else {
+      clearParserBadge();
+    }
+  } catch {
+    clearParserBadge();
+  }
+}
+
+function showParserBadge(detection) {
+  clearParserBadge(true); // clear without animation
+
+  const { platform, icon, label, document_tag_suggestion } = detection;
+
+  // Auto-set document tag
+  if (document_tag_suggestion) {
+    const option = tagSelect.querySelector(`option[value="${document_tag_suggestion}"]`);
+    if (option) tagSelect.value = document_tag_suggestion;
   }
 
-  if (response.parser === 'tax_software') {
-    const warning = document.createElement('div');
-    warning.id = 'tax-warning';
-    warning.className = 'tax-warning';
-    warning.textContent = 'This capture may contain tax return information subject to IRC \u00A77216. Ensure client consent is obtained before AI processing.';
-    badge.parentNode.insertBefore(warning, badge.nextSibling);
+  // Build badge HTML
+  const tintClass = platform === 'gmail' ? 'badge-gmail' :
+                    platform === 'quickbooks' ? 'badge-quickbooks' :
+                    platform === 'tax' ? 'badge-tax' : '';
+
+  let html = `<div class="parser-badge ${tintClass}">
+    <span class="parser-badge-icon">${icon}</span>
+    <span class="parser-badge-label">${escapeHtml(label)}${platform === 'tax' ? ' \u2014 PII auto-masked' : ''}</span>
+    <button class="parser-badge-dismiss" title="Dismiss">&times;</button>
+  </div>`;
+
+  if (platform === 'tax') {
+    html += `<div class="tax-warning">This capture may contain tax return information subject to IRC \u00A77216. Ensure client consent is obtained before AI processing.</div>`;
   }
+
+  parserBadgeBar.innerHTML = html;
+  parserBadgeBar.classList.remove('hidden');
+
+  // Dismiss handler
+  const dismissBtn = parserBadgeBar.querySelector('.parser-badge-dismiss');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', () => {
+      dismissedBadgeTabId = activeTab?.id || null;
+      const badge = parserBadgeBar.querySelector('.parser-badge');
+      if (badge) {
+        badge.classList.add('dismissing');
+        setTimeout(() => clearParserBadge(), 150);
+      } else {
+        clearParserBadge();
+      }
+    });
+  }
+}
+
+function clearParserBadge(instant) {
+  if (!instant && parserBadgeBar.innerHTML) {
+    // Animate out if there's content
+    const badge = parserBadgeBar.querySelector('.parser-badge');
+    if (badge && !badge.classList.contains('dismissing')) {
+      badge.classList.add('dismissing');
+      setTimeout(() => {
+        parserBadgeBar.innerHTML = '';
+        parserBadgeBar.classList.add('hidden');
+      }, 150);
+      return;
+    }
+  }
+  parserBadgeBar.innerHTML = '';
+  parserBadgeBar.classList.add('hidden');
 }
 
 // ---------------------------------------------------------------------------
@@ -1880,6 +1968,8 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'TAB_CHANGED') {
     autoMatchResult = null;
     selectedText = '';
+    dismissedBadgeTabId = null;
+    clearParserBadge(true);
     chrome.storage.session.remove('auto_match_result').catch(() => {});
     if (extensionConfig?.auto_match && message.tab?.url) {
       activeTab = message.tab;
@@ -1889,6 +1979,7 @@ chrome.runtime.onMessage.addListener((message) => {
     }
     updatePreview();
     checkSelectedTextForChat();
+    detectParserBadge();
   }
 });
 
@@ -1896,6 +1987,8 @@ chrome.runtime.onMessage.addListener((message) => {
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
+    dismissedBadgeTabId = null;
+    clearParserBadge(true);
     if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
       activeTab = tab;
       autoMatchResult = null;
