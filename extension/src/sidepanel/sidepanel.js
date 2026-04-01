@@ -177,10 +177,11 @@ async function init() {
 
   showScreen('main');
 
-  // Populate document tag selector
+  // Populate document tag selector — default to "other"
   tagSelect.innerHTML = CONFIG.DOCUMENT_TAGS
     .map(t => `<option value="${t.value}">${t.label}</option>`)
     .join('');
+  tagSelect.value = 'other';
 
   // Get active tab info
   activeTab = await getActiveTab();
@@ -641,7 +642,7 @@ async function detectParserBadge() {
         }
 
         // QuickBooks Online
-        if (host.includes('qbo.intuit.com') || host.includes('quickbooks.intuit.com')) {
+        if (host === 'qbo.intuit.com' || host.endsWith('.qbo.intuit.com') || host === 'quickbooks.intuit.com' || host.endsWith('.quickbooks.intuit.com')) {
           // Check for report vs transaction
           const reportHeader = document.querySelector('[data-testid="report-header"], .report-header, #reportContainer');
           if (reportHeader) {
@@ -654,9 +655,9 @@ async function detectParserBadge() {
           return { detected: false };
         }
 
-        // Tax software
-        const taxHosts = ['drakesoftware.com', 'lacerte.intuit.com', 'cs.thomsonreuters.com', 'proseries.intuit.com', 'pro.taxact.com'];
-        if (taxHosts.some(h => host.includes(h))) {
+        // Tax software — exact suffix match to avoid false positives
+        const taxHosts = ['drakesoftware.com', 'drakecpe.com', 'lacerte.intuit.com', 'cs.thomsonreuters.com', 'proseries.intuit.com', 'pro.taxact.com'];
+        if (taxHosts.some(h => host === h || host.endsWith('.' + h))) {
           return { detected: true, platform: 'tax', label: 'Tax return data detected', icon: '\u{1F3DB}', document_tag_suggestion: 'tax_document' };
         }
 
@@ -1970,6 +1971,7 @@ chrome.runtime.onMessage.addListener((message) => {
     selectedText = '';
     dismissedBadgeTabId = null;
     clearParserBadge(true);
+    tagSelect.value = 'other';
     chrome.storage.session.remove('auto_match_result').catch(() => {});
     if (extensionConfig?.auto_match && message.tab?.url) {
       activeTab = message.tab;
@@ -1989,6 +1991,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const tab = await chrome.tabs.get(activeInfo.tabId);
     dismissedBadgeTabId = null;
     clearParserBadge(true);
+    tagSelect.value = 'other';
     if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
       activeTab = tab;
       autoMatchResult = null;
