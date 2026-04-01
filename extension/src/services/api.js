@@ -150,7 +150,7 @@ export async function getRecentCaptures() {
 export async function askQuestion(clientId, question) {
   return request(`/clients/${clientId}/rag/chat`, {
     method: 'POST',
-    body: JSON.stringify({ message: question }),
+    body: JSON.stringify({ question }),
   });
 }
 
