@@ -452,27 +452,45 @@ async function detectParsedContent() {
     }
 
     // Set capture mode from parser
-    if (response.capture_type === 'text_selection') {
-      setMode('text');
+    if (response.capture_type) {
+      setMode(response.capture_type === 'text_selection' ? 'text' : 'page');
     }
 
     // Show detection badge near capture tabs
-    showParserBadge(response.email_data);
+    showParserBadge(response);
 
-    // Update preview with email summary
+    // Update preview
     updatePreview();
   } catch { /* content script not available */ }
 }
 
-function showParserBadge(emailData) {
+function showParserBadge(response) {
   // Remove existing badge if any
   const existing = document.getElementById('parser-badge');
   if (existing) existing.remove();
 
+  let icon = '';
+  let label = '';
+
+  if (response.parser === 'gmail') {
+    icon = '\u{1F4E7}';
+    label = 'Gmail email detected';
+  } else if (response.parser === 'quickbooks') {
+    if (response.qbo_page_type === 'report') {
+      icon = '\u{1F4CA}';
+      label = 'QuickBooks report detected';
+    } else {
+      icon = '\u{1F4B0}';
+      label = 'QuickBooks transaction detected';
+    }
+  } else {
+    return; // no badge for unknown parsers
+  }
+
   const badge = document.createElement('div');
   badge.id = 'parser-badge';
   badge.className = 'parser-badge';
-  badge.innerHTML = `<span class="parser-badge-icon">\u{1F4E7}</span> Gmail email detected`;
+  badge.innerHTML = `<span class="parser-badge-icon">${icon}</span> ${label}`;
 
   // Insert after capture tabs
   const tabsEl = document.querySelector('.capture-tabs');
@@ -557,7 +575,26 @@ function updatePreview() {
       break;
 
     case 'page':
-      if (activeTab) {
+      if (parsedContent?.parser === 'quickbooks' && parsedContent.qbo_data) {
+        const qd = parsedContent.qbo_data;
+        if (parsedContent.qbo_page_type === 'report') {
+          const title = qd.report_title || 'Report';
+          const company = qd.company_name ? `Company: ${qd.company_name}` : '';
+          const period = qd.date_range ? `Period: ${qd.date_range}` : '';
+          previewBody.innerHTML =
+            `<span class="preview-title">${escapeHtml(title)}</span>` +
+            (company ? `<span class="preview-url">${escapeHtml(company)}</span>` : '') +
+            (period ? `<span class="preview-url">${escapeHtml(period)}</span>` : '');
+        } else {
+          const txnType = qd.transaction_type || 'Transaction';
+          const entity = qd.vendor_or_customer || '';
+          const amount = qd.amount || '';
+          const detail = [entity, amount].filter(Boolean).join(' — ');
+          previewBody.innerHTML =
+            `<span class="preview-title">${escapeHtml(txnType)}${qd.transaction_number ? ` #${escapeHtml(qd.transaction_number)}` : ''}</span>` +
+            (detail ? `<span class="preview-url">${escapeHtml(detail)}</span>` : '');
+        }
+      } else if (activeTab) {
         previewBody.innerHTML =
           `<span class="preview-title">${escapeHtml(activeTab.title || 'Untitled')}</span>` +
           `<span class="preview-url">${escapeHtml(activeTab.url || '')}</span>`;
@@ -632,7 +669,12 @@ async function handleCapture() {
         break;
 
       case 'page':
-        payload = await captureFullPage(tabId);
+        // Use parsed content (e.g., QBO report/transaction) if available
+        if (parsedContent?.content && parsedContent.capture_type === 'full_page') {
+          payload = { type: 'full_page', content: parsedContent.content };
+        } else {
+          payload = await captureFullPage(tabId);
+        }
         break;
 
       case 'file': {

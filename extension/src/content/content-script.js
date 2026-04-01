@@ -10,6 +10,10 @@
  */
 
 import { isGmailPage, isEmailView, extractEmailData, formatAsDocument, getMatchHints } from '../parsers/gmail.js';
+import {
+  isQuickBooksPage, detectQBOPage, extractReportData, extractTransactionData,
+  getMatchHints as getQBOMatchHints, formatAsDocument as formatQBODocument,
+} from '../parsers/quickbooks.js';
 
 // ---------------------------------------------------------------------------
 // Auth token relay (only on callwen.com)
@@ -351,21 +355,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'GET_PARSED_CONTENT': {
       const site = detectSite();
+
+      // Gmail email parser
       if (site === 'gmail' && isGmailPage() && isEmailView()) {
         const emailData = extractEmailData();
         const content = formatAsDocument(emailData);
         const metadata = getMatchHints(emailData);
         sendResponse({
           parsed: true,
+          parser: 'gmail',
           content,
           metadata,
           email_data: emailData,
           capture_type: 'text_selection',
           document_tag: 'correspondence',
         });
-      } else {
-        sendResponse({ parsed: false });
+        return false;
       }
+
+      // QuickBooks Online parser
+      if (site === 'quickbooks' && isQuickBooksPage()) {
+        const pageType = detectQBOPage();
+        if (pageType === 'report') {
+          const reportData = extractReportData();
+          const content = formatQBODocument('report', reportData);
+          sendResponse({
+            parsed: true,
+            parser: 'quickbooks',
+            qbo_page_type: pageType,
+            content,
+            metadata: getQBOMatchHints(),
+            qbo_data: reportData,
+            capture_type: 'full_page',
+            document_tag: 'financial_statement',
+          });
+          return false;
+        }
+        if (pageType === 'transaction') {
+          const txnData = extractTransactionData();
+          const content = formatQBODocument('transaction', txnData);
+          sendResponse({
+            parsed: true,
+            parser: 'quickbooks',
+            qbo_page_type: pageType,
+            content,
+            metadata: getQBOMatchHints(),
+            qbo_data: txnData,
+            capture_type: 'full_page',
+            document_tag: 'financial_statement',
+          });
+          return false;
+        }
+        // dashboard, customer_list, unknown — fall through to generic
+      }
+
+      sendResponse({ parsed: false });
       return false;
     }
 
