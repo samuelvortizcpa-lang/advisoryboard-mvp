@@ -24,6 +24,7 @@ from app.services import storage_service, user_service
 from app.services.audit_service import log_action
 from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.email_router import match_email_to_client
+from app.services.extension_rate_limiter import check_rate as check_burst_rate
 from app.services.subscription_service import (
     TIER_DEFAULTS,
     check_extension_capture_limit,
@@ -125,6 +126,10 @@ async def capture(
 
     if body.capture_type not in CAPTURE_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid capture_type. Must be one of: {', '.join(sorted(CAPTURE_TYPES))}")
+
+    # 0. Burst rate limit (in-memory, per-user)
+    if not check_burst_rate(auth.user_id):
+        raise HTTPException(status_code=429, detail="Too many captures. Please wait a moment.")
 
     # 1. Verify user owns the client
     check_client_access(auth, body.client_id, db)

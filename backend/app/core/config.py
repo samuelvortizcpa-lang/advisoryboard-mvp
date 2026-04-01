@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     # The localhost dev origins are always included automatically.
     allowed_origins: str = ""
 
+    # ── Browser extension ─────────────────────────────────────────────────
+    # Stable Chrome extension origin, e.g. "chrome-extension://abcdefghijklmnop"
+    # Set after the extension is published to the Chrome Web Store.
+    extension_origin: str = ""
+
     model_config = {"env_file": ".env", "case_sensitive": False}
 
     # ── Production safeguards ─────────────────────────────────────────────────
@@ -118,12 +123,18 @@ class Settings(BaseSettings):
         """
         Combined CORS origin list.
 
-        In development: includes localhost dev origins.
-        In production: only origins from ALLOWED_ORIGINS env var.
+        In development: includes localhost dev origins + any chrome-extension origin.
+        In production: only origins from ALLOWED_ORIGINS env var + EXTENSION_ORIGIN.
         """
         extra = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+        # Add the stable extension origin if configured
+        if self.extension_origin:
+            extra.append(self.extension_origin)
+
         if self.environment == "production":
             return extra
+
         dev = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"]
         seen: set[str] = set()
         result: list[str] = []
@@ -132,6 +143,16 @@ class Settings(BaseSettings):
                 seen.add(origin)
                 result.append(origin)
         return result
+
+    @property
+    def cors_allow_origin_regex(self) -> str | None:
+        """
+        In development, allow any chrome-extension:// origin for local testing.
+        In production, return None (only exact origins are used).
+        """
+        if self.environment != "production":
+            return r"^chrome-extension://.*$"
+        return None
 
 
 @lru_cache

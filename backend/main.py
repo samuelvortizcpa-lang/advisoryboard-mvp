@@ -71,8 +71,7 @@ from app.api.consent_public import limiter as consent_limiter
 app.state.limiter = consent_limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-app.add_middleware(
-    CORSMiddleware,
+_cors_kwargs: dict = dict(
     allow_origins=_settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -86,6 +85,11 @@ app.add_middleware(
     ],
     expose_headers=["Content-Disposition"],
 )
+# In development, allow any chrome-extension:// origin for local extension testing
+if _settings.cors_allow_origin_regex:
+    _cors_kwargs["allow_origin_regex"] = _settings.cors_allow_origin_regex
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 
 # ── Security response headers ────────────────────────────────────────────────
