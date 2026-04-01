@@ -1038,13 +1038,28 @@ async function handleCapture() {
 
       case 'screenshot': {
         captureBtnText.textContent = 'Capturing...';
-        const ssResult = await chrome.runtime.sendMessage({ type: 'CAPTURE_VISIBLE_TAB' });
-        if (ssResult?.error) {
+        // Use broadcast pattern — sendResponse is unreliable in MV3 service workers
+        const ssResult = await new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            chrome.runtime.onMessage.removeListener(listener);
+            resolve({ error: 'Screenshot timed out. Please try again.' });
+          }, 10000);
+          function listener(msg) {
+            if (msg.type === 'SCREENSHOT_CAPTURED') {
+              clearTimeout(timeout);
+              chrome.runtime.onMessage.removeListener(listener);
+              resolve(msg);
+            }
+          }
+          chrome.runtime.onMessage.addListener(listener);
+          chrome.runtime.sendMessage({ type: 'CAPTURE_VISIBLE_TAB' }).catch(() => {});
+        });
+        if (ssResult.error) {
           showStatus(ssResult.error, 'error');
           setBtnLoading(false);
           return;
         }
-        if (!ssResult?.imageData) {
+        if (!ssResult.imageData) {
           showStatus('Screenshot capture failed. Please try again.', 'error');
           setBtnLoading(false);
           return;
@@ -1062,7 +1077,13 @@ async function handleCapture() {
       site_domain: activeTab?.url ? extractDomain(activeTab.url) : '',
     };
 
-    await captureContent(clientId, captureType, capturePayload, metadata, tag);
+    const isScreenshot = captureType === 'screenshot';
+    await captureContent(
+      clientId, captureType,
+      isScreenshot ? null : capturePayload,
+      metadata, tag,
+      isScreenshot ? capturePayload : null,
+    );
 
     await addRecentClientId(clientId);
 

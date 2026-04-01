@@ -323,24 +323,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async
   }
 
-  // Screenshot capture — one-click full visible tab capture.
-  // captureVisibleTab completes in ~100ms so sendResponse is reliable here.
+  // Screenshot capture — broadcast pattern (sendResponse is unreliable in MV3)
   if (message.type === 'CAPTURE_VISIBLE_TAB') {
     (async () => {
       try {
-        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-        if (!tab) {
-          sendResponse({ error: 'No active tab found.' });
+        console.log('[Callwen SW] CAPTURE_VISIBLE_TAB received');
+        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (!tabs || tabs.length === 0) {
+          chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', error: 'No active tab found.' });
           return;
         }
+        const tab = tabs[0];
+        console.log('[Callwen SW] Capturing tab:', tab.id, tab.url);
         const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
         const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-        sendResponse({ imageData: base64 });
+        console.log('[Callwen SW] Screenshot captured, broadcasting result');
+        chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', imageData: base64 });
       } catch (err) {
-        sendResponse({ error: 'Cannot capture this page. Try a different tab.' });
+        console.error('[Callwen SW] Screenshot error:', err);
+        chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', error: 'Cannot capture this page. Try a different tab.' });
       }
     })();
-    return true; // async sendResponse
+    return false; // not using sendResponse
   }
 
   // Monitoring preferences
