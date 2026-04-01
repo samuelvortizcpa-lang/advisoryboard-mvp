@@ -465,9 +465,11 @@ async function detectParsedContent() {
 }
 
 function showParserBadge(response) {
-  // Remove existing badge if any
+  // Remove existing badge and warning
   const existing = document.getElementById('parser-badge');
   if (existing) existing.remove();
+  const existingWarn = document.getElementById('tax-warning');
+  if (existingWarn) existingWarn.remove();
 
   let icon = '';
   let label = '';
@@ -483,6 +485,9 @@ function showParserBadge(response) {
       icon = '\u{1F4B0}';
       label = 'QuickBooks transaction detected';
     }
+  } else if (response.parser === 'tax_software') {
+    icon = '\u{1F3DB}';
+    label = 'Tax return data detected \u{2014} sensitive info auto-masked';
   } else {
     return; // no badge for unknown parsers
   }
@@ -496,6 +501,17 @@ function showParserBadge(response) {
   const tabsEl = document.querySelector('.capture-tabs');
   if (tabsEl) {
     tabsEl.parentNode.insertBefore(badge, tabsEl.nextSibling);
+  }
+
+  // Show IRC §7216 warning for tax software
+  if (response.parser === 'tax_software') {
+    const warning = document.createElement('div');
+    warning.id = 'tax-warning';
+    warning.className = 'tax-warning';
+    warning.textContent = 'This capture may contain tax return information subject to IRC \u00A77216. Ensure client consent is obtained before AI processing.';
+
+    // Insert after the badge
+    badge.parentNode.insertBefore(warning, badge.nextSibling);
   }
 }
 
@@ -575,7 +591,18 @@ function updatePreview() {
       break;
 
     case 'page':
-      if (parsedContent?.parser === 'quickbooks' && parsedContent.qbo_data) {
+      if (parsedContent?.parser === 'tax_software' && parsedContent.tax_data) {
+        const td = parsedContent.tax_data;
+        const sw = parsedContent.software_name || 'Tax Software';
+        const client = td.client_name ? `Client: ${td.client_name}` : '';
+        const form = td.form_type ? `Form ${td.form_type}` : '';
+        const year = td.tax_year ? `Tax Year ${td.tax_year}` : '';
+        const detail = [form, year].filter(Boolean).join(' \u{2014} ');
+        previewBody.innerHTML =
+          `<span class="preview-title">${escapeHtml(sw)}</span>` +
+          (client ? `<span class="preview-url">${escapeHtml(client)}</span>` : '') +
+          (detail ? `<span class="preview-url">${escapeHtml(detail)}</span>` : '');
+      } else if (parsedContent?.parser === 'quickbooks' && parsedContent.qbo_data) {
         const qd = parsedContent.qbo_data;
         if (parsedContent.qbo_page_type === 'report') {
           const title = qd.report_title || 'Report';

@@ -154,6 +154,16 @@ a:hover { text-decoration: underline; }
   font-size: 13px;
 }
 
+/* Tax §7216 warning bar */
+.tax-warning {
+  padding: 8px 16px;
+  background: rgba(245, 158, 11, 0.1);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 11px;
+  color: #f59e0b;
+  line-height: 1.4;
+}
+
 /* ---------------------------------------------------------------------------
    Sections & form elements
    --------------------------------------------------------------------------- */

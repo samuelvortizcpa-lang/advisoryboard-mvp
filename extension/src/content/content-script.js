@@ -14,6 +14,10 @@ import {
   isQuickBooksPage, detectQBOPage, extractReportData, extractTransactionData,
   getMatchHints as getQBOMatchHints, formatAsDocument as formatQBODocument,
 } from '../parsers/quickbooks.js';
+import {
+  isTaxSoftwarePage, detectTaxSoftware, extractTaxData,
+  formatAsDocument as formatTaxDocument, getMatchHints as getTaxMatchHints,
+} from '../parsers/tax-software.js';
 
 // ---------------------------------------------------------------------------
 // Auth token relay (only on callwen.com)
@@ -46,10 +50,12 @@ function detectSite() {
   if (host === 'mail.google.com') return 'gmail';
   if (host.includes('outlook.live.com') || host.includes('outlook.office.com')) return 'outlook';
   if (host.includes('qbo.intuit.com') || host.includes('quickbooks.intuit.com')) return 'quickbooks';
-  if (host.includes('drakesoftware.com')) return 'drake';
+  if (host.includes('drakesoftware.com') || host.includes('drakecpe.com')) return 'drake';
   if (host.includes('lacerte.intuit.com')) return 'lacerte';
   if (host.includes('cs.thomsonreuters.com')) return 'ultratax';
   if (host.includes('proconnect.intuit.com')) return 'proconnect';
+  if (host.includes('proseries.intuit.com')) return 'proseries';
+  if (host.includes('pro.taxact.com')) return 'taxact_pro';
   return 'generic';
 }
 
@@ -407,6 +413,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return false;
         }
         // dashboard, customer_list, unknown — fall through to generic
+      }
+
+      // Tax software parser
+      if (isTaxSoftwarePage()) {
+        const softwareName = detectTaxSoftware();
+        const taxData = extractTaxData();
+        const content = formatTaxDocument(softwareName, taxData);
+        sendResponse({
+          parsed: true,
+          parser: 'tax_software',
+          content,
+          metadata: getTaxMatchHints(taxData),
+          tax_data: taxData,
+          software_name: softwareName,
+          capture_type: 'full_page',
+          document_tag: 'tax_document',
+        });
+        return false;
       }
 
       sendResponse({ parsed: false });
