@@ -8,7 +8,8 @@
     "storage",
     "sidePanel",
     "contextMenus",
-    "scripting"
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
     "https://callwen.com/*",

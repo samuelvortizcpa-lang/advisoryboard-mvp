@@ -93,6 +93,52 @@ a:hover { text-decoration: underline; }
   gap: 2px;
 }
 
+/* Monitoring bell toggle */
+.monitoring-bell {
+  position: relative;
+  color: #14b8a6;
+}
+
+.monitoring-bell.muted {
+  color: #475569;
+  opacity: 0.5;
+}
+
+.monitoring-bell.muted svg {
+  stroke: #475569;
+}
+
+/* Mute context menu */
+.mute-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: #1a1f2e;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 150;
+  min-width: 160px;
+  padding: 4px 0;
+}
+
+.mute-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.mute-menu-item:hover {
+  background: rgba(20, 184, 166, 0.08);
+}
+
 /* ---------------------------------------------------------------------------
    Capture mode tabs
    --------------------------------------------------------------------------- */

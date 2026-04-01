@@ -448,6 +448,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true });
       return false;
 
+    case 'SEARCH_PAGE_TEXT': {
+      const pageText = (document.body?.innerText || '').toLowerCase();
+      const searchPattern = (message.pattern || '').toLowerCase();
+      sendResponse({ found: searchPattern && pageText.includes(searchPattern) });
+      return false;
+    }
+
     default:
       return false;
   }

@@ -64,6 +64,7 @@ const ruleSaveSpinner = document.getElementById('rule-save-spinner');
 const addRuleBtn = document.getElementById('add-rule-btn');
 const rulesAddSection = document.getElementById('rules-add-section');
 const rulesGate = document.getElementById('rules-gate');
+const monitoringToggle = document.getElementById('monitoring-toggle');
 
 // ---------------------------------------------------------------------------
 // State
@@ -160,8 +161,8 @@ async function init() {
 
   updatePreview();
 
-  // Load recent captures (non-blocking)
-  loadRecentCaptures();
+  // Initialize monitoring toggle
+  initMonitoringToggle();
 }
 
 // ---------------------------------------------------------------------------
@@ -1030,6 +1031,8 @@ async function handleToggleRule(ruleId) {
 
   try {
     await updateMonitoringRule(ruleId, { is_active: newState });
+    // Notify service worker to refresh cached rules
+    chrome.runtime.sendMessage({ type: 'MONITORING_RULES_CHANGED' }).catch(() => {});
   } catch {
     // Revert
     rule.is_active = !newState;
@@ -1049,6 +1052,9 @@ async function handleDeleteRule(ruleId) {
     await deleteMonitoringRule(ruleId);
     monitoringRules = monitoringRules.filter(r => r.id !== ruleId);
     renderRules();
+
+    // Notify service worker to refresh cached rules
+    chrome.runtime.sendMessage({ type: 'MONITORING_RULES_CHANGED' }).catch(() => {});
   } catch (err) {
     handleApiError(err);
   }
@@ -1180,6 +1186,9 @@ async function handleSaveRule() {
 
     hideRulesForm();
     renderRules();
+
+    // Notify service worker to refresh cached rules
+    chrome.runtime.sendMessage({ type: 'MONITORING_RULES_CHANGED' }).catch(() => {});
   } catch (err) {
     handleApiError(err);
   } finally {
@@ -1261,6 +1270,97 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Monitoring toggle (bell icon in header)
+// ---------------------------------------------------------------------------
+
+let monitoringPrefs = { enabled: true, muted_until: 0 };
+let muteMenuOpen = false;
+
+async function initMonitoringToggle() {
+  try {
+    const response = await new Promise(resolve => {
+      chrome.runtime.sendMessage({ type: 'GET_MONITORING_PREFS' }, resolve);
+    });
+    if (response) monitoringPrefs = response;
+  } catch { /* use defaults */ }
+  updateBellIcon();
+}
+
+function updateBellIcon() {
+  const isMuted = monitoringPrefs.muted_until && Date.now() < monitoringPrefs.muted_until;
+  const isOff = !monitoringPrefs.enabled || isMuted;
+  monitoringToggle.classList.toggle('muted', isOff);
+  monitoringToggle.title = isOff
+    ? (isMuted ? 'Monitoring: muted' : 'Monitoring: off')
+    : 'Monitoring: active';
+}
+
+monitoringToggle.addEventListener('click', async () => {
+  monitoringPrefs.enabled = !monitoringPrefs.enabled;
+  if (monitoringPrefs.enabled) monitoringPrefs.muted_until = 0;
+  updateBellIcon();
+  chrome.runtime.sendMessage({
+    type: 'SET_MONITORING_PREFS',
+    prefs: monitoringPrefs,
+  }).catch(() => {});
+});
+
+// Right-click / long-press shows mute menu
+monitoringToggle.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  showMuteMenu();
+});
+
+function showMuteMenu() {
+  closeMuteMenu();
+  muteMenuOpen = true;
+
+  const menu = document.createElement('div');
+  menu.id = 'mute-menu';
+  menu.className = 'mute-menu';
+  menu.innerHTML = `
+    <button class="mute-menu-item" data-mute="3600000">Mute for 1 hour</button>
+    <button class="mute-menu-item" data-mute="28800000">Mute for 8 hours</button>
+    <button class="mute-menu-item" data-mute="0">Unmute</button>
+  `;
+
+  monitoringToggle.parentElement.style.position = 'relative';
+  monitoringToggle.parentElement.appendChild(menu);
+
+  menu.querySelectorAll('.mute-menu-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const duration = parseInt(e.target.dataset.mute, 10);
+      monitoringPrefs.muted_until = duration ? Date.now() + duration : 0;
+      if (duration) monitoringPrefs.enabled = true;
+      updateBellIcon();
+      chrome.runtime.sendMessage({
+        type: 'SET_MONITORING_PREFS',
+        prefs: monitoringPrefs,
+      }).catch(() => {});
+      closeMuteMenu();
+    });
+  });
+
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', closeMuteMenuOnOutsideClick);
+  }, 10);
+}
+
+function closeMuteMenu() {
+  const existing = document.getElementById('mute-menu');
+  if (existing) existing.remove();
+  muteMenuOpen = false;
+  document.removeEventListener('click', closeMuteMenuOnOutsideClick);
+}
+
+function closeMuteMenuOnOutsideClick(e) {
+  if (!e.target.closest('#mute-menu') && !e.target.closest('#monitoring-toggle')) {
+    closeMuteMenu();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -5,13 +5,17 @@
  * - Context menu registration and click handlers
  * - Auth callback listener (captures token from /extension-auth-callback)
  * - Badge management (daily capture count)
- * - Monitoring rule checks on page navigation
+ * - Passive monitoring: rule matching on page navigation + email sender checks
  * - Message routing between popup, content script, and sidepanel
  */
 
 import { CONFIG } from '../utils/config.js';
 import { handleAuthToken, getToken, isAuthenticated } from '../services/auth.js';
-import { getExtensionConfig, checkMonitoringRules } from '../services/api.js';
+import { getExtensionConfig } from '../services/api.js';
+import {
+  checkPage, checkEmailSender, showMatchNotification,
+  loadRules, invalidateRulesCache, isMonitoringActive,
+} from '../services/monitoring.js';
 
 const AUTH_CALLBACK_PREFIX = `${CONFIG.APP_URL}/extension-auth-callback`;
 
@@ -126,6 +130,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
       await handleAuthToken(token);
       await updateBadge();
 
+      // Pre-load monitoring rules after sign-in
+      loadRules(true).catch(() => {});
+
       // Notify popup that auth state changed
       chrome.runtime.sendMessage({ type: 'AUTH_STATE_CHANGED', authenticated: true })
         .catch(() => { /* popup may not be open */ });
@@ -177,7 +184,7 @@ updateBadge();
 setInterval(updateBadge, 5 * 60 * 1000);
 
 // ---------------------------------------------------------------------------
-// Monitoring rule check on page navigation
+// Passive monitoring — check pages on navigation
 // ---------------------------------------------------------------------------
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
@@ -185,39 +192,24 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return;
   if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) return;
 
+  // Skip auth callback URLs (handled above)
+  if (tab.url.startsWith(AUTH_CALLBACK_PREFIX)) return;
+
   try {
-    // Check if user is authenticated and has monitoring enabled
+    // Check if user is authenticated
     const authenticated = await isAuthenticated();
     if (!authenticated) return;
 
-    const config = await getExtensionConfig();
-    if (!config.monitoring) return;
+    // Check if monitoring is active (enabled + not muted)
+    const active = await isMonitoringActive();
+    if (!active) return;
 
-    // Ask content script for page metadata
-    let pageData;
-    try {
-      pageData = await chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_METADATA' });
-    } catch {
-      // Content script not injected on this page
-      return;
+    const domain = new URL(tab.url).hostname.toLowerCase();
+    const matches = await checkPage(tabId, tab.url, domain);
+
+    if (matches.length > 0) {
+      await showMatchNotification(tabId, tab.url, matches);
     }
-
-    if (!pageData) return;
-
-    // Check against monitoring rules
-    const result = await checkMonitoringRules(pageData);
-    if (!result?.matches?.length) return;
-
-    const topMatch = result.matches[0];
-
-    // Show a notification
-    chrome.notifications.create(`monitoring-${tabId}-${Date.now()}`, {
-      type: 'basic',
-      iconUrl: 'assets/icon-128.png',
-      title: 'Callwen — Client Page Detected',
-      message: `This page may be related to ${topMatch.client_name}. Open the extension to capture it.`,
-      priority: 1,
-    });
   } catch {
     // Best-effort — don't disrupt browsing
   }
@@ -242,6 +234,18 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 });
 
 // ---------------------------------------------------------------------------
+// Notification click handler
+// ---------------------------------------------------------------------------
+
+chrome.notifications.onClicked.addListener((notificationId) => {
+  if (notificationId.startsWith('monitoring-')) {
+    // Open the popup
+    chrome.action.openPopup().catch(() => {});
+    chrome.notifications.clear(notificationId);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Message handling
 // ---------------------------------------------------------------------------
 
@@ -249,7 +253,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'AUTH_TOKEN') {
     handleAuthToken(message.token)
       .then(() => updateBadge())
-      .then(() => sendResponse({ ok: true }));
+      .then(() => {
+        loadRules(true).catch(() => {});
+        sendResponse({ ok: true });
+      });
     return true; // async
   }
 
@@ -276,5 +283,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'UPDATE_BADGE') {
     updateBadge().then(() => sendResponse({ ok: true }));
     return true; // async
+  }
+
+  // Monitoring: rules were modified in the popup — refresh cache
+  if (message.type === 'MONITORING_RULES_CHANGED') {
+    invalidateRulesCache()
+      .then(() => loadRules(true))
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true; // async
+  }
+
+  // Monitoring: email sender check from parsed content
+  if (message.type === 'CHECK_EMAIL_SENDER') {
+    (async () => {
+      try {
+        const matches = await checkEmailSender(message.email_addresses);
+        if (matches.length > 0 && message.tab_id) {
+          const url = message.url || '';
+          await showMatchNotification(message.tab_id, url, matches);
+        }
+        sendResponse({ matches });
+      } catch {
+        sendResponse({ matches: [] });
+      }
+    })();
+    return true; // async
+  }
+
+  // Monitoring preferences
+  if (message.type === 'GET_MONITORING_PREFS') {
+    import('../services/monitoring.js').then(m => m.getMonitoringPrefs())
+      .then(prefs => sendResponse(prefs))
+      .catch(() => sendResponse({ enabled: true, muted_until: 0 }));
+    return true;
+  }
+
+  if (message.type === 'SET_MONITORING_PREFS') {
+    import('../services/monitoring.js').then(m => m.setMonitoringPrefs(message.prefs))
+      .then(updated => sendResponse(updated))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
   }
 });
