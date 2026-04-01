@@ -25,6 +25,7 @@ from app.services.audit_service import log_action
 from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.email_router import match_email_to_client
 from app.services.extension_rate_limiter import check_rate as check_burst_rate
+from app.services import extension_monitoring_service
 from app.services.subscription_service import (
     TIER_DEFAULTS,
     check_extension_capture_limit,
@@ -409,6 +410,211 @@ async def recent_captures(
         )
         for doc, client_name in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# Monitoring rule schemas
+# ---------------------------------------------------------------------------
+
+
+class MonitoringRuleResponse(BaseModel):
+    id: UUID
+    rule_name: str
+    rule_type: str
+    pattern: str
+    client_id: UUID
+    client_name: Optional[str] = None
+    is_active: bool
+    notify_only: bool
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class MonitoringRuleCreateRequest(BaseModel):
+    rule_name: str
+    rule_type: str
+    pattern: str
+    client_id: UUID
+    notify_only: bool = True
+
+
+class MonitoringRuleUpdateRequest(BaseModel):
+    rule_name: Optional[str] = None
+    rule_type: Optional[str] = None
+    pattern: Optional[str] = None
+    client_id: Optional[UUID] = None
+    notify_only: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
+class CheckPageRequest(BaseModel):
+    url: str
+    domain: str = ""
+    email_addresses: List[str] = Field(default_factory=list)
+    page_text_snippet: Optional[str] = None
+
+
+class CheckPageMatch(BaseModel):
+    rule_id: UUID
+    rule_name: str
+    client_id: UUID
+    client_name: str
+    match_type: str
+    pattern_matched: str
+
+
+# ---------------------------------------------------------------------------
+# Monitoring feature gate helper
+# ---------------------------------------------------------------------------
+
+
+def _require_monitoring(auth: AuthContext, db: Session) -> None:
+    """Raise 403 if the user's tier doesn't include extension_monitoring."""
+    sub = get_or_create_subscription(db, auth.user_id, org_id=auth.org_id)
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+    if not tier_config["extension_monitoring"]:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Extension monitoring requires a paid plan",
+                "upgrade_url": "/dashboard/settings/subscriptions",
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# GET /extension/monitoring-rules
+# ---------------------------------------------------------------------------
+
+
+@router.get("/monitoring-rules", response_model=List[MonitoringRuleResponse])
+async def list_monitoring_rules(
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> List[MonitoringRuleResponse]:
+    """List all active monitoring rules for the current user."""
+    _require_monitoring(auth, db)
+    rules = extension_monitoring_service.get_active_rules(auth.user_id, db)
+    return [MonitoringRuleResponse(**r) for r in rules]
+
+
+# ---------------------------------------------------------------------------
+# POST /extension/monitoring-rules
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/monitoring-rules",
+    response_model=MonitoringRuleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_monitoring_rule(
+    body: MonitoringRuleCreateRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> MonitoringRuleResponse:
+    """Create a new monitoring rule."""
+    _require_monitoring(auth, db)
+
+    try:
+        rule = extension_monitoring_service.create_rule(
+            user_id=auth.user_id,
+            org_id=auth.org_id,
+            rule_data=body.model_dump(),
+            db=db,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return MonitoringRuleResponse(
+        id=rule.id,
+        rule_name=rule.rule_name,
+        rule_type=rule.rule_type,
+        pattern=rule.pattern,
+        client_id=rule.client_id,
+        client_name=rule.client.name if rule.client else None,
+        is_active=rule.is_active,
+        notify_only=rule.notify_only,
+        created_at=rule.created_at.isoformat() if rule.created_at else None,
+        updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PUT /extension/monitoring-rules/{rule_id}
+# ---------------------------------------------------------------------------
+
+
+@router.put("/monitoring-rules/{rule_id}", response_model=MonitoringRuleResponse)
+async def update_monitoring_rule(
+    rule_id: UUID,
+    body: MonitoringRuleUpdateRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> MonitoringRuleResponse:
+    """Update an existing monitoring rule."""
+    _require_monitoring(auth, db)
+
+    updates = body.model_dump(exclude_unset=True)
+    try:
+        rule = extension_monitoring_service.update_rule(rule_id, auth.user_id, updates, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return MonitoringRuleResponse(
+        id=rule.id,
+        rule_name=rule.rule_name,
+        rule_type=rule.rule_type,
+        pattern=rule.pattern,
+        client_id=rule.client_id,
+        client_name=rule.client.name if rule.client else None,
+        is_active=rule.is_active,
+        notify_only=rule.notify_only,
+        created_at=rule.created_at.isoformat() if rule.created_at else None,
+        updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# DELETE /extension/monitoring-rules/{rule_id}
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/monitoring-rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def delete_monitoring_rule(
+    rule_id: UUID,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> None:
+    """Deactivate a monitoring rule (soft delete)."""
+    _require_monitoring(auth, db)
+
+    try:
+        extension_monitoring_service.delete_rule(rule_id, auth.user_id, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# POST /extension/monitoring-rules/check
+# ---------------------------------------------------------------------------
+
+
+@router.post("/monitoring-rules/check", response_model=List[CheckPageMatch])
+async def check_monitoring_rules(
+    body: CheckPageRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> List[CheckPageMatch]:
+    """Check a page against all active monitoring rules."""
+    _require_monitoring(auth, db)
+
+    matches = extension_monitoring_service.match_page_against_rules(
+        user_id=auth.user_id,
+        page_data=body.model_dump(),
+        db=db,
+    )
+    return [CheckPageMatch(**m) for m in matches]
 
 
 # ---------------------------------------------------------------------------

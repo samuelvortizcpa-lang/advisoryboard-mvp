@@ -30,6 +30,7 @@ from app.models.audit_log import AuditLog
 from app.models.email_template import EmailTemplate
 from app.models.client_communication import ClientCommunication
 from app.models.follow_up_reminder import FollowUpReminder
+from app.models.extension_monitoring_rule import ExtensionMonitoringRule
 
 __all__ = [
     "User",
@@ -63,4 +64,5 @@ __all__ = [
     "EmailTemplate",
     "ClientCommunication",
     "FollowUpReminder",
+    "ExtensionMonitoringRule",
 ]
