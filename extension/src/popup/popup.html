@@ -8,34 +8,89 @@
 </head>
 <body>
   <div id="app">
-    <!-- Auth gate -->
+
+    <!-- Auth screen (signed out) -->
     <div id="auth-screen" class="screen hidden">
-      <div class="logo-section">
-        <h1 class="logo">Callwen</h1>
-        <p class="tagline">Capture for Advisory</p>
+      <div class="auth-container">
+        <div class="auth-logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="8" fill="#14b8a6"/>
+            <text x="16" y="22" text-anchor="middle" fill="white" font-size="16" font-weight="700" font-family="system-ui">C</text>
+          </svg>
+          <span class="auth-logo-text">Callwen</span>
+        </div>
+        <p class="auth-desc">Capture documents, emails, and web content directly into your Callwen workspace.</p>
+        <button id="sign-in-btn" class="btn btn-accent btn-full">Sign in to Callwen</button>
+        <p class="auth-footer">Don't have an account? <a href="https://callwen.com/sign-up" target="_blank">Sign up</a></p>
       </div>
-      <button id="sign-in-btn" class="btn btn-primary btn-full">Sign in to Callwen</button>
     </div>
 
-    <!-- Main screen -->
+    <!-- Main screen (signed in) -->
     <div id="main-screen" class="screen hidden">
+
+      <!-- Header -->
       <header class="header">
-        <h1 class="logo-sm">Callwen</h1>
-        <button id="sign-out-btn" class="btn-icon" title="Sign out">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+        <div class="header-left">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="8" fill="#14b8a6"/>
+            <text x="16" y="22" text-anchor="middle" fill="white" font-size="16" font-weight="700" font-family="system-ui">C</text>
           </svg>
-        </button>
+          <span id="user-email" class="header-email" title="">Callwen</span>
+        </div>
+        <div class="header-actions">
+          <a id="settings-btn" class="btn-icon" href="https://callwen.com/dashboard/settings" target="_blank" title="Settings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+            </svg>
+          </a>
+          <button id="sign-out-btn" class="btn-icon" title="Sign out">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+            </svg>
+          </button>
+        </div>
       </header>
 
-      <!-- Capture actions -->
-      <div class="section">
-        <label class="label">Client</label>
-        <select id="client-select" class="select">
-          <option value="">Select a client...</option>
-        </select>
+      <!-- Capture mode tabs -->
+      <div class="capture-tabs">
+        <button class="tab active" data-mode="text" title="Capture selected text">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3"/>
+          </svg>
+          <span>Text</span>
+        </button>
+        <button class="tab" data-mode="page" title="Capture full page">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span>Page</span>
+        </button>
+        <button class="tab" data-mode="file" title="Capture file URL">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+          </svg>
+          <span>File</span>
+        </button>
+        <button class="tab" data-mode="screenshot" title="Capture screenshot">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>Screenshot</span>
+        </button>
       </div>
 
+      <!-- Client selector -->
+      <div class="section">
+        <label class="label">Client</label>
+        <div class="select-wrapper">
+          <select id="client-select" class="select">
+            <option value="">Select a client...</option>
+          </select>
+          <span id="auto-match-badge" class="badge hidden">auto-matched</span>
+        </div>
+      </div>
+
+      <!-- Document tag selector -->
       <div class="section">
         <label class="label">Document type</label>
         <select id="tag-select" class="select">
@@ -43,34 +98,49 @@
         </select>
       </div>
 
-      <div class="capture-actions">
-        <button id="capture-selection" class="btn btn-capture" title="Capture selected text">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3"/>
+      <!-- Content preview -->
+      <div id="content-preview" class="content-preview hidden">
+        <div class="preview-label">Preview</div>
+        <div id="preview-body" class="preview-body"></div>
+      </div>
+
+      <!-- Capture button -->
+      <div class="capture-action">
+        <button id="capture-btn" class="btn btn-accent btn-full" disabled>
+          <span id="capture-btn-text">Select a client to capture</span>
+          <span id="capture-spinner" class="spinner hidden"></span>
+          <svg id="capture-check" class="check-icon hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <polyline points="20 6 9 17 4 12"/>
           </svg>
-          Selection
-        </button>
-        <button id="capture-page" class="btn btn-capture" title="Capture full page text">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-          </svg>
-          Full Page
-        </button>
-        <button id="capture-screenshot" class="btn btn-capture" title="Capture screenshot">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
-          </svg>
-          Screenshot
         </button>
       </div>
 
-      <!-- Status -->
+      <!-- Status messages -->
       <div id="status" class="status hidden"></div>
 
-      <!-- Usage info -->
-      <div id="usage" class="usage hidden">
-        <span id="usage-text"></span>
+      <!-- Usage bar -->
+      <div id="usage-section" class="usage-section hidden">
+        <div class="usage-header">
+          <span id="usage-text" class="usage-text"></span>
+          <a id="upgrade-link" class="upgrade-link hidden" href="https://callwen.com/dashboard/settings" target="_blank">Upgrade</a>
+        </div>
+        <div class="progress-track">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
       </div>
+
+      <!-- Recent captures -->
+      <div id="recent-section" class="recent-section hidden">
+        <button id="recent-toggle" class="recent-toggle">
+          <span>Recent captures</span>
+          <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        <div id="recent-list" class="recent-list hidden"></div>
+        <a class="recent-view-all hidden" id="view-all-link" href="https://callwen.com/dashboard" target="_blank">View all in Callwen &rarr;</a>
+      </div>
+
     </div>
   </div>
 
