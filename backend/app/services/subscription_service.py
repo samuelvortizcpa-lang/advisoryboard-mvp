@@ -39,6 +39,11 @@ TIER_DEFAULTS: dict[str, dict] = {
         "max_documents": None,
         "max_members": 1,
         "base_seats": 1,
+        "extension_captures_per_day": 10,
+        "extension_auto_match": False,
+        "extension_quick_query": False,
+        "extension_parsers": False,
+        "extension_monitoring": False,
     },
     "starter": {
         "strategic_queries_limit": 0,
@@ -48,6 +53,11 @@ TIER_DEFAULTS: dict[str, dict] = {
         "max_documents": None,
         "max_members": 1,
         "base_seats": 1,
+        "extension_captures_per_day": 50,
+        "extension_auto_match": True,
+        "extension_quick_query": True,
+        "extension_parsers": True,
+        "extension_monitoring": True,
     },
     "professional": {
         "strategic_queries_limit": 100,
@@ -57,6 +67,11 @@ TIER_DEFAULTS: dict[str, dict] = {
         "max_documents": None,
         "max_members": 3,
         "base_seats": 1,
+        "extension_captures_per_day": 200,
+        "extension_auto_match": True,
+        "extension_quick_query": True,
+        "extension_parsers": True,
+        "extension_monitoring": True,
     },
     "firm": {
         "strategic_queries_limit": 500,
@@ -68,6 +83,11 @@ TIER_DEFAULTS: dict[str, dict] = {
         "base_seats": 3,
         "addon_seat_price_monthly": 79,
         "addon_seat_price_annual": 63,
+        "extension_captures_per_day": None,
+        "extension_auto_match": True,
+        "extension_quick_query": True,
+        "extension_parsers": True,
+        "extension_monitoring": True,
     },
 }
 
@@ -435,4 +455,84 @@ def check_seat_limit(org_id: UUID, db: Session) -> dict:
         "current": info["current_used"],
         "limit": info["total_allowed"],
         "message": msg,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Browser extension helpers
+# ---------------------------------------------------------------------------
+
+
+def check_extension_capture_limit(
+    db: Session, user_id: str, *, org_id: UUID | None = None,
+) -> dict:
+    """
+    Check whether the user can make another extension capture today.
+
+    Returns {allowed, current, limit, tier}.
+    """
+    sub = get_or_create_subscription(db, user_id, org_id=org_id)
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+    limit = tier_config["extension_captures_per_day"]
+
+    if limit is None:
+        return {"allowed": True, "current": 0, "limit": None, "tier": sub.tier}
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    current = (
+        db.query(func.count(Document.id))
+        .join(Client, Document.client_id == Client.id)
+        .filter(
+            Document.source == "extension",
+            Document.upload_date >= today_start,
+        )
+    )
+    if org_id is not None:
+        current = current.filter(Client.org_id == org_id)
+    else:
+        current = current.filter(Client.owner_id == user_id)
+
+    count = current.scalar() or 0
+
+    return {
+        "allowed": count < limit,
+        "current": count,
+        "limit": limit,
+        "tier": sub.tier,
+    }
+
+
+def get_extension_config(
+    db: Session, user_id: str, *, org_id: UUID | None = None,
+) -> dict:
+    """
+    Return the extension feature flags for the user's tier.
+    """
+    sub = get_or_create_subscription(db, user_id, org_id=org_id)
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+
+    limit = tier_config["extension_captures_per_day"]
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_q = (
+        db.query(func.count(Document.id))
+        .join(Client, Document.client_id == Client.id)
+        .filter(
+            Document.source == "extension",
+            Document.upload_date >= today_start,
+        )
+    )
+    if org_id is not None:
+        today_q = today_q.filter(Client.org_id == org_id)
+    else:
+        today_q = today_q.filter(Client.owner_id == user_id)
+    captures_today = today_q.scalar() or 0
+
+    return {
+        "tier": sub.tier,
+        "auto_match": tier_config["extension_auto_match"],
+        "quick_query": tier_config["extension_quick_query"],
+        "parsers": tier_config["extension_parsers"],
+        "monitoring": tier_config["extension_monitoring"],
+        "captures_per_day": limit,
+        "captures_today": captures_today,
     }

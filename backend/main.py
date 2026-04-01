@@ -36,6 +36,7 @@ from app.api.strategy_dashboard import router as strategy_dashboard_router
 from app.api.audit import router as audit_router
 from app.api.support import router as support_router
 from app.api.communications import router as communications_router
+from app.api.extension import router as extension_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -203,3 +204,4 @@ app.include_router(strategy_dashboard_router,  prefix="/api", tags=["strategy-da
 app.include_router(audit_router,               prefix="/api", tags=["audit"])
 app.include_router(support_router,             prefix="/api", tags=["support"])
 app.include_router(communications_router,      prefix="/api", tags=["communications"])
+app.include_router(extension_router,           prefix="/api/extension", tags=["extension"])
