@@ -2079,6 +2079,107 @@ export function createCommunicationsApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Extension types ─────────────────────────────────────────────────────────
+
+export interface ExtensionConfig {
+  tier: string;
+  auto_match: boolean;
+  quick_query: boolean;
+  parsers: boolean;
+  monitoring: boolean;
+  captures_per_day: number | null;
+  captures_today: number;
+  captures_remaining: number | null;
+}
+
+export interface ExtensionCapture {
+  document_id: string;
+  client_id: string;
+  client_name: string;
+  filename: string;
+  capture_type: string | null;
+  source_url: string | null;
+  created_at: string;
+  processed: boolean;
+}
+
+export interface ExtensionCaptureStats {
+  today_count: number;
+  month_count: number;
+  top_clients: { client_id: string; client_name: string; capture_count: number }[];
+}
+
+export interface MonitoringRule {
+  id: string;
+  rule_name: string;
+  rule_type: string;
+  pattern: string;
+  client_id: string;
+  client_name: string | null;
+  is_active: boolean;
+  notify_only: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface MonitoringRuleCreate {
+  rule_name: string;
+  rule_type: string;
+  pattern: string;
+  client_id: string;
+  notify_only?: boolean;
+}
+
+export interface MonitoringRuleUpdate {
+  rule_name?: string;
+  rule_type?: string;
+  pattern?: string;
+  client_id?: string;
+  notify_only?: boolean;
+  is_active?: boolean;
+}
+
+// ─── Extension API factory ───────────────────────────────────────────────────
+
+export function createExtensionApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    getConfig() {
+      return f<ExtensionConfig>("/extension/config");
+    },
+
+    getRecentCaptures(limit = 20) {
+      return f<ExtensionCapture[]>(`/extension/recent-captures?limit=${limit}`);
+    },
+
+    getCaptureStats() {
+      return f<ExtensionCaptureStats>("/extension/capture-stats");
+    },
+
+    getMonitoringRules() {
+      return f<MonitoringRule[]>("/extension/monitoring-rules");
+    },
+
+    createMonitoringRule(data: MonitoringRuleCreate) {
+      return f<MonitoringRule>("/extension/monitoring-rules", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateMonitoringRule(ruleId: string, data: MonitoringRuleUpdate) {
+      return f<MonitoringRule>(`/extension/monitoring-rules/${ruleId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteMonitoringRule(ruleId: string) {
+      return f<void>(`/extension/monitoring-rules/${ruleId}`, { method: "DELETE" });
+    },
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.

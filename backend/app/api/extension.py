@@ -379,11 +379,13 @@ async def match_client(
 
 @router.get("/recent-captures", response_model=List[RecentCaptureItem])
 async def recent_captures(
+    limit: int = 10,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> List[RecentCaptureItem]:
-    """Return the last 10 extension captures for the current user."""
+    """Return recent extension captures for the current user."""
     user = user_service.get_or_create_user(db, {"user_id": auth.user_id})
+    capped_limit = max(1, min(limit, 100))
 
     rows = (
         db.query(Document, Client.name)
@@ -393,7 +395,7 @@ async def recent_captures(
             Document.uploaded_by == user.id,
         )
         .order_by(Document.upload_date.desc())
-        .limit(10)
+        .limit(capped_limit)
         .all()
     )
 
@@ -410,6 +412,80 @@ async def recent_captures(
         )
         for doc, client_name in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# GET /extension/capture-stats
+# ---------------------------------------------------------------------------
+
+
+class CaptureStatsTopClient(BaseModel):
+    client_id: UUID
+    client_name: str
+    capture_count: int
+
+
+class CaptureStatsResponse(BaseModel):
+    today_count: int
+    month_count: int
+    top_clients: List[CaptureStatsTopClient]
+
+
+@router.get("/capture-stats", response_model=CaptureStatsResponse)
+async def capture_stats(
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> CaptureStatsResponse:
+    """Return capture statistics for the current user."""
+    user = user_service.get_or_create_user(db, {"user_id": auth.user_id})
+
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    base_filter = [
+        Document.source == "extension",
+        Document.uploaded_by == user.id,
+    ]
+
+    today_count = (
+        db.query(func.count(Document.id))
+        .filter(*base_filter, Document.upload_date >= today_start)
+        .scalar()
+    ) or 0
+
+    month_count = (
+        db.query(func.count(Document.id))
+        .filter(*base_filter, Document.upload_date >= month_start)
+        .scalar()
+    ) or 0
+
+    top_rows = (
+        db.query(
+            Document.client_id,
+            Client.name,
+            func.count(Document.id).label("cnt"),
+        )
+        .join(Client, Document.client_id == Client.id)
+        .filter(*base_filter, Document.upload_date >= month_start)
+        .group_by(Document.client_id, Client.name)
+        .order_by(func.count(Document.id).desc())
+        .limit(5)
+        .all()
+    )
+
+    return CaptureStatsResponse(
+        today_count=today_count,
+        month_count=month_count,
+        top_clients=[
+            CaptureStatsTopClient(
+                client_id=cid,
+                client_name=cname or "Unknown",
+                capture_count=cnt,
+            )
+            for cid, cname, cnt in top_rows
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +649,22 @@ async def update_monitoring_rule(
         created_at=rule.created_at.isoformat() if rule.created_at else None,
         updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
     )
+
+
+# ---------------------------------------------------------------------------
+# PATCH /extension/monitoring-rules/{rule_id}  (alias for PUT)
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/monitoring-rules/{rule_id}", response_model=MonitoringRuleResponse)
+async def patch_monitoring_rule(
+    rule_id: UUID,
+    body: MonitoringRuleUpdateRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> MonitoringRuleResponse:
+    """Partial update of a monitoring rule (same logic as PUT)."""
+    return await update_monitoring_rule(rule_id, body, db, auth)
 
 
 # ---------------------------------------------------------------------------
