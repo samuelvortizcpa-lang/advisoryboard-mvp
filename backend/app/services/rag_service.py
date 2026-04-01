@@ -210,6 +210,16 @@ async def process_document(db: Session, document: Document) -> None:
     doc_label = f"{document.id} ({document.filename!r})"
     logger.info("RAG: starting processing for %s", doc_label)
 
+    # Image files (screenshots, photos) have no extractable text — mark processed
+    _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff"}
+    file_ext = ("." + (document.file_type or "").lower().lstrip("."))
+    if file_ext in _IMAGE_EXTENSIONS:
+        logger.info("RAG: image file detected for %s — skipping text extraction", doc_label)
+        document.processed = True
+        document.processing_error = None
+        db.commit()
+        return
+
     try:
         # 1. Extract text — download from Supabase Storage to a temp file
         temp_path = None
