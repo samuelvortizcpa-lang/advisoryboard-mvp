@@ -24,32 +24,38 @@ import {
 // ---------------------------------------------------------------------------
 
 (function detectAuthCallback() {
-  const path = window.location.pathname;
-  if (!path.startsWith('/extension-auth-callback')) return;
+  if (!window.location.pathname.startsWith('/extension-auth-callback')) return;
 
-  function extractAndSend() {
+  let tokenSent = false;
+
+  function checkAndRelayToken() {
+    if (tokenSent) return true;
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     if (!token) return false;
 
-    chrome.runtime.sendMessage({ type: 'AUTH_TOKEN_FROM_PAGE', token }, () => {
-      // Ignore errors — service worker will handle it
-    });
+    tokenSent = true;
+    console.log('[Callwen] Relaying auth token to service worker');
+    chrome.runtime.sendMessage(
+      { type: 'AUTH_TOKEN_FROM_PAGE', token },
+      (response) => {
+        console.log('[Callwen] Service worker response:', response);
+      }
+    );
     return true;
   }
 
   // Immediate check (content script may load after the token is already in URL)
-  if (extractAndSend()) return;
+  if (checkAndRelayToken()) return;
 
-  // Polling fallback — SPA redirects may update the URL after content script loads
-  let attempts = 0;
-  const maxAttempts = 60; // 30 seconds at 500ms intervals
-  const interval = setInterval(() => {
-    attempts++;
-    if (extractAndSend() || attempts >= maxAttempts) {
-      clearInterval(interval);
-    }
-  }, 500);
+  // Poll for token — the page uses replaceState to update the URL without
+  // reloading, so we need to keep checking until the token appears.
+  const poller = setInterval(() => {
+    if (checkAndRelayToken()) clearInterval(poller);
+  }, 300);
+
+  // Give up after 30 seconds
+  setTimeout(() => clearInterval(poller), 30000);
 })();
 
 // ---------------------------------------------------------------------------

@@ -45,9 +45,12 @@ export default function ExtensionAuthCallback() {
           return;
         }
 
-        // Replace the URL so the service worker can detect the token.
-        // Using replace() avoids a back-button loop.
-        window.location.replace(
+        // Update the URL so the content script can detect ?token= and relay it
+        // to the service worker. Using replaceState avoids a full page reload
+        // (which would destroy and re-inject the content script).
+        window.history.replaceState(
+          {},
+          "",
           `/extension-auth-callback?token=${encodeURIComponent(token)}`
         );
         setStatus("success");
@@ -88,7 +91,7 @@ export default function ExtensionAuthCallback() {
             />
             <p style={{ fontSize: 15, fontWeight: 600 }}>Connecting to Callwen extension...</p>
             <p style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>
-              This tab will close automatically.
+              This may take a moment.
             </p>
           </>
         )}
@@ -113,7 +116,7 @@ export default function ExtensionAuthCallback() {
             </div>
             <p style={{ fontSize: 15, fontWeight: 600 }}>Connected!</p>
             <p style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>
-              Passing credentials to the extension. This tab will close shortly.
+              You can close this tab.
             </p>
           </>
         )}

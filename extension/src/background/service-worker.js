@@ -232,24 +232,29 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content script detected ?token= on /extension-auth-callback
   if (message.type === 'AUTH_TOKEN_FROM_PAGE') {
+    console.log('[Callwen SW] Received token from content script');
     (async () => {
       try {
-        console.log('[Callwen] Auth token received from content script');
         await handleAuthToken(message.token);
         await updateBadge();
+        console.log('[Callwen SW] Token stored successfully');
         loadRules(true).catch(() => {});
 
-        // Notify sidepanel/popup that auth state changed
+        // Notify sidepanel that auth state changed
         chrome.runtime.sendMessage({ type: 'AUTH_STATE_CHANGED', authenticated: true })
           .catch(() => { /* views may not be open */ });
 
-        // Close the auth tab
-        if (sender.tab?.id) {
-          chrome.tabs.remove(sender.tab.id).catch(() => {});
-        }
-
         sendResponse({ ok: true });
-      } catch {
+
+        // Close the auth tab after a short delay so the sendResponse
+        // completes and the content script receives confirmation
+        setTimeout(() => {
+          if (sender.tab?.id) {
+            chrome.tabs.remove(sender.tab.id).catch(() => {});
+          }
+        }, 500);
+      } catch (err) {
+        console.error('[Callwen SW] Error storing token:', err);
         sendResponse({ ok: false });
       }
     })();
