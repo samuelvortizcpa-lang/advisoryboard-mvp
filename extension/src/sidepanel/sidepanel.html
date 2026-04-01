@@ -8,13 +8,92 @@
 </head>
 <body>
   <div id="app">
-    <header class="header">
-      <h1 class="logo">Callwen</h1>
-      <span class="badge">Quick Query</span>
-    </header>
 
-    <div id="content">
-      <p class="placeholder">Quick Query AI sidebar — coming soon.</p>
+    <!-- Auth screen -->
+    <div id="auth-screen" class="screen hidden">
+      <div class="gate-container">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="8" fill="#14b8a6"/>
+          <text x="16" y="22" text-anchor="middle" fill="white" font-size="16" font-weight="700" font-family="system-ui">C</text>
+        </svg>
+        <h2 class="gate-title">Sign in to Callwen</h2>
+        <p class="gate-desc">Sign in to ask questions about your clients' documents from any page.</p>
+        <button id="sign-in-btn" class="btn btn-accent btn-full">Sign in</button>
+      </div>
+    </div>
+
+    <!-- Tier gate -->
+    <div id="tier-gate" class="screen hidden">
+      <div class="gate-container">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+        <h2 class="gate-title">Upgrade to Quick Query</h2>
+        <p class="gate-desc">Quick Query is available on paid plans. Upgrade to ask questions about your clients' documents from any page.</p>
+        <a href="https://callwen.com/dashboard/settings" target="_blank" class="btn btn-accent btn-full">View plans</a>
+      </div>
+    </div>
+
+    <!-- Main screen -->
+    <div id="main-screen" class="screen hidden">
+
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="8" fill="#14b8a6"/>
+            <text x="16" y="22" text-anchor="middle" fill="white" font-size="16" font-weight="700" font-family="system-ui">C</text>
+          </svg>
+          <span class="header-title">Quick Query</span>
+        </div>
+      </header>
+
+      <!-- Client selector -->
+      <div class="client-section">
+        <div id="sp-client-picker" class="sp-client-picker">
+          <button id="sp-client-btn" class="sp-client-btn" type="button">
+            <span id="sp-client-text" class="sp-client-text placeholder">Select a client...</span>
+            <svg class="sp-client-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="sp-client-dropdown" class="sp-client-dropdown hidden">
+            <div class="sp-search-wrap">
+              <input id="sp-client-search" class="sp-client-search" type="text" placeholder="Search clients..." autocomplete="off">
+            </div>
+            <div id="sp-client-list" class="sp-client-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat area -->
+      <div id="chat-area" class="chat-area">
+        <div id="chat-messages" class="chat-messages">
+          <div class="chat-empty">
+            <p class="chat-empty-title">Ask anything</p>
+            <p class="chat-empty-desc">Questions are answered using your client's uploaded documents with source citations.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Context banner (selected text) -->
+      <div id="context-banner" class="context-banner hidden">
+        <span class="context-text">Selected text available</span>
+        <button id="insert-context-btn" class="context-insert-btn">Insert</button>
+        <button id="dismiss-context-btn" class="context-dismiss-btn">&times;</button>
+      </div>
+
+      <!-- Input area -->
+      <div class="input-area">
+        <div class="input-wrap">
+          <textarea id="query-input" class="query-input" placeholder="Ask about documents..." rows="1" disabled></textarea>
+          <button id="send-btn" class="send-btn" disabled title="Send">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <div id="throttle-msg" class="throttle-msg hidden">Slow down — max 3 questions per minute</div>
+      </div>
+
     </div>
   </div>
 

@@ -37,6 +37,12 @@ chrome.runtime.onInstalled.addListener(() => {
     title: 'Capture linked file to Callwen',
     contexts: ['link'],
   });
+
+  chrome.contextMenus.create({
+    id: 'callwen-ask-about',
+    title: 'Ask Callwen about this',
+    contexts: ['selection'],
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -76,6 +82,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       captureData = { fileUrl: info.linkUrl || '' };
       break;
 
+    case 'callwen-ask-about': {
+      // Open side panel with the selected text as a query
+      const quote = (info.selectionText || '').slice(0, 500);
+      await chrome.storage.session.set({
+        sidepanel_query: `> ${quote}\n\nWhat does this mean?`,
+      });
+      chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+      return;
+    }
+
     default:
       return;
   }
@@ -92,8 +108,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   // Open the popup for client selection
   chrome.action.openPopup().catch(() => {
-    // openPopup() may not be supported in all environments — fall back
-    // to sending a message that the popup listens for on open
+    // openPopup() may not be supported in all environments
   });
 });
 
