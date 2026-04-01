@@ -14,10 +14,7 @@ import {
   getRecentCaptures, getMonitoringRules, createMonitoringRule,
   updateMonitoringRule, deleteMonitoringRule, askQuestion, ERROR_CODES,
 } from '../services/api.js';
-import {
-  captureTextSelection, captureFullPage, captureFileUrl,
-  captureScreenshot, getPageMetadata,
-} from '../services/capture.js';
+import { captureFileUrl, captureScreenshot, getPageMetadata } from '../services/capture.js';
 import { getCachedClients, addRecentClientId, getRecentClientIds } from '../utils/storage.js';
 
 // ---------------------------------------------------------------------------
@@ -550,8 +547,11 @@ function resetPickerText() {
 async function detectSelectedText() {
   if (!activeTab?.id) return;
   try {
-    const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'GET_SELECTED_TEXT' });
-    const text = response?.text?.trim();
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: activeTab.id },
+      func: () => window.getSelection().toString(),
+    });
+    const text = results?.[0]?.result?.trim();
     if (text && text.length > 0) {
       selectedText = text;
       setMode('text');
@@ -814,22 +814,50 @@ async function handleCapture() {
     }
 
     const tabId = activeTab?.id;
-    let payload;
+    let captureType = '';
+    let capturePayload = '';
 
     switch (activeMode) {
       case 'text':
         if (parsedContent?.content) {
-          payload = { type: 'text_selection', content: parsedContent.content };
+          captureType = 'text_selection';
+          capturePayload = parsedContent.content;
         } else {
-          payload = await captureTextSelection(tabId);
+          // Get selected text directly — no content script needed
+          const selResults = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: () => window.getSelection().toString(),
+          });
+          const selText = selResults?.[0]?.result?.trim();
+          if (!selText) {
+            showStatus('No text selected on the page. Select some text first.', 'error');
+            setBtnLoading(false);
+            return;
+          }
+          captureType = 'text_selection';
+          capturePayload = selText.slice(0, CONFIG.MAX_TEXT_LENGTH);
         }
         break;
 
       case 'page':
         if (parsedContent?.content && parsedContent.capture_type === 'full_page') {
-          payload = { type: 'full_page', content: parsedContent.content };
+          captureType = 'full_page';
+          capturePayload = parsedContent.content;
         } else {
-          payload = await captureFullPage(tabId);
+          // Get page text directly — no content script needed
+          const pageResults = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: (maxLen) => (document.body?.innerText || '').substring(0, maxLen),
+            args: [CONFIG.MAX_TEXT_LENGTH],
+          });
+          const pageText = pageResults?.[0]?.result?.trim();
+          if (!pageText) {
+            showStatus('No content found on this page.', 'error');
+            setBtnLoading(false);
+            return;
+          }
+          captureType = 'full_page';
+          capturePayload = pageText;
         }
         break;
 
@@ -841,13 +869,18 @@ async function handleCapture() {
           setBtnLoading(false);
           return;
         }
-        payload = await captureFileUrl(pending.data.fileUrl);
+        const filePayload = await captureFileUrl(pending.data.fileUrl);
+        captureType = filePayload.type;
+        capturePayload = filePayload.file_url;
         break;
       }
 
-      case 'screenshot':
-        payload = await captureScreenshot(tabId);
+      case 'screenshot': {
+        const ssPayload = await captureScreenshot(tabId);
+        captureType = ssPayload.type;
+        capturePayload = ssPayload.image_data;
         break;
+      }
     }
 
     const metadata = {
@@ -857,11 +890,7 @@ async function handleCapture() {
       site_domain: activeTab?.url ? extractDomain(activeTab.url) : '',
     };
 
-    const capturePayload = payload.type === 'file_url'
-      ? payload.file_url
-      : (payload.image_data || payload.content || '');
-
-    await captureContent(clientId, payload.type, capturePayload, metadata, tag);
+    await captureContent(clientId, captureType, capturePayload, metadata, tag);
 
     await addRecentClientId(clientId);
 
@@ -1125,8 +1154,11 @@ async function checkSelectedTextForChat() {
   try {
     const tab = await getActiveTab();
     if (!tab?.id) return;
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SELECTED_TEXT' });
-    const text = response?.text?.trim();
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => window.getSelection().toString(),
+    });
+    const text = results?.[0]?.result?.trim();
     if (text && text.length > 0) {
       selectedText = text;
       contextBanner.classList.remove('hidden');

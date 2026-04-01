@@ -12,8 +12,7 @@
     "notifications"
   ],
   "host_permissions": [
-    "https://callwen.com/*",
-    "https://advisoryboard-mvp-production.up.railway.app/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "service-worker.js"
