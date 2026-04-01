@@ -8,7 +8,7 @@
  */
 
 import { CONFIG } from '../utils/config.js';
-import { isAuthenticated, signIn, signOut } from '../services/auth.js';
+import { getToken, signIn, signOut } from '../services/auth.js';
 import {
   getExtensionConfig, getClients, captureContent, matchClient,
   getRecentCaptures, getMonitoringRules, createMonitoringRule,
@@ -154,9 +154,12 @@ async function getActiveTab() {
 // ---------------------------------------------------------------------------
 
 async function init() {
-  const authed = await isAuthenticated();
+  // Wait for the auth token to be available in storage before doing anything.
+  // This avoids firing API calls that will 401 because the token hasn't been
+  // written yet (e.g. service worker just stored it via AUTH_TOKEN_FROM_PAGE).
+  const token = await getToken();
 
-  if (!authed) {
+  if (!token) {
     showScreen('auth');
     return;
   }
