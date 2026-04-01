@@ -11,6 +11,10 @@ import {
   getExtensionConfig, getClients, captureContent, matchClient,
   getRecentCaptures, ERROR_CODES,
 } from '../services/api.js';
+import {
+  captureTextSelection, captureFullPage, captureFileUrl,
+  captureScreenshot,
+} from '../services/capture.js';
 import { getCachedClients } from '../utils/storage.js';
 
 // ---------------------------------------------------------------------------
@@ -198,11 +202,8 @@ async function tryAutoMatch() {
 async function detectSelectedText() {
   if (!activeTab?.id) return;
   try {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: activeTab.id },
-      func: () => window.getSelection().toString(),
-    });
-    const text = result?.result?.trim();
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'GET_SELECTED_TEXT' });
+    const text = response?.text?.trim();
     if (text && text.length > 0) {
       selectedText = text;
       setMode('text');
@@ -210,7 +211,7 @@ async function detectSelectedText() {
       setMode('page');
     }
   } catch {
-    // Can't access page (chrome:// URLs, etc.)
+    // Content script not available (chrome:// URLs, etc.)
     setMode('page');
   }
 }
@@ -346,86 +347,48 @@ async function handleCapture() {
       activeTab = tab;
     }
 
-    let content = '';
-    let captureType = '';
-    let metadata = {
+    const tabId = activeTab?.id;
+    let payload;
+
+    switch (activeMode) {
+      case 'text':
+        payload = await captureTextSelection(tabId);
+        break;
+
+      case 'page':
+        payload = await captureFullPage(tabId);
+        break;
+
+      case 'file': {
+        const session = await chrome.storage.session.get('pending_capture');
+        const pending = session?.pending_capture;
+        if (!pending?.data?.fileUrl) {
+          showStatus('No file link captured. Right-click a link to capture.', 'error');
+          setBtnLoading(false);
+          return;
+        }
+        payload = await captureFileUrl(pending.data.fileUrl);
+        break;
+      }
+
+      case 'screenshot':
+        payload = await captureScreenshot(tabId);
+        break;
+    }
+
+    const metadata = {
       url: activeTab?.url || '',
       page_title: activeTab?.title || '',
       captured_at: new Date().toISOString(),
       site_domain: activeTab?.url ? extractDomain(activeTab.url) : '',
     };
 
-    switch (activeMode) {
-      case 'text': {
-        // Get fresh selection
-        let text = selectedText;
-        if (activeTab?.id) {
-          try {
-            const [result] = await chrome.scripting.executeScript({
-              target: { tabId: activeTab.id },
-              func: () => window.getSelection().toString(),
-            });
-            if (result?.result?.trim()) text = result.result.trim();
-          } catch { /* use cached */ }
-        }
-        if (!text) {
-          showStatus('No text selected on the page.', 'error');
-          setBtnLoading(false);
-          return;
-        }
-        captureType = 'text_selection';
-        content = text.slice(0, CONFIG.MAX_TEXT_LENGTH);
-        break;
-      }
+    // Send to backend: content or image_data depending on capture type
+    const capturePayload = payload.type === 'file_url'
+      ? payload.file_url
+      : (payload.image_data || payload.content || '');
 
-      case 'page': {
-        if (!activeTab?.id) {
-          showStatus('Cannot access the current page.', 'error');
-          setBtnLoading(false);
-          return;
-        }
-        const [result] = await chrome.scripting.executeScript({
-          target: { tabId: activeTab.id },
-          func: () => document.body?.innerText || '',
-        });
-        const pageText = result?.result?.trim();
-        if (!pageText) {
-          showStatus('Page has no text content.', 'error');
-          setBtnLoading(false);
-          return;
-        }
-        captureType = 'full_page';
-        content = pageText.slice(0, CONFIG.MAX_TEXT_LENGTH);
-        break;
-      }
-
-      case 'file': {
-        // File URL comes from context menu pending capture
-        const session = await chrome.storage.session.get('pending_capture');
-        const pending = session?.pending_capture;
-        if (pending?.data?.fileUrl) {
-          captureType = 'file_url';
-          content = pending.data.fileUrl;
-        } else {
-          showStatus('No file link captured. Right-click a link to capture.', 'error');
-          setBtnLoading(false);
-          return;
-        }
-        break;
-      }
-
-      case 'screenshot': {
-        const dataUrl = await chrome.tabs.captureVisibleTab(null, {
-          format: 'png',
-          quality: 90,
-        });
-        captureType = 'screenshot';
-        content = dataUrl.split(',')[1]; // base64
-        break;
-      }
-    }
-
-    const result = await captureContent(clientId, captureType, content, metadata, tag);
+    const result = await captureContent(clientId, payload.type, capturePayload, metadata, tag);
 
     // Success animation
     setBtnLoading(false);

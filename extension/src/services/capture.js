@@ -1,115 +1,195 @@
 /**
- * Capture logic — text selection, full page, file URL, screenshot.
+ * Capture orchestration.
+ *
+ * Each function talks to the content script to extract data from the active
+ * tab, then returns a structured payload ready for the API. The popup calls
+ * these, then passes the result to api.captureContent().
  */
 
 import { CONFIG } from '../utils/config.js';
-import { captureContent } from './api.js';
 
-/**
- * Capture the current text selection from the active tab.
- */
-export async function captureTextSelection(tab, clientId, documentTag) {
-  const [result] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => window.getSelection().toString(),
-  });
+// ---------------------------------------------------------------------------
+// Text selection
+// ---------------------------------------------------------------------------
 
-  const text = result?.result;
-  if (!text || !text.trim()) {
-    throw new Error('No text selected on the page.');
+export async function captureTextSelection(tabId) {
+  const response = await sendToContentScript(tabId, { type: 'GET_SELECTED_TEXT' });
+  const text = response?.text?.trim();
+
+  if (!text) {
+    throw new Error('No text selected on this page.');
   }
-
   if (text.length > CONFIG.MAX_TEXT_LENGTH) {
-    throw new Error(`Selection too large (${text.length} chars). Max ${CONFIG.MAX_TEXT_LENGTH}.`);
+    throw new Error(`Selection too large (${text.length.toLocaleString()} chars). Max ${CONFIG.MAX_TEXT_LENGTH.toLocaleString()}.`);
   }
 
-  return captureContent({
-    client_id: clientId,
-    capture_type: 'text_selection',
+  return {
+    type: 'text_selection',
     content: text,
-    metadata: _pageMetadata(tab),
-    document_tag: documentTag,
-  });
+  };
 }
 
-/**
- * Capture the full page text content.
- */
-export async function captureFullPage(tab, clientId, documentTag) {
-  const [result] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => document.body.innerText,
-  });
+// ---------------------------------------------------------------------------
+// Full page
+// ---------------------------------------------------------------------------
 
-  const text = result?.result;
-  if (!text || !text.trim()) {
-    throw new Error('Page has no text content.');
+export async function captureFullPage(tabId) {
+  const response = await sendToContentScript(tabId, { type: 'GET_PAGE_TEXT' });
+  const text = response?.text?.trim();
+
+  if (!text) {
+    throw new Error('No content found on this page.');
   }
 
-  const content = text.length > CONFIG.MAX_TEXT_LENGTH
-    ? text.slice(0, CONFIG.MAX_TEXT_LENGTH)
-    : text;
-
-  return captureContent({
-    client_id: clientId,
-    capture_type: 'full_page',
-    content,
-    metadata: _pageMetadata(tab),
-    document_tag: documentTag,
-  });
+  return {
+    type: 'full_page',
+    content: text.slice(0, CONFIG.MAX_TEXT_LENGTH),
+  };
 }
 
-/**
- * Capture a file by its URL (the backend fetches it server-side).
- */
-export async function captureFileUrl(tab, clientId, fileUrl, documentTag) {
-  return captureContent({
-    client_id: clientId,
-    capture_type: 'file_url',
-    file_url: fileUrl,
-    metadata: _pageMetadata(tab),
-    document_tag: documentTag,
-  });
+// ---------------------------------------------------------------------------
+// File URL
+// ---------------------------------------------------------------------------
+
+export async function captureFileUrl(url) {
+  if (!url) {
+    throw new Error('No file URL provided.');
+  }
+
+  try {
+    new URL(url);
+  } catch {
+    throw new Error('Invalid URL format.');
+  }
+
+  // Extract filename from URL path
+  let filename = '';
+  try {
+    const pathname = new URL(url).pathname;
+    const segments = pathname.split('/').filter(Boolean);
+    if (segments.length > 0) {
+      filename = decodeURIComponent(segments[segments.length - 1]);
+    }
+  } catch { /* best-effort */ }
+
+  return {
+    type: 'file_url',
+    file_url: url,
+    filename,
+  };
 }
 
-/**
- * Capture a screenshot of the visible tab.
- */
-export async function captureScreenshot(tab, clientId, documentTag) {
+// ---------------------------------------------------------------------------
+// Screenshot (region selection via content script, capture via background)
+// ---------------------------------------------------------------------------
+
+export async function captureScreenshot(tabId) {
+  // Ask content script to let user select a region
+  const response = await sendToContentScript(tabId, { type: 'START_SCREENSHOT_SELECTION' });
+
+  if (!response?.region) {
+    throw new Error('Screenshot cancelled.');
+  }
+
+  const region = response.region;
+
+  // Capture the full visible tab (only the service worker / background can do this)
   const dataUrl = await chrome.tabs.captureVisibleTab(null, {
     format: 'png',
-    quality: 90,
+    quality: 100,
   });
 
-  // Strip the data:image/png;base64, prefix
-  const base64 = dataUrl.split(',')[1];
+  // Crop to the selected region using an offscreen canvas
+  const croppedBase64 = await cropImage(dataUrl, region);
 
-  return captureContent({
-    client_id: clientId,
-    capture_type: 'screenshot',
-    image_data: base64,
-    metadata: _pageMetadata(tab),
-    document_tag: documentTag,
-  });
+  return {
+    type: 'screenshot',
+    image_data: croppedBase64,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Page metadata
+// ---------------------------------------------------------------------------
+
+export async function getPageMetadata(tabId) {
+  const response = await sendToContentScript(tabId, { type: 'GET_PAGE_METADATA' });
+
+  if (!response) {
+    throw new Error('Could not get page metadata. The content script may not be loaded.');
+  }
+
+  return {
+    url: response.url || '',
+    title: response.title || '',
+    domain: response.domain || '',
+    site_type: response.site_type || 'generic',
+    emails: response.email_addresses || [],
+    companyNames: response.company_names || [],
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function _pageMetadata(tab) {
-  const url = tab.url || '';
-  let domain = '';
-  try {
-    domain = new URL(url).hostname;
-  } catch {
-    // invalid URL
+/**
+ * Send a message to the content script in the given tab.
+ * Wraps chrome.tabs.sendMessage with a timeout.
+ */
+async function sendToContentScript(tabId, message) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Content script did not respond. Try refreshing the page.'));
+    }, 10000);
+
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      clearTimeout(timeout);
+      if (chrome.runtime.lastError) {
+        reject(new Error(
+          'Cannot access this page. The extension may not have permission to run here.'
+        ));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+/**
+ * Crop an image data URL to the given region.
+ * Uses an OffscreenCanvas (available in service workers) or falls back
+ * to a regular canvas (for popup context).
+ */
+async function cropImage(dataUrl, region) {
+  // Load the image
+  const blob = await (await fetch(dataUrl)).blob();
+  const bitmap = await createImageBitmap(blob);
+
+  // Clamp region to image bounds
+  const x = Math.max(0, Math.round(region.x));
+  const y = Math.max(0, Math.round(region.y));
+  const w = Math.min(Math.round(region.width), bitmap.width - x);
+  const h = Math.min(Math.round(region.height), bitmap.height - y);
+
+  if (w <= 0 || h <= 0) {
+    throw new Error('Invalid screenshot region.');
   }
 
-  return {
-    url,
-    page_title: tab.title || '',
-    captured_at: new Date().toISOString(),
-    site_domain: domain,
-  };
+  // Use OffscreenCanvas (works in service workers and modern browsers)
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, x, y, w, h, 0, 0, w, h);
+  bitmap.close();
+
+  const outputBlob = await canvas.convertToBlob({ type: 'image/png' });
+
+  // Convert blob to base64
+  const buffer = await outputBlob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
