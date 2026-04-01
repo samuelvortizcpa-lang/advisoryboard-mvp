@@ -84,13 +84,19 @@ async function init() {
 
   // Check for pre-selected client from popup/auto-match
   try {
-    const session = await chrome.storage.session.get('sidepanel_client');
+    const session = await chrome.storage.session.get(['sidepanel_client', 'selected_client_id', 'selected_client_name']);
     if (session.sidepanel_client) {
       const { id, name } = session.sidepanel_client;
       if (id && allClients.some(c => c.id === id)) {
         selectClient(id, name);
       }
       await chrome.storage.session.remove('sidepanel_client');
+    } else if (session.selected_client_id) {
+      const id = session.selected_client_id;
+      const name = session.selected_client_name || allClients.find(c => c.id === id)?.name || 'Unknown';
+      if (allClients.some(c => c.id === id)) {
+        selectClient(id, name);
+      }
     }
   } catch { /* no pre-selection */ }
 
@@ -194,6 +200,12 @@ function selectClient(id, name) {
   spClientList.querySelectorAll('.sp-client-option').forEach(el => {
     el.classList.toggle('selected', el.dataset.id === id);
   });
+
+  // Sync to session storage so popup can pick it up
+  chrome.storage.session.set({
+    selected_client_id: id,
+    selected_client_name: name,
+  }).catch(() => {});
 }
 
 spClientBtn.addEventListener('click', (e) => {
@@ -471,6 +483,24 @@ signInBtn.addEventListener('click', () => signIn());
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'AUTH_STATE_CHANGED' && message.authenticated) {
     init();
+  }
+  if (message.type === 'TAB_CHANGED') {
+    // Active tab changed — refresh selected text check
+    checkSelectedText();
+  }
+});
+
+// Sync state from popup changes
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'session') return;
+
+  if (changes.selected_client_id && changes.selected_client_id.newValue) {
+    const id = changes.selected_client_id.newValue;
+    const name = changes.selected_client_name?.newValue ||
+      allClients.find(c => c.id === id)?.name || 'Unknown';
+    if (id !== selectedClientId && allClients.some(c => c.id === id)) {
+      selectClient(id, name);
+    }
   }
 });
 

@@ -10,6 +10,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   // Public pages — skip Clerk auth entirely
   if (
     req.nextUrl.pathname.startsWith("/consent/sign") ||
+    req.nextUrl.pathname.startsWith("/extension-auth-callback") ||
     req.nextUrl.pathname === "/privacy" ||
     req.nextUrl.pathname === "/terms"
   ) {

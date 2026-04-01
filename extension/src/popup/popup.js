@@ -284,6 +284,12 @@ function selectClient(clientId, clientName) {
     el.classList.toggle('selected', el.dataset.id === clientId);
   });
 
+  // Sync to session storage so sidepanel can pick it up
+  chrome.storage.session.set({
+    selected_client_id: clientId,
+    selected_client_name: clientName,
+  }).catch(() => {});
+
   updateCaptureButton();
 }
 
@@ -369,6 +375,8 @@ async function tryAutoMatch() {
 
     if (result?.matched && result.client_id) {
       autoMatchResult = result;
+      // Sync auto-match to session storage for sidepanel
+      chrome.storage.session.set({ auto_match_result: result }).catch(() => {});
       renderClientList();
       selectClient(result.client_id, result.client_name || getClientName(result.client_id));
     } else {
@@ -745,6 +753,39 @@ signOutBtn.addEventListener('click', async () => {
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'AUTH_STATE_CHANGED' && message.authenticated) {
     init();
+  }
+  if (message.type === 'TAB_CHANGED') {
+    // Active tab changed — clear auto-match and re-detect
+    autoMatchResult = null;
+    selectedText = '';
+    chrome.storage.session.remove('auto_match_result').catch(() => {});
+    if (extensionConfig?.auto_match && message.tab?.url) {
+      activeTab = message.tab;
+      tryAutoMatch();
+    } else {
+      resetPickerText();
+    }
+    updatePreview();
+  }
+});
+
+// Sync state from sidepanel changes
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'session') return;
+
+  if (changes.selected_client_id && changes.selected_client_id.newValue) {
+    const id = changes.selected_client_id.newValue;
+    const name = changes.selected_client_name?.newValue || getClientName(id);
+    if (id !== selectedClientId) {
+      selectedClientId = id;
+      clientSelectHidden.value = id;
+      clientPickerText.textContent = name;
+      clientPickerText.classList.remove('placeholder');
+      clientListEl.querySelectorAll('.client-option').forEach(el => {
+        el.classList.toggle('selected', el.dataset.id === id);
+      });
+      updateCaptureButton();
+    }
   }
 });
 

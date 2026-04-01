@@ -224,6 +224,24 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 // ---------------------------------------------------------------------------
+// Tab change handling — clear auto-match and notify views
+// ---------------------------------------------------------------------------
+
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    // Clear stale auto-match when switching tabs
+    await chrome.storage.session.remove('auto_match_result');
+
+    // Broadcast tab change to popup and sidepanel
+    chrome.runtime.sendMessage({
+      type: 'TAB_CHANGED',
+      tab: { id: tab.id, url: tab.url, title: tab.title },
+    }).catch(() => { /* views may not be open */ });
+  } catch { /* tab may not exist */ }
+});
+
+// ---------------------------------------------------------------------------
 // Message handling
 // ---------------------------------------------------------------------------
 
