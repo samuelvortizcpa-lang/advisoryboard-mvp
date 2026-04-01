@@ -1235,13 +1235,7 @@ function addAiMessage(answer, confidenceTier, confidenceScore, sources) {
   el.className = 'msg-ai';
 
   const tier = (confidenceTier || 'medium').toLowerCase();
-  let pct = '';
-  if (confidenceScore != null) {
-    let s = confidenceScore;
-    if (s > 100) s = s / 100;       // undo double-multiplication
-    if (s > 0 && s <= 1) s = s * 100; // convert 0-1 range to percentage
-    pct = s.toFixed(1) + '%';
-  }
+  const pct = confidenceScore != null ? formatScore(confidenceScore) : '';
   const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
 
   let html = `<div class="confidence-row">
@@ -1256,7 +1250,7 @@ function addAiMessage(answer, confidenceTier, confidenceScore, sources) {
     html += '<div class="sources-row">';
     sources.forEach((src, i) => {
       const name = src.document_name || src.filename || `Source ${i + 1}`;
-      const score = src.score != null ? (src.score * 100).toFixed(0) + '%' : '';
+      const score = src.score != null ? formatScore(src.score) : '';
       html += `<div class="source-pill" data-idx="${i}">
         <span class="source-pill-name">${escapeHtml(name)}</span>
         ${score ? `<span class="source-pill-score">${score}</span>` : ''}
@@ -1811,6 +1805,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // ===========================================================================
 // HELPERS
 // ===========================================================================
+
+function formatScore(raw) {
+  let s = raw;
+  if (s > 100) s = s / 100;
+  if (s > 0 && s <= 1) s = s * 100;
+  return s.toFixed(1) + '%';
+}
 
 function escapeHtml(str) {
   const div = document.createElement('div');
