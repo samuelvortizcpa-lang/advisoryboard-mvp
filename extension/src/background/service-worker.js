@@ -122,10 +122,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (!changeInfo.url || !changeInfo.url.startsWith(AUTH_CALLBACK_PREFIX)) return;
+  // Wait until the callback page appends ?token=JWT before acting
+  if (!changeInfo.url.includes('token=')) return;
 
   try {
     const url = new URL(changeInfo.url);
     const token = url.searchParams.get('token');
+    console.log('[Callwen] Auth callback detected, token present:', !!token);
     if (token) {
       await handleAuthToken(token);
       await updateBadge();
@@ -136,10 +139,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
       // Notify popup that auth state changed
       chrome.runtime.sendMessage({ type: 'AUTH_STATE_CHANGED', authenticated: true })
         .catch(() => { /* popup may not be open */ });
-    }
 
-    // Close the auth tab
-    chrome.tabs.remove(tabId).catch(() => {});
+      // Close the auth tab now that we have the token
+      chrome.tabs.remove(tabId).catch(() => {});
+    }
   } catch {
     // Malformed URL — ignore
   }
