@@ -24,6 +24,9 @@ const AUTH_CALLBACK_PREFIX = `${CONFIG.APP_URL}/extension-auth-callback`;
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onInstalled.addListener(() => {
+  // Make the toolbar icon open the side panel instead of a popup
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
   chrome.contextMenus.create({
     id: 'callwen-capture-selection',
     title: 'Capture selection to Callwen',
@@ -110,10 +113,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     },
   });
 
-  // Open the popup for client selection
-  chrome.action.openPopup().catch(() => {
-    // openPopup() may not be supported in all environments
-  });
+  // Open the side panel for client selection
+  chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
 });
 
 // ---------------------------------------------------------------------------
@@ -240,10 +241,13 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 // Notification click handler
 // ---------------------------------------------------------------------------
 
-chrome.notifications.onClicked.addListener((notificationId) => {
+chrome.notifications.onClicked.addListener(async (notificationId) => {
   if (notificationId.startsWith('monitoring-')) {
-    // Open the popup
-    chrome.action.openPopup().catch(() => {});
+    // Open the side panel
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+    } catch { /* best effort */ }
     chrome.notifications.clear(notificationId);
   }
 });

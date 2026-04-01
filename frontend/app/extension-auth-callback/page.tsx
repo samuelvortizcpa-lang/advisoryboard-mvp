@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 /**
@@ -137,13 +138,13 @@ export default function ExtensionAuthCallback() {
             </div>
             <p style={{ fontSize: 15, fontWeight: 600 }}>Connection failed</p>
             <p style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>{errorMsg}</p>
-            <a
+            <Link
               href="/sign-in?redirect_url=/extension-auth-callback"
               style={{
                 display: "inline-block",
                 marginTop: 16,
                 padding: "10px 20px",
-                background: "#14b8a6",
+                background: "#c9944a",
                 color: "#fff",
                 borderRadius: 8,
                 fontWeight: 600,
@@ -152,7 +153,7 @@ export default function ExtensionAuthCallback() {
               }}
             >
               Try again
-            </a>
+            </Link>
           </>
         )}
       </div>

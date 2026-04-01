@@ -1,32 +1,76 @@
 /**
- * Side panel — Quick Query AI interface.
+ * Side panel — primary extension UI.
  *
- * Lets users ask questions against a client's document corpus via the
- * existing RAG endpoint. Session-only chat (not persisted). Single-turn
- * questions only (no multi-turn context). Paid tiers only.
+ * Three tabs: Capture | Chat | Rules
+ *
+ * On open: check auth → load config + clients → detect page context →
+ * auto-match client → show capture interface.
  */
 
-import { isAuthenticated, signIn } from '../services/auth.js';
+import { CONFIG } from '../utils/config.js';
+import { isAuthenticated, signIn, signOut } from '../services/auth.js';
 import {
-  getExtensionConfig, getClients, askQuestion, ERROR_CODES,
+  getExtensionConfig, getClients, captureContent, matchClient,
+  getRecentCaptures, getMonitoringRules, createMonitoringRule,
+  updateMonitoringRule, deleteMonitoringRule, askQuestion, ERROR_CODES,
 } from '../services/api.js';
-import { getRecentClientIds } from '../utils/storage.js';
+import {
+  captureTextSelection, captureFullPage, captureFileUrl,
+  captureScreenshot, getPageMetadata,
+} from '../services/capture.js';
+import { getCachedClients, addRecentClientId, getRecentClientIds } from '../utils/storage.js';
 
 // ---------------------------------------------------------------------------
-// DOM refs
+// DOM refs — shared
 // ---------------------------------------------------------------------------
 
 const authScreen = document.getElementById('auth-screen');
-const tierGate = document.getElementById('tier-gate');
 const mainScreen = document.getElementById('main-screen');
 const signInBtn = document.getElementById('sign-in-btn');
+const signOutBtn = document.getElementById('sign-out-btn');
+const userEmail = document.getElementById('user-email');
+const monitoringToggle = document.getElementById('monitoring-toggle');
 
-const spClientBtn = document.getElementById('sp-client-btn');
-const spClientText = document.getElementById('sp-client-text');
-const spClientDropdown = document.getElementById('sp-client-dropdown');
-const spClientSearch = document.getElementById('sp-client-search');
-const spClientList = document.getElementById('sp-client-list');
+// ---------------------------------------------------------------------------
+// DOM refs — capture panel
+// ---------------------------------------------------------------------------
 
+const clientSelectHidden = document.getElementById('client-select');
+const clientPickerBtn = document.getElementById('client-picker-btn');
+const clientPickerText = document.getElementById('client-picker-text');
+const autoMatchBadge = document.getElementById('auto-match-badge');
+const clientDropdown = document.getElementById('client-dropdown');
+const clientSearch = document.getElementById('client-search');
+const clientListEl = document.getElementById('client-list');
+const tagSelect = document.getElementById('tag-select');
+const contentPreview = document.getElementById('content-preview');
+const previewBody = document.getElementById('preview-body');
+const captureBtn = document.getElementById('capture-btn');
+const captureBtnText = document.getElementById('capture-btn-text');
+const captureSpinner = document.getElementById('capture-spinner');
+const captureCheck = document.getElementById('capture-check');
+const statusEl = document.getElementById('status');
+const usageSection = document.getElementById('usage-section');
+const usageText = document.getElementById('usage-text');
+const upgradeLink = document.getElementById('upgrade-link');
+const progressBar = document.getElementById('progress-bar');
+const recentSection = document.getElementById('recent-section');
+const recentToggleBtn = document.getElementById('recent-toggle');
+const recentListEl = document.getElementById('recent-list');
+const quickRuleLink = document.getElementById('quick-rule-link');
+const createRuleFromMatch = document.getElementById('create-rule-from-match');
+
+// ---------------------------------------------------------------------------
+// DOM refs — chat panel
+// ---------------------------------------------------------------------------
+
+const chatTierGate = document.getElementById('chat-tier-gate');
+const chatArea = document.getElementById('chat-area');
+const chatClientBtn = document.getElementById('chat-client-btn');
+const chatClientText = document.getElementById('chat-client-text');
+const chatClientDropdown = document.getElementById('chat-client-dropdown');
+const chatClientSearch = document.getElementById('chat-client-search');
+const chatClientList = document.getElementById('chat-client-list');
 const chatMessages = document.getElementById('chat-messages');
 const contextBanner = document.getElementById('context-banner');
 const insertContextBtn = document.getElementById('insert-context-btn');
@@ -36,16 +80,48 @@ const sendBtn = document.getElementById('send-btn');
 const throttleMsg = document.getElementById('throttle-msg');
 
 // ---------------------------------------------------------------------------
+// DOM refs — rules panel
+// ---------------------------------------------------------------------------
+
+const rulesListEl = document.getElementById('rules-list');
+const rulesForm = document.getElementById('rules-form');
+const rulesFormCancel = document.getElementById('rules-form-cancel');
+const ruleNameInput = document.getElementById('rule-name');
+const ruleTypeSelect = document.getElementById('rule-type');
+const rulePatternInput = document.getElementById('rule-pattern');
+const ruleClientSelect = document.getElementById('rule-client');
+const ruleSaveBtn = document.getElementById('rule-save-btn');
+const ruleSaveText = document.getElementById('rule-save-text');
+const ruleSaveSpinner = document.getElementById('rule-save-spinner');
+const addRuleBtn = document.getElementById('add-rule-btn');
+const rulesAddSection = document.getElementById('rules-add-section');
+const rulesGate = document.getElementById('rules-gate');
+
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
+let activeMode = 'text';
+let activeTab = null;
+let selectedText = '';
+let extensionConfig = null;
 let allClients = [];
 let recentClientIds = [];
+let autoMatchResult = null;
 let selectedClientId = '';
-let selectedClientName = '';
-let selectedText = '';       // text selected on the active page
-let chatHistory = [];        // { role: 'user'|'ai', content, confidence?, sources? }
-const queryTimestamps = [];  // for client-side throttle
+let parsedContent = null;
+let monitoringRules = [];
+let activePanel = 'capture';
+const CLIENT_CACHE_TTL = 5 * 60 * 1000;
+
+// Chat-specific state
+let chatSelectedClientId = '';
+let chatSelectedClientName = '';
+let chatHistory = [];
+const queryTimestamps = [];
+
+// Monitoring
+let monitoringPrefs = { enabled: true, muted_until: 0 };
 
 // ---------------------------------------------------------------------------
 // Init
@@ -53,55 +129,103 @@ const queryTimestamps = [];  // for client-side throttle
 
 async function init() {
   const authed = await isAuthenticated();
+
   if (!authed) {
     showScreen('auth');
     return;
   }
 
-  try {
-    const config = await getExtensionConfig();
-    if (!config.quick_query) {
-      showScreen('tier');
-      return;
-    }
-  } catch (err) {
-    if (err.code === ERROR_CODES.AUTH_EXPIRED) {
-      showScreen('auth');
-      return;
-    }
-    // Can't verify tier — let them try
-  }
-
   showScreen('main');
 
-  // Load clients
-  try {
-    const clients = await getClients();
-    allClients = Array.isArray(clients) ? clients : [];
-    recentClientIds = await getRecentClientIds();
-    renderClientList();
-  } catch { /* client list fails — dropdown stays empty */ }
+  // Populate document tag selector
+  tagSelect.innerHTML = CONFIG.DOCUMENT_TAGS
+    .map(t => `<option value="${t.value}">${t.label}</option>`)
+    .join('');
 
-  // Check for pre-selected client from popup/auto-match
+  // Get active tab info
   try {
-    const session = await chrome.storage.session.get(['sidepanel_client', 'selected_client_id', 'selected_client_name']);
-    if (session.sidepanel_client) {
-      const { id, name } = session.sidepanel_client;
-      if (id && allClients.some(c => c.id === id)) {
-        selectClient(id, name);
-      }
-      await chrome.storage.session.remove('sidepanel_client');
-    } else if (session.selected_client_id) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    activeTab = tab;
+  } catch { /* no tab access */ }
+
+  // Check for pending capture from context menu
+  let pendingCapture = null;
+  try {
+    const session = await chrome.storage.session.get('pending_capture');
+    pendingCapture = session.pending_capture;
+    if (pendingCapture && Date.now() - pendingCapture.timestamp < 30000) {
+      setMode(pendingCapture.capture_type === 'text_selection' ? 'text' :
+              pendingCapture.capture_type === 'full_page' ? 'page' :
+              pendingCapture.capture_type === 'file_url' ? 'file' : 'page');
+    } else {
+      pendingCapture = null;
+    }
+    await chrome.storage.session.remove('pending_capture');
+  } catch { /* no session storage */ }
+
+  // Load recently used client IDs
+  recentClientIds = await getRecentClientIds();
+
+  // Load config + clients in parallel
+  try {
+    const [config, clients] = await Promise.all([
+      loadConfig(),
+      loadClients(),
+    ]);
+
+    extensionConfig = config;
+    allClients = Array.isArray(clients) ? clients : [];
+    renderClientList();
+    renderChatClientList();
+    updateUsage(config);
+
+    // Set up chat availability
+    if (!config.quick_query) {
+      chatTierGate.classList.remove('hidden');
+      chatArea.classList.add('hidden');
+    }
+
+    // Auto-match if enabled
+    if (config?.auto_match && activeTab?.url) {
+      tryAutoMatch();
+    }
+  } catch (err) {
+    handleApiError(err);
+  }
+
+  // Check for parsed content (Gmail emails, etc.)
+  if (!pendingCapture && activeTab?.id) {
+    await detectParsedContent();
+  }
+
+  // Detect selected text on the active page
+  if (!pendingCapture && !parsedContent) {
+    await detectSelectedText();
+  } else if (pendingCapture?.capture_type === 'text_selection' && pendingCapture.data.text) {
+    selectedText = pendingCapture.data.text;
+    setMode('text');
+  }
+
+  updatePreview();
+
+  // Initialize monitoring toggle
+  initMonitoringToggle();
+
+  // Check for pre-selected client from storage
+  try {
+    const session = await chrome.storage.session.get(['selected_client_id', 'selected_client_name']);
+    if (session.selected_client_id) {
       const id = session.selected_client_id;
-      const name = session.selected_client_name || allClients.find(c => c.id === id)?.name || 'Unknown';
+      const name = session.selected_client_name || getClientName(id);
       if (allClients.some(c => c.id === id)) {
         selectClient(id, name);
+        selectChatClient(id, name);
       }
     }
   } catch { /* no pre-selection */ }
 
-  // Check for selected text on the active page
-  await checkSelectedText();
+  // Check for selected text for chat context
+  await checkSelectedTextForChat();
 
   // Check for pre-filled query text from context menu
   try {
@@ -110,21 +234,752 @@ async function init() {
       queryInput.value = session.sidepanel_query;
       autoResizeInput();
       await chrome.storage.session.remove('sidepanel_query');
+      // Auto-switch to chat tab
+      switchPanel('chat');
     }
   } catch { /* no pre-fill */ }
 }
 
-function showScreen(name) {
-  authScreen.classList.toggle('hidden', name !== 'auth');
-  tierGate.classList.toggle('hidden', name !== 'tier');
-  mainScreen.classList.toggle('hidden', name !== 'main');
+// ---------------------------------------------------------------------------
+// Screen switching
+// ---------------------------------------------------------------------------
+
+function showScreen(screen) {
+  authScreen.classList.toggle('hidden', screen !== 'auth');
+  mainScreen.classList.toggle('hidden', screen !== 'main');
 }
 
 // ---------------------------------------------------------------------------
-// Client picker
+// Data loading
+// ---------------------------------------------------------------------------
+
+async function loadConfig() {
+  return getExtensionConfig();
+}
+
+async function loadClients() {
+  const cached = await getCachedClients();
+  if (cached && cached._ts && Date.now() - cached._ts < CLIENT_CACHE_TTL) {
+    return cached.clients;
+  }
+  return getClients();
+}
+
+// ---------------------------------------------------------------------------
+// Main tab switching (Capture / Chat / Rules)
+// ---------------------------------------------------------------------------
+
+document.querySelectorAll('.main-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    switchPanel(tab.dataset.panel);
+  });
+});
+
+function switchPanel(panel) {
+  activePanel = panel;
+
+  document.querySelectorAll('.main-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.panel === panel);
+  });
+
+  document.getElementById('panel-capture').classList.toggle('hidden', panel !== 'capture');
+  document.getElementById('panel-chat').classList.toggle('hidden', panel !== 'chat');
+  document.getElementById('panel-rules').classList.toggle('hidden', panel !== 'rules');
+
+  // Load data on first visit
+  if (panel === 'rules') loadRules();
+}
+
+// ===========================================================================
+// CAPTURE PANEL
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Client picker — custom searchable dropdown
 // ---------------------------------------------------------------------------
 
 function renderClientList(filter = '') {
+  const query = filter.toLowerCase().trim();
+  const sorted = [...allClients].sort((a, b) =>
+    (a.name || '').localeCompare(b.name || ''));
+
+  const recentSet = new Set(recentClientIds);
+  const recentClients = recentClientIds
+    .map(id => sorted.find(c => c.id === id))
+    .filter(Boolean);
+  const otherClients = sorted.filter(c => !recentSet.has(c.id));
+
+  const filterFn = (c) => {
+    if (!query) return true;
+    const name = (c.name || '').toLowerCase();
+    const biz = (c.business_name || '').toLowerCase();
+    return name.includes(query) || biz.includes(query);
+  };
+
+  let html = '';
+
+  // Auto-match suggestion at top
+  if (autoMatchResult && !query) {
+    const mc = sorted.find(c => c.id === autoMatchResult.client_id);
+    if (mc) {
+      const conf = autoMatchResult.confidence || 'high';
+      const method = autoMatchResult.match_method || 'match';
+      html += '<div class="client-list-divider">Suggested match</div>';
+      html += clientOptionHtml(mc, true, conf, method);
+    }
+  }
+
+  // Recently used
+  const filteredRecent = recentClients.filter(filterFn);
+  if (filteredRecent.length > 0) {
+    html += '<div class="client-list-divider">Recently used</div>';
+    filteredRecent.slice(0, 3).forEach(c => {
+      if (autoMatchResult?.client_id === c.id && !query) return;
+      html += clientOptionHtml(c, false);
+    });
+  }
+
+  // All clients
+  const filteredOther = otherClients.filter(filterFn);
+  const filteredAll = query ? sorted.filter(filterFn) : filteredOther;
+
+  if (filteredAll.length > 0) {
+    if (!query) html += '<div class="client-list-divider">All clients</div>';
+    filteredAll.forEach(c => {
+      if (!query && autoMatchResult?.client_id === c.id) return;
+      if (!query && recentSet.has(c.id)) return;
+      html += clientOptionHtml(c, false);
+    });
+  }
+
+  if (!html) {
+    html = '<div class="client-list-empty">No clients found</div>';
+  }
+
+  clientListEl.innerHTML = html;
+
+  clientListEl.querySelectorAll('.client-option').forEach(el => {
+    el.addEventListener('click', () => {
+      selectClient(el.dataset.id, el.dataset.name);
+      closeDropdown();
+    });
+  });
+}
+
+function clientOptionHtml(client, isAutoMatch, confidence, method) {
+  const selected = client.id === selectedClientId ? ' selected' : '';
+  const matchClass = isAutoMatch ? ' auto-match-suggestion' : '';
+  const label = escapeHtml(client.name || 'Unnamed');
+  const biz = client.business_name ? `<span class="client-option-biz">${escapeHtml(client.business_name)}</span>` : '';
+  const badge = isAutoMatch
+    ? `<span class="match-badge ${confidence}">${escapeHtml(method)}</span>`
+    : '';
+
+  return `<div class="client-option${matchClass}${selected}" data-id="${client.id}" data-name="${escapeHtml(client.name || 'Unnamed')}">
+    <span class="client-option-name">${label}</span>${biz}${badge}
+  </div>`;
+}
+
+function selectClient(clientId, clientName) {
+  selectedClientId = clientId;
+  clientSelectHidden.value = clientId;
+
+  clientPickerText.textContent = clientName;
+  clientPickerText.classList.remove('placeholder');
+
+  // Show match badge if auto-matched
+  if (autoMatchResult && autoMatchResult.client_id === clientId) {
+    const conf = autoMatchResult.confidence || 'high';
+    const method = autoMatchResult.match_method || 'match';
+    autoMatchBadge.textContent = `Auto-matched via ${method}`;
+    autoMatchBadge.className = `match-badge ${conf}`;
+    quickRuleLink.classList.remove('hidden');
+  } else {
+    autoMatchBadge.classList.add('hidden');
+    quickRuleLink.classList.add('hidden');
+  }
+
+  // Highlight in list
+  clientListEl.querySelectorAll('.client-option').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === clientId);
+  });
+
+  // Sync to session storage
+  chrome.storage.session.set({
+    selected_client_id: clientId,
+    selected_client_name: clientName,
+  }).catch(() => {});
+
+  // Also sync chat client
+  selectChatClient(clientId, clientName);
+
+  updateCaptureButton();
+}
+
+// Dropdown open/close
+clientPickerBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const isOpen = clientDropdown.classList.contains('hidden');
+  if (isOpen) openDropdown();
+  else closeDropdown();
+});
+
+function openDropdown() {
+  clientDropdown.classList.remove('hidden');
+  clientPickerBtn.classList.add('open');
+  clientSearch.value = '';
+  renderClientList();
+  setTimeout(() => clientSearch.focus(), 10);
+}
+
+function closeDropdown() {
+  clientDropdown.classList.add('hidden');
+  clientPickerBtn.classList.remove('open');
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#client-picker')) closeDropdown();
+  if (!e.target.closest('#chat-client-picker')) closeChatDropdown();
+});
+
+clientSearch.addEventListener('input', () => {
+  renderClientList(clientSearch.value);
+});
+
+clientSearch.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeDropdown(); return; }
+  if (e.key === 'Enter') {
+    const first = clientListEl.querySelector('.client-option');
+    if (first) {
+      selectClient(first.dataset.id, first.dataset.name);
+      closeDropdown();
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Auto-match
+// ---------------------------------------------------------------------------
+
+async function tryAutoMatch() {
+  clientPickerText.textContent = 'Finding matching client...';
+  clientPickerText.classList.add('placeholder');
+  clientPickerBtn.classList.add('loading');
+
+  try {
+    let pageData;
+    try {
+      pageData = await getPageMetadata(activeTab.id);
+    } catch {
+      pageData = {
+        url: activeTab.url,
+        domain: new URL(activeTab.url).hostname,
+        title: activeTab.title || '',
+        emails: [],
+        companyNames: [],
+      };
+    }
+
+    const matchEmails = parsedContent?.metadata?.email_addresses || pageData.emails || [];
+    const matchCompanies = parsedContent?.metadata?.company_names || pageData.companyNames || [];
+
+    const result = await matchClient({
+      url: pageData.url || activeTab.url,
+      email_addresses: matchEmails,
+      company_names: matchCompanies,
+      page_title: pageData.title || activeTab.title || '',
+    });
+
+    if (result?.matched && result.client_id) {
+      autoMatchResult = result;
+      chrome.storage.session.set({ auto_match_result: result }).catch(() => {});
+      renderClientList();
+      selectClient(result.client_id, result.client_name || getClientName(result.client_id));
+    } else {
+      resetPickerText();
+    }
+  } catch {
+    resetPickerText();
+  }
+
+  clientPickerBtn.classList.remove('loading');
+}
+
+function getClientName(id) {
+  const c = allClients.find(cl => cl.id === id);
+  return c?.name || 'Unknown';
+}
+
+function resetPickerText() {
+  if (!selectedClientId) {
+    clientPickerText.textContent = 'Select a client...';
+    clientPickerText.classList.add('placeholder');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Detect selected text
+// ---------------------------------------------------------------------------
+
+async function detectSelectedText() {
+  if (!activeTab?.id) return;
+  try {
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'GET_SELECTED_TEXT' });
+    const text = response?.text?.trim();
+    if (text && text.length > 0) {
+      selectedText = text;
+      setMode('text');
+    } else {
+      setMode('page');
+    }
+  } catch {
+    setMode('page');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Parsed content detection (Gmail emails, QBO, tax software)
+// ---------------------------------------------------------------------------
+
+async function detectParsedContent() {
+  if (!activeTab?.id) return;
+  try {
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'GET_PARSED_CONTENT' });
+    if (!response?.parsed) return;
+
+    parsedContent = response;
+
+    if (response.document_tag) {
+      const option = tagSelect.querySelector(`option[value="${response.document_tag}"]`);
+      if (option) tagSelect.value = response.document_tag;
+    }
+
+    if (response.capture_type) {
+      setMode(response.capture_type === 'text_selection' ? 'text' : 'page');
+    }
+
+    showParserBadge(response);
+    updatePreview();
+  } catch { /* content script not available */ }
+}
+
+function showParserBadge(response) {
+  const existing = document.getElementById('parser-badge');
+  if (existing) existing.remove();
+  const existingWarn = document.getElementById('tax-warning');
+  if (existingWarn) existingWarn.remove();
+
+  let icon = '';
+  let label = '';
+
+  if (response.parser === 'gmail') {
+    icon = '\u{1F4E7}';
+    label = 'Gmail email detected';
+  } else if (response.parser === 'quickbooks') {
+    if (response.qbo_page_type === 'report') {
+      icon = '\u{1F4CA}';
+      label = 'QuickBooks report detected';
+    } else {
+      icon = '\u{1F4B0}';
+      label = 'QuickBooks transaction detected';
+    }
+  } else if (response.parser === 'tax_software') {
+    icon = '\u{1F3DB}';
+    label = 'Tax return data detected \u{2014} sensitive info auto-masked';
+  } else {
+    return;
+  }
+
+  const badge = document.createElement('div');
+  badge.id = 'parser-badge';
+  badge.className = 'parser-badge';
+  badge.innerHTML = `<span class="parser-badge-icon">${icon}</span> ${label}`;
+
+  const tabsEl = document.querySelector('.capture-tabs');
+  if (tabsEl) {
+    tabsEl.parentNode.insertBefore(badge, tabsEl.nextSibling);
+  }
+
+  if (response.parser === 'tax_software') {
+    const warning = document.createElement('div');
+    warning.id = 'tax-warning';
+    warning.className = 'tax-warning';
+    warning.textContent = 'This capture may contain tax return information subject to IRC \u00A77216. Ensure client consent is obtained before AI processing.';
+    badge.parentNode.insertBefore(warning, badge.nextSibling);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Recent captures (collapsible section in capture panel)
+// ---------------------------------------------------------------------------
+
+let recentLoaded = false;
+
+recentToggleBtn.addEventListener('click', () => {
+  const isOpen = recentToggleBtn.classList.contains('open');
+  recentToggleBtn.classList.toggle('open', !isOpen);
+  recentListEl.classList.toggle('hidden', isOpen);
+  if (!isOpen && !recentLoaded) loadRecentCaptures();
+});
+
+async function loadRecentCaptures() {
+  if (recentLoaded) return;
+
+  try {
+    const captures = await getRecentCaptures();
+    const items = Array.isArray(captures) ? captures : (captures?.captures || []);
+
+    if (items.length === 0) {
+      recentListEl.innerHTML = '<div class="rules-empty"><p>No recent captures yet.</p></div>';
+      recentListEl.classList.remove('hidden');
+      return;
+    }
+
+    recentLoaded = true;
+    const recent = items.slice(0, 10);
+    recentListEl.innerHTML = recent.map(c => {
+      const domain = c.source_url ? extractDomain(c.source_url) : '';
+      const time = c.created_at ? formatRelativeTime(c.created_at) : '';
+      return `<div class="recent-item">
+        <span class="recent-client">${escapeHtml(c.client_name || 'Unknown')}</span>
+        <div class="recent-meta">
+          ${domain ? `<span class="recent-url">${escapeHtml(domain)}</span>` : ''}
+          ${time ? `<span>${time}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    recentListEl.classList.remove('hidden');
+    recentSection.classList.remove('hidden');
+  } catch { /* non-critical */ }
+}
+
+// ---------------------------------------------------------------------------
+// Capture mode tabs
+// ---------------------------------------------------------------------------
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    setMode(tab.dataset.mode);
+    updatePreview();
+  });
+});
+
+function setMode(mode) {
+  activeMode = mode;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mode === mode);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Content preview
+// ---------------------------------------------------------------------------
+
+function updatePreview() {
+  contentPreview.classList.remove('hidden');
+
+  switch (activeMode) {
+    case 'text':
+      if (parsedContent?.email_data) {
+        const ed = parsedContent.email_data;
+        const fromLine = ed.from_name || ed.from_email || 'Unknown sender';
+        const subjectLine = ed.subject || 'No subject';
+        const threadInfo = ed.thread_length > 1 ? ` (${ed.thread_length} messages)` : '';
+        previewBody.innerHTML =
+          `<span class="preview-title">${escapeHtml(`Email from ${fromLine}`)}</span>` +
+          `<span class="preview-url">${escapeHtml(subjectLine)}${threadInfo}</span>`;
+      } else if (selectedText) {
+        const truncated = selectedText.length > 200 ? selectedText.slice(0, 200) + '...' : selectedText;
+        previewBody.innerHTML = escapeHtml(truncated);
+      } else {
+        previewBody.innerHTML = '<span class="preview-placeholder">Select text on the page, then capture</span>';
+      }
+      break;
+
+    case 'page':
+      if (parsedContent?.parser === 'tax_software' && parsedContent.tax_data) {
+        const td = parsedContent.tax_data;
+        const sw = parsedContent.software_name || 'Tax Software';
+        const client = td.client_name ? `Client: ${td.client_name}` : '';
+        const form = td.form_type ? `Form ${td.form_type}` : '';
+        const year = td.tax_year ? `Tax Year ${td.tax_year}` : '';
+        const detail = [form, year].filter(Boolean).join(' \u{2014} ');
+        previewBody.innerHTML =
+          `<span class="preview-title">${escapeHtml(sw)}</span>` +
+          (client ? `<span class="preview-url">${escapeHtml(client)}</span>` : '') +
+          (detail ? `<span class="preview-url">${escapeHtml(detail)}</span>` : '');
+      } else if (parsedContent?.parser === 'quickbooks' && parsedContent.qbo_data) {
+        const qd = parsedContent.qbo_data;
+        if (parsedContent.qbo_page_type === 'report') {
+          const title = qd.report_title || 'Report';
+          const company = qd.company_name ? `Company: ${qd.company_name}` : '';
+          const period = qd.date_range ? `Period: ${qd.date_range}` : '';
+          previewBody.innerHTML =
+            `<span class="preview-title">${escapeHtml(title)}</span>` +
+            (company ? `<span class="preview-url">${escapeHtml(company)}</span>` : '') +
+            (period ? `<span class="preview-url">${escapeHtml(period)}</span>` : '');
+        } else {
+          const txnType = qd.transaction_type || 'Transaction';
+          const entity = qd.vendor_or_customer || '';
+          const amount = qd.amount || '';
+          const detail = [entity, amount].filter(Boolean).join(' — ');
+          previewBody.innerHTML =
+            `<span class="preview-title">${escapeHtml(txnType)}${qd.transaction_number ? ` #${escapeHtml(qd.transaction_number)}` : ''}</span>` +
+            (detail ? `<span class="preview-url">${escapeHtml(detail)}</span>` : '');
+        }
+      } else if (activeTab) {
+        previewBody.innerHTML =
+          `<span class="preview-title">${escapeHtml(activeTab.title || 'Untitled')}</span>` +
+          `<span class="preview-url">${escapeHtml(activeTab.url || '')}</span>`;
+      } else {
+        previewBody.innerHTML = '<span class="preview-placeholder">No page detected</span>';
+      }
+      break;
+
+    case 'file':
+      previewBody.innerHTML = '<span class="preview-placeholder">Right-click a link and choose "Capture linked file"</span>';
+      break;
+
+    case 'screenshot':
+      previewBody.innerHTML = '<span class="preview-placeholder">Click capture to screenshot the visible page</span>';
+      break;
+
+    default:
+      contentPreview.classList.add('hidden');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Capture button state
+// ---------------------------------------------------------------------------
+
+function updateCaptureButton() {
+  if (!selectedClientId) {
+    captureBtn.disabled = true;
+    captureBtnText.textContent = 'Select a client to capture';
+    return;
+  }
+
+  const clientName = getClientName(selectedClientId);
+  captureBtn.disabled = false;
+  captureBtnText.textContent = `Capture to ${clientName}`;
+}
+
+// ---------------------------------------------------------------------------
+// Capture flow
+// ---------------------------------------------------------------------------
+
+captureBtn.addEventListener('click', handleCapture);
+
+async function handleCapture() {
+  if (!selectedClientId) {
+    showStatus('Please select a client first.', 'error');
+    return;
+  }
+
+  const clientId = selectedClientId;
+  const tag = tagSelect.value;
+  setBtnLoading(true);
+  hideStatus();
+
+  try {
+    if (!activeTab?.id) {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      activeTab = tab;
+    }
+
+    const tabId = activeTab?.id;
+    let payload;
+
+    switch (activeMode) {
+      case 'text':
+        if (parsedContent?.content) {
+          payload = { type: 'text_selection', content: parsedContent.content };
+        } else {
+          payload = await captureTextSelection(tabId);
+        }
+        break;
+
+      case 'page':
+        if (parsedContent?.content && parsedContent.capture_type === 'full_page') {
+          payload = { type: 'full_page', content: parsedContent.content };
+        } else {
+          payload = await captureFullPage(tabId);
+        }
+        break;
+
+      case 'file': {
+        const session = await chrome.storage.session.get('pending_capture');
+        const pending = session?.pending_capture;
+        if (!pending?.data?.fileUrl) {
+          showStatus('No file link captured. Right-click a link to capture.', 'error');
+          setBtnLoading(false);
+          return;
+        }
+        payload = await captureFileUrl(pending.data.fileUrl);
+        break;
+      }
+
+      case 'screenshot':
+        payload = await captureScreenshot(tabId);
+        break;
+    }
+
+    const metadata = {
+      url: activeTab?.url || '',
+      page_title: activeTab?.title || '',
+      captured_at: new Date().toISOString(),
+      site_domain: activeTab?.url ? extractDomain(activeTab.url) : '',
+    };
+
+    const capturePayload = payload.type === 'file_url'
+      ? payload.file_url
+      : (payload.image_data || payload.content || '');
+
+    await captureContent(clientId, payload.type, capturePayload, metadata, tag);
+
+    await addRecentClientId(clientId);
+
+    setBtnLoading(false);
+    showBtnSuccess();
+
+    chrome.runtime.sendMessage({ type: 'CAPTURE_COMPLETE' }).catch(() => {});
+
+    if (extensionConfig) {
+      extensionConfig.captures_today = (extensionConfig.captures_today || 0) + 1;
+      if (extensionConfig.captures_per_day > 0) {
+        extensionConfig.captures_remaining = Math.max(0,
+          (extensionConfig.captures_remaining || 0) - 1);
+      }
+      updateUsage(extensionConfig);
+    }
+
+  } catch (err) {
+    setBtnLoading(false);
+    handleApiError(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Button states
+// ---------------------------------------------------------------------------
+
+function setBtnLoading(loading) {
+  captureBtn.disabled = loading;
+  captureBtnText.classList.toggle('hidden', loading);
+  captureSpinner.classList.toggle('hidden', !loading);
+  captureCheck.classList.add('hidden');
+
+  document.querySelectorAll('.tab, .select').forEach(el => {
+    el.disabled = loading;
+    if (loading) el.style.pointerEvents = 'none';
+    else el.style.pointerEvents = '';
+  });
+
+  clientPickerBtn.disabled = loading;
+}
+
+function showBtnSuccess() {
+  captureBtn.classList.add('btn-success');
+  captureBtnText.classList.add('hidden');
+  captureSpinner.classList.add('hidden');
+  captureCheck.classList.remove('hidden');
+
+  // Reset after 3 seconds
+  setTimeout(() => {
+    captureBtn.classList.remove('btn-success');
+    captureCheck.classList.add('hidden');
+    captureBtnText.classList.remove('hidden');
+    updateCaptureButton();
+  }, 3000);
+}
+
+// ---------------------------------------------------------------------------
+// Usage display
+// ---------------------------------------------------------------------------
+
+function updateUsage(config) {
+  if (!config || config.captures_per_day === -1) {
+    usageSection.classList.remove('hidden');
+    usageText.textContent = `${config.captures_today || 0} captures today (unlimited)`;
+    progressBar.style.width = '0%';
+    upgradeLink.classList.add('hidden');
+    return;
+  }
+
+  if (config.captures_per_day > 0) {
+    usageSection.classList.remove('hidden');
+    const used = config.captures_today || 0;
+    const total = config.captures_per_day;
+    const remaining = config.captures_remaining ?? (total - used);
+    const pct = Math.min(100, (used / total) * 100);
+
+    usageText.textContent = `${used} of ${total} captures today`;
+    progressBar.style.width = `${pct}%`;
+
+    if (remaining <= 0) {
+      progressBar.classList.add('limit-reached');
+      upgradeLink.classList.remove('hidden');
+      captureBtn.disabled = true;
+      captureBtnText.textContent = 'Daily limit reached';
+    } else {
+      progressBar.classList.remove('limit-reached');
+      upgradeLink.classList.add('hidden');
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Status messages
+// ---------------------------------------------------------------------------
+
+function showStatus(message, type) {
+  statusEl.textContent = message;
+  statusEl.className = `status ${type}`;
+  statusEl.classList.remove('hidden');
+
+  if (type === 'success') {
+    setTimeout(() => statusEl.classList.add('hidden'), 4000);
+  }
+}
+
+function hideStatus() {
+  statusEl.classList.add('hidden');
+}
+
+// ---------------------------------------------------------------------------
+// Error handling
+// ---------------------------------------------------------------------------
+
+function handleApiError(err) {
+  if (err.code === ERROR_CODES.AUTH_EXPIRED) {
+    showScreen('auth');
+    return;
+  }
+  if (err.code === ERROR_CODES.TIER_UPGRADE) {
+    showStatus('This feature requires a paid plan.', 'error');
+    if (err.upgradeUrl) {
+      upgradeLink.href = err.upgradeUrl;
+      upgradeLink.classList.remove('hidden');
+    }
+    return;
+  }
+  if (err.code === ERROR_CODES.RATE_LIMITED) {
+    showStatus(err.message || 'Daily capture limit reached.', 'error');
+    return;
+  }
+  showStatus(err.message || 'Something went wrong.', 'error');
+}
+
+// ===========================================================================
+// CHAT PANEL (Quick Query)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Chat client picker
+// ---------------------------------------------------------------------------
+
+function renderChatClientList(filter = '') {
   const query = filter.toLowerCase().trim();
   const sorted = [...allClients].sort((a, b) =>
     (a.name || '').localeCompare(b.name || ''));
@@ -143,22 +998,20 @@ function renderClientList(filter = '') {
 
   let html = '';
 
-  // Recently used
   const filteredRecent = recentClients.filter(matchFn);
   if (filteredRecent.length > 0 && !query) {
     html += '<div class="sp-client-divider">Recently used</div>';
     filteredRecent.slice(0, 3).forEach(c => {
-      html += clientOptionHtml(c);
+      html += chatClientOptionHtml(c);
     });
   }
 
-  // All (or filtered)
   const list = query ? sorted.filter(matchFn) : otherClients;
   if (list.length > 0) {
     if (!query) html += '<div class="sp-client-divider">All clients</div>';
     list.forEach(c => {
       if (!query && recentSet.has(c.id)) return;
-      html += clientOptionHtml(c);
+      html += chatClientOptionHtml(c);
     });
   }
 
@@ -166,91 +1019,84 @@ function renderClientList(filter = '') {
     html = '<div class="sp-client-empty">No clients found</div>';
   }
 
-  spClientList.innerHTML = html;
+  chatClientList.innerHTML = html;
 
-  spClientList.querySelectorAll('.sp-client-option').forEach(el => {
+  chatClientList.querySelectorAll('.sp-client-option').forEach(el => {
     el.addEventListener('click', () => {
-      selectClient(el.dataset.id, el.dataset.name);
-      closeDropdown();
+      selectChatClient(el.dataset.id, el.dataset.name);
+      closeChatDropdown();
     });
   });
 }
 
-function clientOptionHtml(c) {
-  const sel = c.id === selectedClientId ? ' selected' : '';
+function chatClientOptionHtml(c) {
+  const sel = c.id === chatSelectedClientId ? ' selected' : '';
   const label = c.business_name ? `${c.name} — ${c.business_name}` : c.name;
-  return `<div class="sp-client-option${sel}" data-id="${c.id}" data-name="${esc(c.name || 'Unnamed')}">${esc(label)}</div>`;
+  return `<div class="sp-client-option${sel}" data-id="${c.id}" data-name="${escapeHtml(c.name || 'Unnamed')}">${escapeHtml(label)}</div>`;
 }
 
-function selectClient(id, name) {
-  // If switching clients, clear chat
-  if (selectedClientId && selectedClientId !== id) {
+function selectChatClient(id, name) {
+  if (chatSelectedClientId && chatSelectedClientId !== id) {
     clearChat();
   }
 
-  selectedClientId = id;
-  selectedClientName = name;
-  spClientText.textContent = name;
-  spClientText.classList.remove('placeholder');
+  chatSelectedClientId = id;
+  chatSelectedClientName = name;
+  chatClientText.textContent = name;
+  chatClientText.classList.remove('placeholder');
   queryInput.disabled = false;
   queryInput.placeholder = `Ask about ${name}'s documents...`;
   updateSendBtn();
 
-  // Highlight in list
-  spClientList.querySelectorAll('.sp-client-option').forEach(el => {
+  chatClientList.querySelectorAll('.sp-client-option').forEach(el => {
     el.classList.toggle('selected', el.dataset.id === id);
   });
 
-  // Sync to session storage so popup can pick it up
   chrome.storage.session.set({
     selected_client_id: id,
     selected_client_name: name,
   }).catch(() => {});
 }
 
-spClientBtn.addEventListener('click', (e) => {
+chatClientBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  if (spClientDropdown.classList.contains('hidden')) openDropdown();
-  else closeDropdown();
+  if (chatClientDropdown.classList.contains('hidden')) openChatDropdown();
+  else closeChatDropdown();
 });
 
-function openDropdown() {
-  spClientDropdown.classList.remove('hidden');
-  spClientBtn.classList.add('open');
-  spClientSearch.value = '';
-  renderClientList();
-  setTimeout(() => spClientSearch.focus(), 10);
+function openChatDropdown() {
+  chatClientDropdown.classList.remove('hidden');
+  chatClientBtn.classList.add('open');
+  chatClientSearch.value = '';
+  renderChatClientList();
+  setTimeout(() => chatClientSearch.focus(), 10);
 }
 
-function closeDropdown() {
-  spClientDropdown.classList.add('hidden');
-  spClientBtn.classList.remove('open');
+function closeChatDropdown() {
+  chatClientDropdown.classList.add('hidden');
+  chatClientBtn.classList.remove('open');
 }
 
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('#sp-client-picker')) closeDropdown();
+chatClientSearch.addEventListener('input', () => {
+  renderChatClientList(chatClientSearch.value);
 });
 
-spClientSearch.addEventListener('input', () => {
-  renderClientList(spClientSearch.value);
-});
-
-spClientSearch.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeDropdown(); return; }
+chatClientSearch.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeChatDropdown(); return; }
   if (e.key === 'Enter') {
-    const first = spClientList.querySelector('.sp-client-option');
+    const first = chatClientList.querySelector('.sp-client-option');
     if (first) {
-      selectClient(first.dataset.id, first.dataset.name);
-      closeDropdown();
+      selectChatClient(first.dataset.id, first.dataset.name);
+      closeChatDropdown();
     }
   }
 });
 
 // ---------------------------------------------------------------------------
-// Selected text context
+// Selected text context (for chat)
 // ---------------------------------------------------------------------------
 
-async function checkSelectedText() {
+async function checkSelectedTextForChat() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
@@ -280,7 +1126,7 @@ dismissContextBtn.addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Chat
+// Chat messages
 // ---------------------------------------------------------------------------
 
 function clearChat() {
@@ -293,7 +1139,6 @@ function clearChat() {
 }
 
 function addUserMessage(text) {
-  // Remove empty state if present
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
 
@@ -329,7 +1174,6 @@ function addAiMessage(answer, confidenceTier, confidenceScore, sources) {
   const el = document.createElement('div');
   el.className = 'msg-ai';
 
-  // Confidence row
   const tier = (confidenceTier || 'medium').toLowerCase();
   const pct = confidenceScore != null ? `${Math.round(confidenceScore * 100)}%` : '';
   const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
@@ -340,33 +1184,29 @@ function addAiMessage(answer, confidenceTier, confidenceScore, sources) {
     ${pct ? `<span class="confidence-pct">${pct}</span>` : ''}
   </div>`;
 
-  // Answer text
-  html += `<div class="msg-ai-text">${esc(answer)}</div>`;
+  html += `<div class="msg-ai-text">${escapeHtml(answer)}</div>`;
 
-  // Sources
   if (sources && sources.length > 0) {
     html += '<div class="sources-row">';
     sources.forEach((src, i) => {
       const name = src.document_name || src.filename || `Source ${i + 1}`;
       const score = src.score != null ? (src.score * 100).toFixed(0) + '%' : '';
       html += `<div class="source-pill" data-idx="${i}">
-        <span class="source-pill-name">${esc(name)}</span>
+        <span class="source-pill-name">${escapeHtml(name)}</span>
         ${score ? `<span class="source-pill-score">${score}</span>` : ''}
       </div>`;
     });
     html += '</div>';
-    // Hidden preview containers
     sources.forEach((src, i) => {
       const preview = src.chunk_text || src.content || '';
       if (preview) {
-        html += `<div class="source-preview hidden" data-preview-idx="${i}">${esc(preview.slice(0, 300))}</div>`;
+        html += `<div class="source-preview hidden" data-preview-idx="${i}">${escapeHtml(preview.slice(0, 300))}</div>`;
       }
     });
   }
 
   el.innerHTML = html;
 
-  // Source pill click → toggle preview
   el.querySelectorAll('.source-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       const idx = pill.dataset.idx;
@@ -382,7 +1222,7 @@ function addAiMessage(answer, confidenceTier, confidenceScore, sources) {
 function addErrorMessage(text) {
   const el = document.createElement('div');
   el.className = 'msg-ai';
-  el.innerHTML = `<div class="msg-ai-text" style="color: #ef4444;">${esc(text)}</div>`;
+  el.innerHTML = `<div class="msg-ai-text" style="color: #ef4444;">${escapeHtml(text)}</div>`;
   chatMessages.appendChild(el);
   scrollToBottom();
 }
@@ -397,9 +1237,8 @@ function scrollToBottom() {
 
 async function handleSend() {
   const question = queryInput.value.trim();
-  if (!question || !selectedClientId) return;
+  if (!question || !chatSelectedClientId) return;
 
-  // Client-side throttle: max 3 per minute
   const now = Date.now();
   const recentQueries = queryTimestamps.filter(t => now - t < 60000);
   if (recentQueries.length >= 3) {
@@ -409,7 +1248,6 @@ async function handleSend() {
   }
   queryTimestamps.push(now);
 
-  // Clear input
   queryInput.value = '';
   autoResizeInput();
   updateSendBtn();
@@ -419,11 +1257,10 @@ async function handleSend() {
   setInputEnabled(false);
 
   try {
-    const response = await askQuestion(selectedClientId, question);
+    const response = await askQuestion(chatSelectedClientId, question);
 
     removeTypingIndicator();
 
-    // Parse RAG response — the backend returns various shapes
     const answer = response.response || response.answer || response.message || 'No answer available.';
     const confidenceTier = response.confidence_tier || response.confidence || 'medium';
     const confidenceScore = response.confidence_score ?? response.score ?? null;
@@ -451,10 +1288,9 @@ function setInputEnabled(enabled) {
 }
 
 function updateSendBtn() {
-  sendBtn.disabled = !queryInput.value.trim() || !selectedClientId;
+  sendBtn.disabled = !queryInput.value.trim() || !chatSelectedClientId;
 }
 
-// Send on click or Enter (Shift+Enter for newline)
 sendBtn.addEventListener('click', handleSend);
 
 queryInput.addEventListener('keydown', (e) => {
@@ -474,48 +1310,452 @@ function autoResizeInput() {
   queryInput.style.height = Math.min(queryInput.scrollHeight, 80) + 'px';
 }
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// RULES PANEL
+// ===========================================================================
+
+let rulesLoaded = false;
+
+async function loadRules() {
+  if (extensionConfig && extensionConfig.monitoring_enabled === false) {
+    rulesListEl.classList.add('hidden');
+    rulesAddSection.classList.add('hidden');
+    rulesForm.classList.add('hidden');
+    rulesGate.classList.remove('hidden');
+    return;
+  }
+
+  rulesGate.classList.add('hidden');
+
+  if (rulesLoaded) return;
+
+  try {
+    const result = await getMonitoringRules();
+    monitoringRules = Array.isArray(result) ? result : (result?.rules || []);
+    rulesLoaded = true;
+    renderRules();
+  } catch (err) {
+    if (err.code === ERROR_CODES.TIER_UPGRADE) {
+      rulesListEl.classList.add('hidden');
+      rulesAddSection.classList.add('hidden');
+      rulesForm.classList.add('hidden');
+      rulesGate.classList.remove('hidden');
+    } else {
+      rulesListEl.innerHTML = '<div class="rules-empty"><p>Failed to load rules.</p></div>';
+    }
+  }
+}
+
+function renderRules() {
+  if (monitoringRules.length === 0) {
+    rulesListEl.innerHTML = '<div class="rules-empty"><p>No monitoring rules yet.</p><p style="font-size:11px;color:#475569;">Rules auto-capture pages matching your patterns.</p></div>';
+    rulesAddSection.classList.remove('hidden');
+    return;
+  }
+
+  rulesAddSection.classList.remove('hidden');
+
+  const html = monitoringRules.map(rule => {
+    const icon = getRuleTypeIcon(rule.rule_type || rule.type);
+    const clientName = rule.client_name || getClientName(rule.client_id) || 'Unknown';
+    const isActive = rule.is_active !== false;
+    const pattern = rule.pattern || '';
+
+    return `<div class="rule-item" data-rule-id="${rule.id}">
+      <div class="rule-type-icon">${icon}</div>
+      <div class="rule-info">
+        <div class="rule-name">${escapeHtml(rule.name || 'Unnamed rule')}</div>
+        <div class="rule-detail">${escapeHtml(pattern)} → ${escapeHtml(clientName)}</div>
+      </div>
+      <div class="rule-actions">
+        <button class="toggle${isActive ? ' on' : ''}" data-action="toggle" data-rule-id="${rule.id}" title="${isActive ? 'Disable' : 'Enable'}"></button>
+        <button class="rule-delete" data-action="delete" data-rule-id="${rule.id}" title="Delete rule">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+          </svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  rulesListEl.innerHTML = html;
+
+  rulesListEl.querySelectorAll('[data-action="toggle"]').forEach(btn => {
+    btn.addEventListener('click', () => handleToggleRule(btn.dataset.ruleId));
+  });
+
+  rulesListEl.querySelectorAll('[data-action="delete"]').forEach(btn => {
+    btn.addEventListener('click', () => handleDeleteRule(btn.dataset.ruleId));
+  });
+}
+
+function getRuleTypeIcon(type) {
+  switch (type) {
+    case 'domain': return '\u{1F310}';
+    case 'url_contains': return '\u{1F517}';
+    case 'email_from': return '\u{1F4E7}';
+    case 'page_title': return '\u{1F4C4}';
+    default: return '\u{1F50D}';
+  }
+}
+
+async function handleToggleRule(ruleId) {
+  const rule = monitoringRules.find(r => r.id === ruleId);
+  if (!rule) return;
+
+  const newState = rule.is_active === false ? true : false;
+
+  rule.is_active = newState;
+  const toggleBtn = rulesListEl.querySelector(`[data-action="toggle"][data-rule-id="${ruleId}"]`);
+  if (toggleBtn) toggleBtn.classList.toggle('on', newState);
+
+  try {
+    await updateMonitoringRule(ruleId, { is_active: newState });
+    chrome.runtime.sendMessage({ type: 'MONITORING_RULES_CHANGED' }).catch(() => {});
+  } catch {
+    rule.is_active = !newState;
+    if (toggleBtn) toggleBtn.classList.toggle('on', !newState);
+  }
+}
+
+async function handleDeleteRule(ruleId) {
+  const rule = monitoringRules.find(r => r.id === ruleId);
+  const ruleName = rule?.name || 'this rule';
+
+  const confirmed = await showConfirmDialog(`Delete "${ruleName}"? This cannot be undone.`);
+  if (!confirmed) return;
+
+  try {
+    await deleteMonitoringRule(ruleId);
+    monitoringRules = monitoringRules.filter(r => r.id !== ruleId);
+    renderRules();
+    chrome.runtime.sendMessage({ type: 'MONITORING_RULES_CHANGED' }).catch(() => {});
+  } catch (err) {
+    handleApiError(err);
+  }
+}
+
+function showConfirmDialog(message) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `<div class="confirm-dialog">
+      <p>${escapeHtml(message)}</p>
+      <div class="confirm-actions">
+        <button class="btn-ghost" data-confirm="cancel">Cancel</button>
+        <button class="btn-danger" data-confirm="ok">Delete</button>
+      </div>
+    </div>`;
+
+    document.body.appendChild(overlay);
+
+    const cleanup = (result) => {
+      overlay.remove();
+      resolve(result);
+    };
+
+    overlay.querySelector('[data-confirm="cancel"]').addEventListener('click', () => cleanup(false));
+    overlay.querySelector('[data-confirm="ok"]').addEventListener('click', () => cleanup(true));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+  });
+}
+
+// --- Add rule form ---
+
+addRuleBtn.addEventListener('click', () => {
+  showRulesForm();
+});
+
+rulesFormCancel.addEventListener('click', () => {
+  hideRulesForm();
+});
+
+function showRulesForm(prefill = {}) {
+  rulesForm.classList.remove('hidden');
+  rulesAddSection.classList.add('hidden');
+
+  const clientOptions = allClients.map(c =>
+    `<option value="${c.id}">${escapeHtml(c.name || 'Unnamed')}</option>`
+  ).join('');
+  ruleClientSelect.innerHTML = `<option value="">Select a client...</option>${clientOptions}`;
+
+  ruleNameInput.value = prefill.name || '';
+  ruleTypeSelect.value = prefill.rule_type || 'domain';
+  rulePatternInput.value = prefill.pattern || '';
+  if (prefill.client_id) ruleClientSelect.value = prefill.client_id;
+
+  updatePatternPlaceholder();
+  validateRuleForm();
+
+  setTimeout(() => ruleNameInput.focus(), 10);
+}
+
+function hideRulesForm() {
+  rulesForm.classList.add('hidden');
+  rulesAddSection.classList.remove('hidden');
+  ruleNameInput.value = '';
+  rulePatternInput.value = '';
+  ruleClientSelect.value = '';
+}
+
+ruleTypeSelect.addEventListener('change', updatePatternPlaceholder);
+
+function updatePatternPlaceholder() {
+  const placeholders = {
+    domain: 'e.g., acmecorp.com',
+    url_contains: 'e.g., /invoices/',
+    email_from: 'e.g., cfo@acmecorp.com',
+    page_title: 'e.g., Profit & Loss',
+  };
+  rulePatternInput.placeholder = placeholders[ruleTypeSelect.value] || 'Enter pattern...';
+}
+
+ruleNameInput.addEventListener('input', validateRuleForm);
+rulePatternInput.addEventListener('input', validateRuleForm);
+ruleClientSelect.addEventListener('change', validateRuleForm);
+
+function validateRuleForm() {
+  const valid = ruleNameInput.value.trim() &&
+                rulePatternInput.value.trim() &&
+                ruleClientSelect.value;
+  ruleSaveBtn.disabled = !valid;
+}
+
+ruleSaveBtn.addEventListener('click', handleSaveRule);
+
+async function handleSaveRule() {
+  const name = ruleNameInput.value.trim();
+  const ruleType = ruleTypeSelect.value;
+  const pattern = rulePatternInput.value.trim();
+  const clientId = ruleClientSelect.value;
+
+  if (!name || !pattern || !clientId) return;
+
+  ruleSaveBtn.disabled = true;
+  ruleSaveText.classList.add('hidden');
+  ruleSaveSpinner.classList.remove('hidden');
+
+  try {
+    const newRule = await createMonitoringRule({
+      name,
+      rule_type: ruleType,
+      pattern,
+      client_id: clientId,
+    });
+
+    if (newRule) {
+      monitoringRules.push(newRule);
+    } else {
+      rulesLoaded = false;
+      await loadRules();
+    }
+
+    hideRulesForm();
+    renderRules();
+
+    chrome.runtime.sendMessage({ type: 'MONITORING_RULES_CHANGED' }).catch(() => {});
+  } catch (err) {
+    handleApiError(err);
+  } finally {
+    ruleSaveBtn.disabled = false;
+    ruleSaveText.classList.remove('hidden');
+    ruleSaveSpinner.classList.add('hidden');
+  }
+}
+
+// --- Quick rule creation from auto-match ---
+
+createRuleFromMatch.addEventListener('click', (e) => {
+  e.preventDefault();
+  switchPanel('rules');
+
+  const prefill = {
+    client_id: autoMatchResult?.client_id || selectedClientId || '',
+  };
+
+  if (activeTab?.url) {
+    try {
+      const domain = new URL(activeTab.url).hostname;
+      prefill.rule_type = 'domain';
+      prefill.pattern = domain;
+      prefill.name = `Capture from ${domain}`;
+    } catch {}
+  }
+
+  showRulesForm(prefill);
+});
+
+// ===========================================================================
+// MONITORING TOGGLE (bell icon in header)
+// ===========================================================================
+
+async function initMonitoringToggle() {
+  try {
+    const response = await new Promise(resolve => {
+      chrome.runtime.sendMessage({ type: 'GET_MONITORING_PREFS' }, resolve);
+    });
+    if (response) monitoringPrefs = response;
+  } catch { /* use defaults */ }
+  updateBellIcon();
+}
+
+function updateBellIcon() {
+  const isMuted = monitoringPrefs.muted_until && Date.now() < monitoringPrefs.muted_until;
+  const isOff = !monitoringPrefs.enabled || isMuted;
+  monitoringToggle.classList.toggle('muted', isOff);
+  monitoringToggle.title = isOff
+    ? (isMuted ? 'Monitoring: muted' : 'Monitoring: off')
+    : 'Monitoring: active';
+}
+
+monitoringToggle.addEventListener('click', async () => {
+  monitoringPrefs.enabled = !monitoringPrefs.enabled;
+  if (monitoringPrefs.enabled) monitoringPrefs.muted_until = 0;
+  updateBellIcon();
+  chrome.runtime.sendMessage({
+    type: 'SET_MONITORING_PREFS',
+    prefs: monitoringPrefs,
+  }).catch(() => {});
+});
+
+monitoringToggle.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  showMuteMenu();
+});
+
+function showMuteMenu() {
+  closeMuteMenu();
+
+  const menu = document.createElement('div');
+  menu.id = 'mute-menu';
+  menu.className = 'mute-menu';
+  menu.innerHTML = `
+    <button class="mute-menu-item" data-mute="3600000">Mute for 1 hour</button>
+    <button class="mute-menu-item" data-mute="28800000">Mute for 8 hours</button>
+    <button class="mute-menu-item" data-mute="0">Unmute</button>
+  `;
+
+  monitoringToggle.parentElement.style.position = 'relative';
+  monitoringToggle.parentElement.appendChild(menu);
+
+  menu.querySelectorAll('.mute-menu-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const duration = parseInt(e.target.dataset.mute, 10);
+      monitoringPrefs.muted_until = duration ? Date.now() + duration : 0;
+      if (duration) monitoringPrefs.enabled = true;
+      updateBellIcon();
+      chrome.runtime.sendMessage({
+        type: 'SET_MONITORING_PREFS',
+        prefs: monitoringPrefs,
+      }).catch(() => {});
+      closeMuteMenu();
+    });
+  });
+
+  setTimeout(() => {
+    document.addEventListener('click', closeMuteMenuOnOutsideClick);
+  }, 10);
+}
+
+function closeMuteMenu() {
+  const existing = document.getElementById('mute-menu');
+  if (existing) existing.remove();
+  document.removeEventListener('click', closeMuteMenuOnOutsideClick);
+}
+
+function closeMuteMenuOnOutsideClick(e) {
+  if (!e.target.closest('#mute-menu') && !e.target.closest('#monitoring-toggle')) {
+    closeMuteMenu();
+  }
+}
+
+// ===========================================================================
+// AUTH EVENTS
+// ===========================================================================
 
 signInBtn.addEventListener('click', () => signIn());
+
+signOutBtn.addEventListener('click', async () => {
+  await signOut();
+  showScreen('auth');
+});
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'AUTH_STATE_CHANGED' && message.authenticated) {
     init();
   }
   if (message.type === 'TAB_CHANGED') {
-    // Active tab changed — refresh selected text check
-    checkSelectedText();
+    autoMatchResult = null;
+    selectedText = '';
+    chrome.storage.session.remove('auto_match_result').catch(() => {});
+    if (extensionConfig?.auto_match && message.tab?.url) {
+      activeTab = message.tab;
+      tryAutoMatch();
+    } else {
+      resetPickerText();
+    }
+    updatePreview();
+    checkSelectedTextForChat();
   }
 });
 
-// Sync state from popup changes
+// Sync state from storage changes
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'session') return;
 
   if (changes.selected_client_id && changes.selected_client_id.newValue) {
     const id = changes.selected_client_id.newValue;
-    const name = changes.selected_client_name?.newValue ||
-      allClients.find(c => c.id === id)?.name || 'Unknown';
+    const name = changes.selected_client_name?.newValue || getClientName(id);
+
+    // Sync capture picker
     if (id !== selectedClientId && allClients.some(c => c.id === id)) {
-      selectClient(id, name);
+      selectedClientId = id;
+      clientSelectHidden.value = id;
+      clientPickerText.textContent = name;
+      clientPickerText.classList.remove('placeholder');
+      clientListEl.querySelectorAll('.client-option').forEach(el => {
+        el.classList.toggle('selected', el.dataset.id === id);
+      });
+      updateCaptureButton();
+    }
+
+    // Sync chat picker
+    if (id !== chatSelectedClientId && allClients.some(c => c.id === id)) {
+      selectChatClient(id, name);
     }
   }
 });
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// HELPERS
+// ===========================================================================
 
-function esc(str) {
+function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
 }
 
-// ---------------------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------------------
+function extractDomain(url) {
+  try { return new URL(url).hostname; } catch { return ''; }
+}
+
+function formatRelativeTime(dateStr) {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMin = Math.floor((now - then) / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+// ===========================================================================
+// BOOT
+// ===========================================================================
 
 init();
