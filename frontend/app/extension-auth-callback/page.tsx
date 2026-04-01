@@ -6,13 +6,15 @@ import { useEffect, useState } from "react";
 /**
  * Extension auth callback page.
  *
- * When the Chrome extension triggers sign-in, Clerk redirects here after
- * authentication. This page grabs the session token from Clerk and passes
- * it back to the extension via a URL the service worker is watching:
- *   callwen.com/extension-auth-callback?token=<jwt>
+ * Flow:
+ * 1. Extension opens /sign-in?redirect_url=/extension-auth-callback
+ * 2. User signs in via Clerk
+ * 3. Clerk redirects here (because of redirect_url)
+ * 4. This page gets JWT from Clerk, puts it in the URL
+ * 5. Service worker detects the URL, extracts token, closes the tab
  *
- * The service worker intercepts this URL in chrome.tabs.onUpdated, extracts
- * the token, stores it, and closes this tab automatically.
+ * If the user arrives unauthenticated (e.g. direct visit), we redirect
+ * to sign-in with redirect_url back to this page.
  */
 export default function ExtensionAuthCallback() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -22,13 +24,21 @@ export default function ExtensionAuthCallback() {
   useEffect(() => {
     if (!isLoaded) return;
 
-    async function passTokenToExtension() {
-      if (!isSignedIn) {
-        setStatus("error");
-        setErrorMsg("Not signed in. Please sign in first.");
-        return;
-      }
+    // Already have a token in the URL — the service worker will pick it up.
+    // Don't re-fetch; just show success.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("token")) {
+      setStatus("success");
+      return;
+    }
 
+    if (!isSignedIn) {
+      // Redirect to sign-in, which will send the user back here after auth
+      window.location.replace("/sign-in?redirect_url=/extension-auth-callback");
+      return;
+    }
+
+    async function passTokenToExtension() {
       try {
         const token = await getToken();
         if (!token) {
@@ -37,9 +47,11 @@ export default function ExtensionAuthCallback() {
           return;
         }
 
-        // Redirect to the callback URL that the extension service worker watches.
-        // The service worker will extract the token and close this tab.
-        window.location.href = `/extension-auth-callback?token=${encodeURIComponent(token)}`;
+        // Replace the URL so the service worker can detect the token.
+        // Using replace() avoids a back-button loop.
+        window.location.replace(
+          `/extension-auth-callback?token=${encodeURIComponent(token)}`
+        );
         setStatus("success");
       } catch {
         setStatus("error");
@@ -57,8 +69,8 @@ export default function ExtensionAuthCallback() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#0f1419",
-        color: "#e2e8f0",
+        background: "#f8fafc",
+        color: "#1a202c",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
@@ -69,7 +81,7 @@ export default function ExtensionAuthCallback() {
               style={{
                 width: 32,
                 height: 32,
-                border: "3px solid #2d3748",
+                border: "3px solid #e2e8f0",
                 borderTopColor: "#14b8a6",
                 borderRadius: "50%",
                 animation: "spin 0.8s linear infinite",
@@ -77,7 +89,7 @@ export default function ExtensionAuthCallback() {
               }}
             />
             <p style={{ fontSize: 15, fontWeight: 600 }}>Connecting to Callwen extension...</p>
-            <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 8 }}>
+            <p style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>
               This tab will close automatically.
             </p>
           </>
@@ -96,12 +108,13 @@ export default function ExtensionAuthCallback() {
                 justifyContent: "center",
                 margin: "0 auto 16px",
                 fontSize: 18,
+                color: "#fff",
               }}
             >
               ✓
             </div>
             <p style={{ fontSize: 15, fontWeight: 600 }}>Connected!</p>
-            <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 8 }}>
+            <p style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>
               Passing credentials to the extension. This tab will close shortly.
             </p>
           </>
@@ -120,20 +133,21 @@ export default function ExtensionAuthCallback() {
                 justifyContent: "center",
                 margin: "0 auto 16px",
                 fontSize: 18,
+                color: "#fff",
               }}
             >
               ✕
             </div>
             <p style={{ fontSize: 15, fontWeight: 600 }}>Connection failed</p>
-            <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 8 }}>{errorMsg}</p>
+            <p style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>{errorMsg}</p>
             <a
-              href="/sign-in?extension=true"
+              href="/sign-in?redirect_url=/extension-auth-callback"
               style={{
                 display: "inline-block",
                 marginTop: 16,
                 padding: "10px 20px",
                 background: "#14b8a6",
-                color: "#0f1419",
+                color: "#fff",
                 borderRadius: 8,
                 fontWeight: 600,
                 fontSize: 13,

@@ -64,7 +64,7 @@ export async function signIn() {
     chrome.tabs.onUpdated.addListener(listener);
 
     // Open sign-in page
-    chrome.tabs.create({ url: `${CONFIG.APP_URL}/sign-in?extension=true` })
+    chrome.tabs.create({ url: `${CONFIG.APP_URL}/sign-in?redirect_url=/extension-auth-callback` })
       .then(tab => { authTabId = tab.id; })
       .catch(err => settle(null, err));
   });
