@@ -1775,8 +1775,40 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   } catch { /* tab may not exist */ }
 });
 
-// Sync state from storage changes
+// Sync auth and client state from local storage changes
 chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local') {
+    // Auth token added or changed → auto-transition to authenticated view
+    if (changes.callwen_auth_token) {
+      const newToken = changes.callwen_auth_token.newValue;
+      if (newToken) {
+        // Only re-init if we're currently showing the sign-in screen
+        if (authScreen && !authScreen.classList.contains('hidden')) {
+          init();
+        }
+      } else {
+        // Token removed → show sign-in
+        allClients = [];
+        extensionConfig = null;
+        chatHistory = [];
+        selectedClientId = '';
+        showScreen('auth');
+      }
+    }
+
+    // Cached clients updated from another context (e.g. service worker)
+    if (changes.callwen_cached_clients && changes.callwen_cached_clients.newValue) {
+      const cached = changes.callwen_cached_clients.newValue;
+      const clients = cached.clients || cached;
+      if (Array.isArray(clients) && clients.length > 0 && mainScreen && !mainScreen.classList.contains('hidden')) {
+        allClients = clients;
+        renderClientList();
+        renderChatClientList();
+      }
+    }
+    return;
+  }
+
   if (area !== 'session') return;
 
   if (changes.selected_client_id && changes.selected_client_id.newValue) {
