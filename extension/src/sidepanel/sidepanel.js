@@ -14,7 +14,7 @@ import {
   getRecentCaptures, getMonitoringRules, createMonitoringRule,
   updateMonitoringRule, deleteMonitoringRule, askQuestion, ERROR_CODES,
 } from '../services/api.js';
-import { captureFileUrl, captureScreenshot, getPageMetadata } from '../services/capture.js';
+import { captureFileUrl, getPageMetadata } from '../services/capture.js';
 import { getCachedClients, addRecentClientId, getRecentClientIds } from '../utils/storage.js';
 
 // ---------------------------------------------------------------------------
@@ -115,6 +115,7 @@ let recentClientIds = [];
 let autoMatchResult = null;
 let selectedClientId = '';
 let parsedContent = null;
+let screenshotPreviewData = null;
 let monitoringRules = [];
 let activePanel = 'capture';
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
@@ -1032,9 +1033,30 @@ async function handleCapture() {
       }
 
       case 'screenshot': {
-        const ssPayload = await captureScreenshot(tabId);
-        captureType = ssPayload.type;
-        capturePayload = ssPayload.image_data;
+        captureBtnText.textContent = 'Selecting region...';
+        const ssResult = await chrome.runtime.sendMessage({ type: 'START_SCREENSHOT' });
+        if (ssResult?.cancelled) {
+          showStatus('Screenshot cancelled. Click Screenshot to try again.', 'info');
+          setBtnLoading(false);
+          return;
+        }
+        if (ssResult?.error) {
+          showStatus(ssResult.error, 'error');
+          setBtnLoading(false);
+          return;
+        }
+        if (!ssResult?.imageData) {
+          showStatus('Screenshot capture failed. Please try again.', 'error');
+          setBtnLoading(false);
+          return;
+        }
+        captureType = 'screenshot';
+        capturePayload = ssResult.imageData;
+        // Show thumbnail preview
+        screenshotPreviewData = ssResult.imageData;
+        previewBody.innerHTML =
+          `<img src="data:image/png;base64,${ssResult.imageData}" style="max-width:100%;max-height:120px;border-radius:4px;border:1px solid #e2e8f0;" />` +
+          `<span class="preview-url">${ssResult.width} × ${ssResult.height}px</span>`;
         break;
       }
     }

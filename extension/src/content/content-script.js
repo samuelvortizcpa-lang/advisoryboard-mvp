@@ -202,100 +202,172 @@ function getPageMetadata() {
 
 function startScreenshotSelection() {
   return new Promise((resolve) => {
-    // Create overlay
-    const overlay = document.createElement('div');
-    Object.assign(overlay.style, {
+    const Z = '2147483647';
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Container for all screenshot UI elements
+    const container = document.createElement('div');
+    container.id = 'callwen-screenshot-overlay';
+    Object.assign(container.style, {
       position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
-      background: 'rgba(0, 0, 0, 0.4)', cursor: 'crosshair', zIndex: '2147483647',
+      zIndex: Z, cursor: 'crosshair',
     });
 
-    // Selection box
-    const selBox = document.createElement('div');
-    Object.assign(selBox.style, {
-      position: 'fixed', border: '2px solid #c9944a', background: 'rgba(201, 148, 74, 0.1)',
-      zIndex: '2147483647', pointerEvents: 'none', display: 'none',
+    // Dim overlay (4 divs surrounding the cutout — top, bottom, left, right)
+    const dimColor = 'rgba(0, 0, 0, 0.35)';
+    const dims = ['top', 'bottom', 'left', 'right'].map(id => {
+      const d = document.createElement('div');
+      d.dataset.pos = id;
+      Object.assign(d.style, {
+        position: 'absolute', background: dimColor, transition: 'none',
+      });
+      return d;
     });
+    // Initially: full overlay dim (no cutout)
+    Object.assign(dims[0].style, { top: '0', left: '0', width: '100%', height: '100%' }); // top = full
+    Object.assign(dims[1].style, { top: '0', left: '0', width: '0', height: '0' }); // bottom hidden
+    Object.assign(dims[2].style, { top: '0', left: '0', width: '0', height: '0' }); // left hidden
+    Object.assign(dims[3].style, { top: '0', left: '0', width: '0', height: '0' }); // right hidden
+    dims.forEach(d => container.appendChild(d));
 
-    // Instructions
+    // Selection border
+    const selBorder = document.createElement('div');
+    Object.assign(selBorder.style, {
+      position: 'absolute', border: '1.5px solid rgba(255,255,255,0.8)',
+      boxShadow: '0 0 0 1px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(0,0,0,0.1)',
+      borderRadius: '2px', pointerEvents: 'none', display: 'none',
+    });
+    container.appendChild(selBorder);
+
+    // Dimension indicator
+    const dimLabel = document.createElement('div');
+    Object.assign(dimLabel.style, {
+      position: 'absolute', padding: '2px 8px', borderRadius: '4px',
+      background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: '11px',
+      fontFamily: 'system-ui, -apple-system, sans-serif', pointerEvents: 'none',
+      display: 'none', whiteSpace: 'nowrap',
+    });
+    container.appendChild(dimLabel);
+
+    // Instructions hint
     const hint = document.createElement('div');
     Object.assign(hint.style, {
-      position: 'fixed', top: '16px', left: '50%', transform: 'translateX(-50%)',
-      padding: '8px 16px', borderRadius: '8px', background: '#1a1f2e', color: '#e2e8f0',
-      fontSize: '13px', fontFamily: 'system-ui, sans-serif', zIndex: '2147483647',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+      position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)',
+      padding: '8px 18px', borderRadius: '20px', background: 'rgba(0,0,0,0.7)',
+      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      color: '#f1f5f9', fontSize: '13px', fontFamily: 'system-ui, -apple-system, sans-serif',
+      pointerEvents: 'none', transition: 'opacity 0.3s',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
     });
-    hint.textContent = 'Click and drag to select a region. Press Esc to cancel.';
+    hint.textContent = 'Click and drag to select a region \u00B7 Esc to cancel';
+    container.appendChild(hint);
 
-    document.body.appendChild(overlay);
-    document.body.appendChild(selBox);
-    document.body.appendChild(hint);
+    // Auto-fade hint after 3 seconds
+    const hintTimer = setTimeout(() => { hint.style.opacity = '0'; }, 3000);
+
+    document.body.appendChild(container);
 
     let startX = 0, startY = 0, dragging = false;
 
+    function updateDims(x, y, w, h) {
+      // Four-div cutout: top strip, bottom strip, left column, right column
+      // Top: full width, from top to selection top
+      Object.assign(dims[0].style, { top: '0', left: '0', width: `${vw}px`, height: `${y}px` });
+      // Bottom: full width, from selection bottom to viewport bottom
+      Object.assign(dims[1].style, { top: `${y + h}px`, left: '0', width: `${vw}px`, height: `${vh - y - h}px` });
+      // Left: from selection top to selection bottom, left edge to selection left
+      Object.assign(dims[2].style, { top: `${y}px`, left: '0', width: `${x}px`, height: `${h}px` });
+      // Right: from selection top to selection bottom, selection right to viewport right
+      Object.assign(dims[3].style, { top: `${y}px`, left: `${x + w}px`, width: `${vw - x - w}px`, height: `${h}px` });
+    }
+
     const cleanup = () => {
-      overlay.remove();
-      selBox.remove();
-      hint.remove();
+      clearTimeout(hintTimer);
+      container.remove();
       document.removeEventListener('keydown', onKey);
     };
 
     const onKey = (e) => {
-      if (e.key === 'Escape') {
-        cleanup();
-        resolve(null);
-      }
+      if (e.key === 'Escape') { cleanup(); resolve(null); }
     };
     document.addEventListener('keydown', onKey);
 
-    overlay.addEventListener('mousedown', (e) => {
+    // Right-click cancels
+    container.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      cleanup();
+      resolve(null);
+    });
+
+    container.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // left click only
       startX = e.clientX;
       startY = e.clientY;
       dragging = true;
-      selBox.style.display = 'block';
-      selBox.style.left = `${startX}px`;
-      selBox.style.top = `${startY}px`;
-      selBox.style.width = '0';
-      selBox.style.height = '0';
+      hint.style.opacity = '0';
+      selBorder.style.display = 'block';
+      dimLabel.style.display = 'block';
     });
 
-    overlay.addEventListener('mousemove', (e) => {
+    container.addEventListener('mousemove', (e) => {
       if (!dragging) return;
       const x = Math.min(startX, e.clientX);
       const y = Math.min(startY, e.clientY);
       const w = Math.abs(e.clientX - startX);
       const h = Math.abs(e.clientY - startY);
-      Object.assign(selBox.style, {
+
+      Object.assign(selBorder.style, {
         left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px`,
       });
+
+      updateDims(x, y, w, h);
+
+      // Dimension label positioned below bottom-right corner
+      dimLabel.textContent = `${Math.round(w * devicePixelRatio)} \u00D7 ${Math.round(h * devicePixelRatio)}`;
+      const labelX = Math.min(x + w + 4, vw - 80);
+      const labelY = Math.min(y + h + 4, vh - 24);
+      Object.assign(dimLabel.style, { left: `${labelX}px`, top: `${labelY}px` });
     });
 
-    overlay.addEventListener('mouseup', (e) => {
+    container.addEventListener('mouseup', (e) => {
       if (!dragging) return;
       dragging = false;
 
-      const rect = {
-        x: Math.min(startX, e.clientX),
-        y: Math.min(startY, e.clientY),
-        width: Math.abs(e.clientX - startX),
-        height: Math.abs(e.clientY - startY),
-      };
+      const x = Math.min(startX, e.clientX);
+      const y = Math.min(startY, e.clientY);
+      const w = Math.abs(e.clientX - startX);
+      const h = Math.abs(e.clientY - startY);
 
-      cleanup();
-
-      // Minimum selection size (10x10)
-      if (rect.width < 10 || rect.height < 10) {
-        resolve(null);
+      // Minimum selection size
+      if (w < 10 || h < 10) {
+        // Reset to full dim, let user try again
+        Object.assign(dims[0].style, { top: '0', left: '0', width: '100%', height: '100%' });
+        dims.slice(1).forEach(d => Object.assign(d.style, { width: '0', height: '0' }));
+        selBorder.style.display = 'none';
+        dimLabel.style.display = 'none';
+        // Show brief "drag to select" hint
+        hint.textContent = 'Drag to select a region';
+        hint.style.opacity = '1';
+        setTimeout(() => { hint.style.opacity = '0'; }, 2000);
         return;
       }
 
-      // Include devicePixelRatio for retina displays
-      resolve({
-        x: rect.x * window.devicePixelRatio,
-        y: rect.y * window.devicePixelRatio,
-        width: rect.width * window.devicePixelRatio,
-        height: rect.height * window.devicePixelRatio,
-        dpr: window.devicePixelRatio,
-      });
+      // Brief gold flash on the border
+      selBorder.style.borderColor = '#c9944a';
+      selBorder.style.boxShadow = '0 0 0 2px rgba(201,148,74,0.4)';
+
+      setTimeout(() => {
+        cleanup();
+        const dpr = window.devicePixelRatio || 1;
+        resolve({
+          x: x * dpr,
+          y: y * dpr,
+          width: w * dpr,
+          height: h * dpr,
+          dpr,
+        });
+      }, 150);
     });
   });
 }

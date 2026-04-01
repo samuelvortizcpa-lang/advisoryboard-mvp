@@ -323,6 +323,93 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async
   }
 
+  // Screenshot capture — side panel requests full screenshot pipeline
+  if (message.type === 'START_SCREENSHOT') {
+    (async () => {
+      try {
+        // 1. Find the active non-chrome tab
+        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        const tab = tabs?.find(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+        if (!tab) {
+          sendResponse({ error: 'Cannot capture Chrome system pages.' });
+          return;
+        }
+
+        // 2. Inject region selection into the tab
+        let region = null;
+        try {
+          // Try content script message first (already injected)
+          region = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('timeout')), 60000);
+            chrome.tabs.sendMessage(tab.id, { type: 'START_SCREENSHOT_SELECTION' }, (resp) => {
+              clearTimeout(timeout);
+              if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
+              resolve(resp?.region || null);
+            });
+          });
+        } catch {
+          // Inject content script and retry
+          try {
+            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content-script.js'] });
+            region = await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error('timeout')), 60000);
+              chrome.tabs.sendMessage(tab.id, { type: 'START_SCREENSHOT_SELECTION' }, (resp) => {
+                clearTimeout(timeout);
+                if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
+                resolve(resp?.region || null);
+              });
+            });
+          } catch {
+            sendResponse({ error: 'Cannot access this page. Try refreshing or switching tabs.' });
+            return;
+          }
+        }
+
+        if (!region) {
+          sendResponse({ cancelled: true });
+          return;
+        }
+
+        // 3. Capture the visible tab
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+
+        // 4. Crop to the selected region using OffscreenCanvas
+        const blob = await (await fetch(dataUrl)).blob();
+        const bitmap = await createImageBitmap(blob);
+
+        const x = Math.max(0, Math.round(region.x));
+        const y = Math.max(0, Math.round(region.y));
+        const w = Math.min(Math.round(region.width), bitmap.width - x);
+        const h = Math.min(Math.round(region.height), bitmap.height - y);
+
+        if (w <= 0 || h <= 0) {
+          bitmap.close();
+          sendResponse({ error: 'Selection too small. Please select a larger area.' });
+          return;
+        }
+
+        const canvas = new OffscreenCanvas(w, h);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, x, y, w, h, 0, 0, w, h);
+        bitmap.close();
+
+        const outputBlob = await canvas.convertToBlob({ type: 'image/png' });
+        const buffer = await outputBlob.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+
+        sendResponse({ imageData: base64, width: w, height: h });
+      } catch (err) {
+        sendResponse({ error: err.message || 'Screenshot capture failed.' });
+      }
+    })();
+    return true; // async
+  }
+
   // Monitoring preferences
   if (message.type === 'GET_MONITORING_PREFS') {
     import('../services/monitoring.js').then(m => m.getMonitoringPrefs())
