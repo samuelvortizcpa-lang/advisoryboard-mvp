@@ -62,6 +62,7 @@ let allClients = [];         // full client list
 let recentClientIds = [];    // last 5 used client IDs
 let autoMatchResult = null;  // { client_id, client_name, match_method, confidence }
 let selectedClientId = '';
+let parsedContent = null;    // { content, metadata, email_data, capture_type, document_tag }
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
@@ -127,10 +128,15 @@ async function init() {
     handleApiError(err);
   }
 
+  // Check for parsed content (Gmail emails, etc.)
+  if (!pendingCapture && activeTab?.id) {
+    await detectParsedContent();
+  }
+
   // Detect selected text on the active page
-  if (!pendingCapture) {
+  if (!pendingCapture && !parsedContent) {
     await detectSelectedText();
-  } else if (pendingCapture.capture_type === 'text_selection' && pendingCapture.data.text) {
+  } else if (pendingCapture?.capture_type === 'text_selection' && pendingCapture.data.text) {
     selectedText = pendingCapture.data.text;
     setMode('text');
   }
@@ -366,10 +372,14 @@ async function tryAutoMatch() {
       };
     }
 
+    // Use richer match hints from parsed content (e.g., Gmail email addresses)
+    const matchEmails = parsedContent?.metadata?.email_addresses || pageData.emails || [];
+    const matchCompanies = parsedContent?.metadata?.company_names || pageData.companyNames || [];
+
     const result = await matchClient({
       url: pageData.url || activeTab.url,
-      email_addresses: pageData.emails || [],
-      company_names: pageData.companyNames || [],
+      email_addresses: matchEmails,
+      company_names: matchCompanies,
       page_title: pageData.title || activeTab.title || '',
     });
 
@@ -420,6 +430,54 @@ async function detectSelectedText() {
     }
   } catch {
     setMode('page');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Parsed content detection (Gmail emails, etc.)
+// ---------------------------------------------------------------------------
+
+async function detectParsedContent() {
+  if (!activeTab?.id) return;
+  try {
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'GET_PARSED_CONTENT' });
+    if (!response?.parsed) return;
+
+    parsedContent = response;
+
+    // Auto-set document tag
+    if (response.document_tag) {
+      const option = tagSelect.querySelector(`option[value="${response.document_tag}"]`);
+      if (option) tagSelect.value = response.document_tag;
+    }
+
+    // Set capture mode from parser
+    if (response.capture_type === 'text_selection') {
+      setMode('text');
+    }
+
+    // Show detection badge near capture tabs
+    showParserBadge(response.email_data);
+
+    // Update preview with email summary
+    updatePreview();
+  } catch { /* content script not available */ }
+}
+
+function showParserBadge(emailData) {
+  // Remove existing badge if any
+  const existing = document.getElementById('parser-badge');
+  if (existing) existing.remove();
+
+  const badge = document.createElement('div');
+  badge.id = 'parser-badge';
+  badge.className = 'parser-badge';
+  badge.innerHTML = `<span class="parser-badge-icon">\u{1F4E7}</span> Gmail email detected`;
+
+  // Insert after capture tabs
+  const tabsEl = document.querySelector('.capture-tabs');
+  if (tabsEl) {
+    tabsEl.parentNode.insertBefore(badge, tabsEl.nextSibling);
   }
 }
 
@@ -480,7 +538,15 @@ function updatePreview() {
 
   switch (activeMode) {
     case 'text':
-      if (selectedText) {
+      if (parsedContent?.email_data) {
+        const ed = parsedContent.email_data;
+        const fromLine = ed.from_name || ed.from_email || 'Unknown sender';
+        const subjectLine = ed.subject || 'No subject';
+        const threadInfo = ed.thread_length > 1 ? ` (${ed.thread_length} messages)` : '';
+        previewBody.innerHTML =
+          `<span class="preview-title">${escapeHtml(`Email from ${fromLine}`)}</span>` +
+          `<span class="preview-url">${escapeHtml(subjectLine)}${threadInfo}</span>`;
+      } else if (selectedText) {
         const truncated = selectedText.length > 200
           ? selectedText.slice(0, 200) + '...'
           : selectedText;
@@ -557,7 +623,12 @@ async function handleCapture() {
 
     switch (activeMode) {
       case 'text':
-        payload = await captureTextSelection(tabId);
+        // Use parsed content (e.g., Gmail email) if available
+        if (parsedContent?.content) {
+          payload = { type: 'text_selection', content: parsedContent.content };
+        } else {
+          payload = await captureTextSelection(tabId);
+        }
         break;
 
       case 'page':

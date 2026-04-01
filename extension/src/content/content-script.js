@@ -4,9 +4,12 @@
  * Responsibilities:
  * 1. On callwen.com: detect Clerk session and relay auth token to the extension
  * 2. On all pages: respond to messages for text/metadata extraction
- * 3. Screenshot region selection
- * 4. Monitoring match banner
+ * 3. Gmail: structured email extraction via parser
+ * 4. Screenshot region selection
+ * 5. Monitoring match banner
  */
+
+import { isGmailPage, isEmailView, extractEmailData, formatAsDocument, getMatchHints } from '../parsers/gmail.js';
 
 // ---------------------------------------------------------------------------
 // Auth token relay (only on callwen.com)
@@ -345,6 +348,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'GET_SITE_TYPE':
       sendResponse({ site_type: detectSite() });
       return false;
+
+    case 'GET_PARSED_CONTENT': {
+      const site = detectSite();
+      if (site === 'gmail' && isGmailPage() && isEmailView()) {
+        const emailData = extractEmailData();
+        const content = formatAsDocument(emailData);
+        const metadata = getMatchHints(emailData);
+        sendResponse({
+          parsed: true,
+          content,
+          metadata,
+          email_data: emailData,
+          capture_type: 'text_selection',
+          document_tag: 'correspondence',
+        });
+      } else {
+        sendResponse({ parsed: false });
+      }
+      return false;
+    }
 
     case 'START_SCREENSHOT_SELECTION':
       startScreenshotSelection().then(region => {

@@ -137,6 +137,23 @@ a:hover { text-decoration: underline; }
   stroke: #14b8a6;
 }
 
+/* Parser detection badge */
+.parser-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: rgba(20, 184, 166, 0.08);
+  border-bottom: 1px solid #2d3748;
+  font-size: 11px;
+  color: #14b8a6;
+  font-weight: 500;
+}
+
+.parser-badge-icon {
+  font-size: 13px;
+}
+
 /* ---------------------------------------------------------------------------
    Sections & form elements
    --------------------------------------------------------------------------- */
