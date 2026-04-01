@@ -160,6 +160,26 @@ async def _startup_log() -> None:
     from app.services.auto_sync_service import start_scheduler
     start_scheduler()
 
+    # ── Fix stuck image documents (one-time) ─────────────────────────────
+    try:
+        from sqlalchemy import text as sa_text
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        result = db.execute(sa_text(
+            "UPDATE documents SET processed = true, processing_error = NULL "
+            "WHERE processed = false AND ("
+            "  file_type IN ('png','jpg','jpeg','gif','webp','bmp','tiff')"
+            "  OR filename ILIKE '%.png' OR filename ILIKE '%.jpg'"
+            "  OR filename ILIKE '%.jpeg'"
+            ")"
+        ))
+        db.commit()
+        if result.rowcount > 0:
+            logger.info("Fixed %d stuck image document(s)", result.rowcount)
+        db.close()
+    except Exception as exc:
+        logger.warning("Image document fix skipped: %s", exc)
+
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
