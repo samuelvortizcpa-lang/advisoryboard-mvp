@@ -155,10 +155,7 @@ a:hover { text-decoration: underline; }
   margin-bottom: 6px;
 }
 
-.select-wrapper {
-  position: relative;
-}
-
+/* Tag select (keep .select for the document tag dropdown) */
 .select {
   width: 100%;
   padding: 8px 12px;
@@ -187,18 +184,197 @@ a:hover { text-decoration: underline; }
   color: #e2e8f0;
 }
 
-.badge {
+/* ---------------------------------------------------------------------------
+   Client picker (custom searchable dropdown)
+   --------------------------------------------------------------------------- */
+
+.client-picker {
+  position: relative;
+}
+
+.client-picker-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #e2e8f0;
+  background: #1a1f2e;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  text-align: left;
+  gap: 6px;
+}
+
+.client-picker-btn:hover {
+  border-color: #475569;
+}
+
+.client-picker-btn.open {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.15);
+}
+
+.client-picker-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-picker-text.placeholder {
+  color: #64748b;
+}
+
+.client-picker-chevron {
+  flex-shrink: 0;
+  color: #64748b;
+  transition: transform 0.15s;
+}
+
+.client-picker-btn.open .client-picker-chevron {
+  transform: rotate(180deg);
+}
+
+/* Shimmer loading state */
+.client-picker-btn.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.client-picker-btn.loading::after {
+  content: '';
   position: absolute;
-  right: 36px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0; left: -100%; width: 200%; height: 100%;
+  background: linear-gradient(90deg, transparent 25%, rgba(20, 184, 166, 0.06) 50%, transparent 75%);
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  to { transform: translateX(50%); }
+}
+
+/* Dropdown panel */
+.client-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #1a1f2e;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.client-search-wrap {
+  padding: 8px;
+  border-bottom: 1px solid #2d3748;
+}
+
+.client-search {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #2d3748;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #e2e8f0;
+  background: #0f1419;
+  outline: none;
+}
+
+.client-search:focus {
+  border-color: #14b8a6;
+}
+
+.client-search::placeholder {
+  color: #475569;
+}
+
+.client-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.client-list-divider {
+  padding: 4px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.client-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #e2e8f0;
+  transition: background 0.1s;
+}
+
+.client-option:hover {
+  background: rgba(20, 184, 166, 0.08);
+}
+
+.client-option.selected {
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.client-option.auto-match-suggestion {
+  border-left: 2px solid #14b8a6;
+  background: rgba(20, 184, 166, 0.06);
+}
+
+.client-option-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-option-biz {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+/* Auto-match badge (inline in the picker button) */
+.match-badge {
+  flex-shrink: 0;
   font-size: 10px;
   font-weight: 500;
-  color: #14b8a6;
-  background: rgba(20, 184, 166, 0.12);
   padding: 2px 6px;
   border-radius: 4px;
   pointer-events: none;
+}
+
+.match-badge.high {
+  color: #14b8a6;
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.match-badge.medium {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.client-list-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #475569;
 }
 
 /* ---------------------------------------------------------------------------

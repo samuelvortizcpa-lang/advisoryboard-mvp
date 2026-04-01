@@ -13,9 +13,9 @@ import {
 } from '../services/api.js';
 import {
   captureTextSelection, captureFullPage, captureFileUrl,
-  captureScreenshot,
+  captureScreenshot, getPageMetadata,
 } from '../services/capture.js';
-import { getCachedClients } from '../utils/storage.js';
+import { getCachedClients, addRecentClientId, getRecentClientIds } from '../utils/storage.js';
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -26,8 +26,13 @@ const mainScreen = document.getElementById('main-screen');
 const signInBtn = document.getElementById('sign-in-btn');
 const signOutBtn = document.getElementById('sign-out-btn');
 const userEmail = document.getElementById('user-email');
-const clientSelect = document.getElementById('client-select');
+const clientSelectHidden = document.getElementById('client-select');
+const clientPickerBtn = document.getElementById('client-picker-btn');
+const clientPickerText = document.getElementById('client-picker-text');
 const autoMatchBadge = document.getElementById('auto-match-badge');
+const clientDropdown = document.getElementById('client-dropdown');
+const clientSearch = document.getElementById('client-search');
+const clientListEl = document.getElementById('client-list');
 const tagSelect = document.getElementById('tag-select');
 const contentPreview = document.getElementById('content-preview');
 const previewBody = document.getElementById('preview-body');
@@ -53,7 +58,11 @@ let activeMode = 'text';
 let activeTab = null;
 let selectedText = '';
 let extensionConfig = null;
-const CLIENT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+let allClients = [];         // full client list
+let recentClientIds = [];    // last 5 used client IDs
+let autoMatchResult = null;  // { client_id, client_name, match_method, confidence }
+let selectedClientId = '';
+const CLIENT_CACHE_TTL = 5 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Init
@@ -86,7 +95,6 @@ async function init() {
     const session = await chrome.storage.session.get('pending_capture');
     pendingCapture = session.pending_capture;
     if (pendingCapture && Date.now() - pendingCapture.timestamp < 30000) {
-      // Use the pending capture's mode
       setMode(pendingCapture.capture_type === 'text_selection' ? 'text' :
               pendingCapture.capture_type === 'full_page' ? 'page' :
               pendingCapture.capture_type === 'file_url' ? 'file' : 'page');
@@ -96,6 +104,9 @@ async function init() {
     await chrome.storage.session.remove('pending_capture');
   } catch { /* no session storage */ }
 
+  // Load recently used client IDs
+  recentClientIds = await getRecentClientIds();
+
   // Load config + clients in parallel
   try {
     const [config, clients] = await Promise.all([
@@ -104,12 +115,13 @@ async function init() {
     ]);
 
     extensionConfig = config;
-    populateClients(clients);
+    allClients = Array.isArray(clients) ? clients : [];
+    renderClientList();
     updateUsage(config);
 
-    // Auto-match client if enabled
+    // Auto-match if enabled (non-blocking UI — show shimmer while loading)
     if (config?.auto_match && activeTab?.url) {
-      await tryAutoMatch();
+      tryAutoMatch();
     }
   } catch (err) {
     handleApiError(err);
@@ -143,61 +155,249 @@ function showScreen(screen) {
 // ---------------------------------------------------------------------------
 
 async function loadConfig() {
-  const config = await getExtensionConfig();
-  return config;
+  return getExtensionConfig();
 }
 
 async function loadClients() {
-  // Use cache if fresh enough
   const cached = await getCachedClients();
   if (cached && cached._ts && Date.now() - cached._ts < CLIENT_CACHE_TTL) {
     return cached.clients;
   }
-
-  const clients = await getClients();
-  return clients;
+  return getClients();
 }
 
-function populateClients(clients) {
-  if (!Array.isArray(clients)) return;
+// ---------------------------------------------------------------------------
+// Client picker — custom searchable dropdown
+// ---------------------------------------------------------------------------
 
-  clientSelect.innerHTML = '<option value="">Select a client...</option>' +
-    clients.map(c => {
-      const label = c.business_name ? `${c.name} — ${c.business_name}` : c.name;
-      return `<option value="${c.id}">${escapeHtml(label)}</option>`;
-    }).join('');
+function renderClientList(filter = '') {
+  const query = filter.toLowerCase().trim();
+
+  // Sort all clients alphabetically
+  const sorted = [...allClients].sort((a, b) =>
+    (a.name || '').localeCompare(b.name || ''));
+
+  // Split into groups
+  const recentSet = new Set(recentClientIds);
+  const recentClients = recentClientIds
+    .map(id => sorted.find(c => c.id === id))
+    .filter(Boolean);
+  const otherClients = sorted.filter(c => !recentSet.has(c.id));
+
+  // Apply search filter
+  const filterFn = (c) => {
+    if (!query) return true;
+    const name = (c.name || '').toLowerCase();
+    const biz = (c.business_name || '').toLowerCase();
+    return name.includes(query) || biz.includes(query);
+  };
+
+  let html = '';
+
+  // Auto-match suggestion at top
+  if (autoMatchResult && !query) {
+    const mc = sorted.find(c => c.id === autoMatchResult.client_id);
+    if (mc) {
+      const conf = autoMatchResult.confidence || 'high';
+      const method = autoMatchResult.match_method || 'match';
+      html += `<div class="client-list-divider">Suggested match</div>`;
+      html += clientOptionHtml(mc, true, conf, method);
+    }
+  }
+
+  // Recently used
+  const filteredRecent = recentClients.filter(filterFn);
+  if (filteredRecent.length > 0) {
+    html += `<div class="client-list-divider">Recently used</div>`;
+    filteredRecent.slice(0, 3).forEach(c => {
+      // Don't duplicate auto-match suggestion
+      if (autoMatchResult?.client_id === c.id && !query) return;
+      html += clientOptionHtml(c, false);
+    });
+  }
+
+  // All clients
+  const filteredOther = otherClients.filter(filterFn);
+  const filteredAll = query
+    ? sorted.filter(filterFn)
+    : filteredOther;
+
+  if (filteredAll.length > 0) {
+    if (!query) html += `<div class="client-list-divider">All clients</div>`;
+    filteredAll.forEach(c => {
+      // Skip if already shown in auto-match or recent
+      if (!query && autoMatchResult?.client_id === c.id) return;
+      if (!query && recentSet.has(c.id)) return;
+      html += clientOptionHtml(c, false);
+    });
+  }
+
+  if (!html) {
+    html = '<div class="client-list-empty">No clients found</div>';
+  }
+
+  clientListEl.innerHTML = html;
+
+  // Attach click handlers
+  clientListEl.querySelectorAll('.client-option').forEach(el => {
+    el.addEventListener('click', () => {
+      selectClient(el.dataset.id, el.dataset.name);
+      closeDropdown();
+    });
+  });
 }
+
+function clientOptionHtml(client, isAutoMatch, confidence, method) {
+  const selected = client.id === selectedClientId ? ' selected' : '';
+  const matchClass = isAutoMatch ? ' auto-match-suggestion' : '';
+  const label = escapeHtml(client.name || 'Unnamed');
+  const biz = client.business_name ? `<span class="client-option-biz">${escapeHtml(client.business_name)}</span>` : '';
+  const badge = isAutoMatch
+    ? `<span class="match-badge ${confidence}">${escapeHtml(method)}</span>`
+    : '';
+
+  return `<div class="client-option${matchClass}${selected}" data-id="${client.id}" data-name="${escapeHtml(client.name || 'Unnamed')}">
+    <span class="client-option-name">${label}</span>${biz}${badge}
+  </div>`;
+}
+
+function selectClient(clientId, clientName) {
+  selectedClientId = clientId;
+  clientSelectHidden.value = clientId;
+
+  // Update button text
+  clientPickerText.textContent = clientName;
+  clientPickerText.classList.remove('placeholder');
+
+  // Show match badge in button if auto-matched
+  if (autoMatchResult && autoMatchResult.client_id === clientId) {
+    const conf = autoMatchResult.confidence || 'high';
+    const method = autoMatchResult.match_method || 'match';
+    autoMatchBadge.textContent = `Auto-matched via ${method}`;
+    autoMatchBadge.className = `match-badge ${conf}`;
+  } else {
+    autoMatchBadge.classList.add('hidden');
+  }
+
+  // Highlight in list
+  clientListEl.querySelectorAll('.client-option').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === clientId);
+  });
+
+  updateCaptureButton();
+}
+
+// Dropdown open/close
+clientPickerBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const isOpen = clientDropdown.classList.contains('hidden');
+  if (isOpen) openDropdown();
+  else closeDropdown();
+});
+
+function openDropdown() {
+  clientDropdown.classList.remove('hidden');
+  clientPickerBtn.classList.add('open');
+  clientSearch.value = '';
+  renderClientList();
+  // Focus search after a tick so the dropdown is visible
+  setTimeout(() => clientSearch.focus(), 10);
+}
+
+function closeDropdown() {
+  clientDropdown.classList.add('hidden');
+  clientPickerBtn.classList.remove('open');
+}
+
+// Close on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#client-picker')) {
+    closeDropdown();
+  }
+});
+
+// Search filter
+clientSearch.addEventListener('input', () => {
+  renderClientList(clientSearch.value);
+});
+
+// Keyboard nav
+clientSearch.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeDropdown();
+    return;
+  }
+  if (e.key === 'Enter') {
+    const first = clientListEl.querySelector('.client-option');
+    if (first) {
+      selectClient(first.dataset.id, first.dataset.name);
+      closeDropdown();
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Auto-match
+// ---------------------------------------------------------------------------
 
 async function tryAutoMatch() {
+  // Show loading state on picker
+  clientPickerText.textContent = 'Finding matching client...';
+  clientPickerText.classList.add('placeholder');
+  clientPickerBtn.classList.add('loading');
+
   try {
-    // Get page metadata from content script
     let pageData;
     try {
-      pageData = await chrome.tabs.sendMessage(activeTab.id, { type: 'GET_PAGE_METADATA' });
+      pageData = await getPageMetadata(activeTab.id);
     } catch {
       pageData = {
         url: activeTab.url,
         domain: new URL(activeTab.url).hostname,
-        page_text_snippet: activeTab.title || '',
+        title: activeTab.title || '',
+        emails: [],
+        companyNames: [],
       };
     }
 
     const result = await matchClient({
       url: pageData.url || activeTab.url,
-      email_addresses: pageData.email_addresses || [],
-      company_names: [],
-      page_title: activeTab.title || '',
+      email_addresses: pageData.emails || [],
+      company_names: pageData.companyNames || [],
+      page_title: pageData.title || activeTab.title || '',
     });
 
     if (result?.matched && result.client_id) {
-      clientSelect.value = result.client_id;
-      autoMatchBadge.classList.remove('hidden');
-      updateCaptureButton();
+      autoMatchResult = result;
+      renderClientList();
+      selectClient(result.client_id, result.client_name || getClientName(result.client_id));
+    } else {
+      // No match — reset to placeholder
+      resetPickerText();
     }
   } catch {
-    // Auto-match is best-effort
+    // Auto-match failed silently — just reset
+    resetPickerText();
+  }
+
+  clientPickerBtn.classList.remove('loading');
+}
+
+function getClientName(id) {
+  const c = allClients.find(cl => cl.id === id);
+  return c?.name || 'Unknown';
+}
+
+function resetPickerText() {
+  if (!selectedClientId) {
+    clientPickerText.textContent = 'Select a client...';
+    clientPickerText.classList.add('placeholder');
   }
 }
+
+// ---------------------------------------------------------------------------
+// Detect selected text
+// ---------------------------------------------------------------------------
 
 async function detectSelectedText() {
   if (!activeTab?.id) return;
@@ -211,10 +411,13 @@ async function detectSelectedText() {
       setMode('page');
     }
   } catch {
-    // Content script not available (chrome:// URLs, etc.)
     setMode('page');
   }
 }
+
+// ---------------------------------------------------------------------------
+// Recent captures list
+// ---------------------------------------------------------------------------
 
 async function loadRecentCaptures() {
   try {
@@ -238,7 +441,7 @@ async function loadRecentCaptures() {
     recentSection.classList.remove('hidden');
     viewAllLink.classList.remove('hidden');
   } catch {
-    // Recent captures are non-critical
+    // Non-critical
   }
 }
 
@@ -306,20 +509,14 @@ function updatePreview() {
 // Capture button state
 // ---------------------------------------------------------------------------
 
-clientSelect.addEventListener('change', () => {
-  autoMatchBadge.classList.add('hidden');
-  updateCaptureButton();
-});
-
 function updateCaptureButton() {
-  const clientId = clientSelect.value;
-  if (!clientId) {
+  if (!selectedClientId) {
     captureBtn.disabled = true;
     captureBtnText.textContent = 'Select a client to capture';
     return;
   }
 
-  const clientName = clientSelect.options[clientSelect.selectedIndex].text;
+  const clientName = getClientName(selectedClientId);
   captureBtn.disabled = false;
   captureBtnText.textContent = `Capture to ${clientName}`;
 }
@@ -331,12 +528,12 @@ function updateCaptureButton() {
 captureBtn.addEventListener('click', handleCapture);
 
 async function handleCapture() {
-  const clientId = clientSelect.value;
-  if (!clientId) {
+  if (!selectedClientId) {
     showStatus('Please select a client first.', 'error');
     return;
   }
 
+  const clientId = selectedClientId;
   const tag = tagSelect.value;
   setBtnLoading(true);
   hideStatus();
@@ -383,12 +580,14 @@ async function handleCapture() {
       site_domain: activeTab?.url ? extractDomain(activeTab.url) : '',
     };
 
-    // Send to backend: content or image_data depending on capture type
     const capturePayload = payload.type === 'file_url'
       ? payload.file_url
       : (payload.image_data || payload.content || '');
 
     const result = await captureContent(clientId, payload.type, capturePayload, metadata, tag);
+
+    // Track recently used client
+    await addRecentClientId(clientId);
 
     // Success animation
     setBtnLoading(false);
@@ -407,7 +606,6 @@ async function handleCapture() {
       updateUsage(extensionConfig);
     }
 
-    // Show success, auto-close after 2s
     if (result?.warning) {
       showStatus(result.warning, 'success');
     }
@@ -429,12 +627,14 @@ function setBtnLoading(loading) {
   captureSpinner.classList.toggle('hidden', !loading);
   captureCheck.classList.add('hidden');
 
-  // Disable all tabs and selectors during capture
   document.querySelectorAll('.tab, .select').forEach(el => {
     el.disabled = loading;
     if (loading) el.style.pointerEvents = 'none';
     else el.style.pointerEvents = '';
   });
+
+  // Disable client picker during capture
+  clientPickerBtn.disabled = loading;
 }
 
 function showBtnSuccess() {
@@ -450,7 +650,6 @@ function showBtnSuccess() {
 
 function updateUsage(config) {
   if (!config || config.captures_per_day === -1) {
-    // Unlimited tier
     usageSection.classList.remove('hidden');
     usageText.textContent = `${config.captures_today || 0} captures today (unlimited)`;
     progressBar.style.width = '0%';
@@ -543,7 +742,6 @@ signOutBtn.addEventListener('click', async () => {
   showScreen('auth');
 });
 
-// Listen for auth state changes from the service worker
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'AUTH_STATE_CHANGED' && message.authenticated) {
     init();

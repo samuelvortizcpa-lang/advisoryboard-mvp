@@ -82,12 +82,20 @@
       <!-- Client selector -->
       <div class="section">
         <label class="label">Client</label>
-        <div class="select-wrapper">
-          <select id="client-select" class="select">
-            <option value="">Select a client...</option>
-          </select>
-          <span id="auto-match-badge" class="badge hidden">auto-matched</span>
+        <div id="client-picker" class="client-picker">
+          <button id="client-picker-btn" class="client-picker-btn" type="button">
+            <span id="client-picker-text" class="client-picker-text">Select a client...</span>
+            <span id="auto-match-badge" class="match-badge hidden"></span>
+            <svg class="client-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="client-dropdown" class="client-dropdown hidden">
+            <div class="client-search-wrap">
+              <input id="client-search" class="client-search" type="text" placeholder="Search clients..." autocomplete="off">
+            </div>
+            <div id="client-list" class="client-list"></div>
+          </div>
         </div>
+        <input id="client-select" type="hidden" value="">
       </div>
 
       <!-- Document tag selector -->
