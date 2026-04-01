@@ -1235,7 +1235,13 @@ function addAiMessage(answer, confidenceTier, confidenceScore, sources) {
   el.className = 'msg-ai';
 
   const tier = (confidenceTier || 'medium').toLowerCase();
-  const pct = confidenceScore != null ? `${Math.round(confidenceScore * 100)}%` : '';
+  let pct = '';
+  if (confidenceScore != null) {
+    let s = confidenceScore;
+    if (s > 100) s = s / 100;       // undo double-multiplication
+    if (s > 0 && s <= 1) s = s * 100; // convert 0-1 range to percentage
+    pct = s.toFixed(1) + '%';
+  }
   const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
 
   let html = `<div class="confidence-row">
