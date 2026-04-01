@@ -16,59 +16,10 @@ import { getAuthToken, setAuthToken, clearAuthToken, clearAll } from '../utils/s
 // ---------------------------------------------------------------------------
 
 export async function signIn() {
-  return new Promise((resolve, reject) => {
-    const callbackPrefix = `${CONFIG.APP_URL}/extension-auth-callback`;
-    let authTabId = null;
-    let settled = false;
-
-    const cleanup = () => {
-      chrome.tabs.onUpdated.removeListener(listener);
-      clearTimeout(timeout);
-    };
-
-    const settle = async (token, error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-
-      // Close the auth tab if it's still open
-      if (authTabId !== null) {
-        try { await chrome.tabs.remove(authTabId); } catch { /* already closed */ }
-      }
-
-      if (error) return reject(error);
-      resolve(token);
-    };
-
-    // Timeout after 5 minutes — user may have closed the tab
-    const timeout = setTimeout(() => {
-      settle(null, new Error('Sign-in timed out. Please try again.'));
-    }, 5 * 60 * 1000);
-
-    // Watch for the callback URL
-    const listener = async (tabId, changeInfo) => {
-      if (changeInfo.url && changeInfo.url.startsWith(callbackPrefix)) {
-        try {
-          const url = new URL(changeInfo.url);
-          const token = url.searchParams.get('token');
-          if (!token) {
-            return settle(null, new Error('No token in callback URL.'));
-          }
-          await setAuthToken(token);
-          settle(token, null);
-        } catch (err) {
-          settle(null, err);
-        }
-      }
-    };
-
-    chrome.tabs.onUpdated.addListener(listener);
-
-    // Open sign-in page
-    chrome.tabs.create({ url: `${CONFIG.APP_URL}/extension-auth-callback` })
-      .then(tab => { authTabId = tab.id; })
-      .catch(err => settle(null, err));
-  });
+  // Just open the auth callback page. The content script running on that page
+  // will detect the ?token= parameter and relay it to the service worker via
+  // AUTH_TOKEN_FROM_PAGE message. No tabs.onUpdated watcher needed.
+  await chrome.tabs.create({ url: `${CONFIG.APP_URL}/extension-auth-callback` });
 }
 
 // ---------------------------------------------------------------------------
@@ -111,60 +62,12 @@ export async function isAuthenticated() {
 // ---------------------------------------------------------------------------
 
 export async function refreshSession() {
-  return new Promise((resolve, reject) => {
-    const callbackPrefix = `${CONFIG.APP_URL}/extension-auth-callback`;
-    let refreshTabId = null;
-    let settled = false;
-
-    const cleanup = () => {
-      chrome.tabs.onUpdated.removeListener(listener);
-      clearTimeout(timeout);
-    };
-
-    const settle = async (token, error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-
-      if (refreshTabId !== null) {
-        try { await chrome.tabs.remove(refreshTabId); } catch { /* already closed */ }
-      }
-
-      if (error) return reject(error);
-      resolve(token);
-    };
-
-    const timeout = setTimeout(() => {
-      settle(null, new Error('Session refresh timed out.'));
-    }, 30 * 1000);
-
-    const listener = async (tabId, changeInfo) => {
-      if (changeInfo.url && changeInfo.url.startsWith(callbackPrefix)) {
-        try {
-          const url = new URL(changeInfo.url);
-          const token = url.searchParams.get('token');
-          if (token) {
-            await setAuthToken(token);
-            settle(token, null);
-          } else {
-            settle(null, new Error('No token in refresh callback.'));
-          }
-        } catch (err) {
-          settle(null, err);
-        }
-      }
-    };
-
-    chrome.tabs.onUpdated.addListener(listener);
-
-    // Open callwen.com in the background — if user has an active session,
-    // Clerk auto-authenticates and the app redirects to the callback
-    chrome.tabs.create({
-      url: `${CONFIG.APP_URL}/extension-auth-callback?refresh=true`,
-      active: false,
-    })
-      .then(tab => { refreshTabId = tab.id; })
-      .catch(err => settle(null, err));
+  // Open the callback page in the background. The content script will detect
+  // the token and relay it via AUTH_TOKEN_FROM_PAGE. The service worker closes
+  // the tab after receiving the token.
+  await chrome.tabs.create({
+    url: `${CONFIG.APP_URL}/extension-auth-callback?refresh=true`,
+    active: false,
   });
 }
 

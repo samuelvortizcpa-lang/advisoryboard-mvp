@@ -20,7 +20,40 @@ import {
 } from '../parsers/tax-software.js';
 
 // ---------------------------------------------------------------------------
-// Auth token relay (only on callwen.com)
+// Auth callback detection — relay JWT from /extension-auth-callback to service worker
+// ---------------------------------------------------------------------------
+
+(function detectAuthCallback() {
+  const path = window.location.pathname;
+  if (!path.startsWith('/extension-auth-callback')) return;
+
+  function extractAndSend() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (!token) return false;
+
+    chrome.runtime.sendMessage({ type: 'AUTH_TOKEN_FROM_PAGE', token }, () => {
+      // Ignore errors — service worker will handle it
+    });
+    return true;
+  }
+
+  // Immediate check (content script may load after the token is already in URL)
+  if (extractAndSend()) return;
+
+  // Polling fallback — SPA redirects may update the URL after content script loads
+  let attempts = 0;
+  const maxAttempts = 60; // 30 seconds at 500ms intervals
+  const interval = setInterval(() => {
+    attempts++;
+    if (extractAndSend() || attempts >= maxAttempts) {
+      clearInterval(interval);
+    }
+  }, 500);
+})();
+
+// ---------------------------------------------------------------------------
+// Auth token relay (only on callwen.com) — Clerk cookie passthrough
 // ---------------------------------------------------------------------------
 
 if (window.location.hostname === 'callwen.com' || window.location.hostname === 'localhost') {

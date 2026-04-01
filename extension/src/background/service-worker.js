@@ -118,36 +118,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // ---------------------------------------------------------------------------
-// Auth callback listener
+// Auth callback listener (old tabs.onUpdated approach removed — now handled
+// by content script sending AUTH_TOKEN_FROM_PAGE message)
 // ---------------------------------------------------------------------------
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  if (!changeInfo.url || !changeInfo.url.startsWith(AUTH_CALLBACK_PREFIX)) return;
-  // Wait until the callback page appends ?token=JWT before acting
-  if (!changeInfo.url.includes('token=')) return;
-
-  try {
-    const url = new URL(changeInfo.url);
-    const token = url.searchParams.get('token');
-    console.log('[Callwen] Auth callback detected, token present:', !!token);
-    if (token) {
-      await handleAuthToken(token);
-      await updateBadge();
-
-      // Pre-load monitoring rules after sign-in
-      loadRules(true).catch(() => {});
-
-      // Notify popup that auth state changed
-      chrome.runtime.sendMessage({ type: 'AUTH_STATE_CHANGED', authenticated: true })
-        .catch(() => { /* popup may not be open */ });
-
-      // Close the auth tab now that we have the token
-      chrome.tabs.remove(tabId).catch(() => {});
-    }
-  } catch {
-    // Malformed URL — ignore
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Badge management
@@ -257,6 +230,33 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Content script detected ?token= on /extension-auth-callback
+  if (message.type === 'AUTH_TOKEN_FROM_PAGE') {
+    (async () => {
+      try {
+        console.log('[Callwen] Auth token received from content script');
+        await handleAuthToken(message.token);
+        await updateBadge();
+        loadRules(true).catch(() => {});
+
+        // Notify sidepanel/popup that auth state changed
+        chrome.runtime.sendMessage({ type: 'AUTH_STATE_CHANGED', authenticated: true })
+          .catch(() => { /* views may not be open */ });
+
+        // Close the auth tab
+        if (sender.tab?.id) {
+          chrome.tabs.remove(sender.tab.id).catch(() => {});
+        }
+
+        sendResponse({ ok: true });
+      } catch {
+        sendResponse({ ok: false });
+      }
+    })();
+    return true; // async
+  }
+
+  // Clerk cookie relay from content script on callwen.com
   if (message.type === 'AUTH_TOKEN') {
     handleAuthToken(message.token)
       .then(() => updateBadge())
