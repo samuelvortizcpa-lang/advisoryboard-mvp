@@ -323,22 +323,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async
   }
 
-  // Screenshot capture — side panel requests full screenshot pipeline
+  // Screenshot capture — side panel requests full screenshot pipeline.
+  // Result is broadcast back via SCREENSHOT_RESULT (not sendResponse) because
+  // the message channel can close during the long user interaction.
   if (message.type === 'START_SCREENSHOT') {
     (async () => {
+      const send = (data) => {
+        chrome.runtime.sendMessage({ type: 'SCREENSHOT_RESULT', ...data }).catch(() => {});
+      };
       try {
         // 1. Find the active non-chrome tab
         const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         const tab = tabs?.find(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
         if (!tab) {
-          sendResponse({ error: 'Cannot capture Chrome system pages.' });
+          send({ error: 'Cannot capture Chrome system pages.' });
           return;
         }
 
         // 2. Inject region selection into the tab
         let region = null;
         try {
-          // Try content script message first (already injected)
           region = await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => reject(new Error('timeout')), 60000);
             chrome.tabs.sendMessage(tab.id, { type: 'START_SCREENSHOT_SELECTION' }, (resp) => {
@@ -360,13 +364,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               });
             });
           } catch {
-            sendResponse({ error: 'Cannot access this page. Try refreshing or switching tabs.' });
+            send({ error: 'Cannot access this page. Try refreshing or switching tabs.' });
             return;
           }
         }
 
         if (!region) {
-          sendResponse({ cancelled: true });
+          send({ cancelled: true });
           return;
         }
 
@@ -384,7 +388,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         if (w <= 0 || h <= 0) {
           bitmap.close();
-          sendResponse({ error: 'Selection too small. Please select a larger area.' });
+          send({ error: 'Selection too small. Please select a larger area.' });
           return;
         }
 
@@ -402,12 +406,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         const base64 = btoa(binary);
 
-        sendResponse({ imageData: base64, width: w, height: h });
+        send({ imageData: base64, width: w, height: h });
       } catch (err) {
-        sendResponse({ error: err.message || 'Screenshot capture failed.' });
+        send({ error: err.message || 'Screenshot capture failed.' });
       }
     })();
-    return true; // async
+    return false; // no sendResponse needed — result broadcast via separate message
   }
 
   // Monitoring preferences
