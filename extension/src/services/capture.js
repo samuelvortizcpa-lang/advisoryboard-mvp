@@ -138,17 +138,34 @@ export async function getPageMetadata(tabId) {
  * Wraps chrome.tabs.sendMessage with a timeout.
  */
 async function sendToContentScript(tabId, message) {
+  try {
+    return await trySendMessage(tabId, message);
+  } catch {
+    // Content script may not be injected yet — try injecting it manually
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content-script.js'],
+      });
+      return await trySendMessage(tabId, message);
+    } catch (retryErr) {
+      throw new Error(
+        'Cannot access this page. Try refreshing the page or switching to a regular web page.'
+      );
+    }
+  }
+}
+
+function trySendMessage(tabId, message) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error('Content script did not respond. Try refreshing the page.'));
+      reject(new Error('Content script did not respond.'));
     }, 10000);
 
     chrome.tabs.sendMessage(tabId, message, (response) => {
       clearTimeout(timeout);
       if (chrome.runtime.lastError) {
-        reject(new Error(
-          'Cannot access this page. The extension may not have permission to run here.'
-        ));
+        reject(new Error(chrome.runtime.lastError.message));
         return;
       }
       resolve(response);

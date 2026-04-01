@@ -124,6 +124,35 @@ const queryTimestamps = [];
 let monitoringPrefs = { enabled: true, muted_until: 0 };
 
 // ---------------------------------------------------------------------------
+// Tab detection — side panels don't always share window context
+// ---------------------------------------------------------------------------
+
+async function getActiveTab() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const good = tabs?.find(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+    if (good) return good;
+  } catch { /* fall through */ }
+
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const good = tabs?.find(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+    if (good) return good;
+  } catch { /* fall through */ }
+
+  try {
+    const tabs = await chrome.tabs.query({ active: true });
+    for (const tab of tabs) {
+      if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+        return tab;
+      }
+    }
+  } catch { /* fall through */ }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 
@@ -143,10 +172,7 @@ async function init() {
     .join('');
 
   // Get active tab info
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    activeTab = tab;
-  } catch { /* no tab access */ }
+  activeTab = await getActiveTab();
 
   // Check for pending capture from context menu
   let pendingCapture = null;
@@ -784,8 +810,7 @@ async function handleCapture() {
 
   try {
     if (!activeTab?.id) {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      activeTab = tab;
+      activeTab = await getActiveTab();
     }
 
     const tabId = activeTab?.id;
@@ -1098,7 +1123,7 @@ chatClientSearch.addEventListener('keydown', (e) => {
 
 async function checkSelectedTextForChat() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = await getActiveTab();
     if (!tab?.id) return;
     const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SELECTED_TEXT' });
     const text = response?.text?.trim();
@@ -1699,6 +1724,20 @@ chrome.runtime.onMessage.addListener((message) => {
     updatePreview();
     checkSelectedTextForChat();
   }
+});
+
+// Direct tab activation listener — more reliable than relying on service worker relay
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+      activeTab = tab;
+      autoMatchResult = null;
+      selectedText = '';
+      updatePreview();
+      detectParsedContent();
+    }
+  } catch { /* tab may not exist */ }
 });
 
 // Sync state from storage changes
