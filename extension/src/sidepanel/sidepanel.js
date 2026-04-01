@@ -54,6 +54,7 @@ const progressBar = document.getElementById('progress-bar');
 const recentSection = document.getElementById('recent-section');
 const recentToggleBtn = document.getElementById('recent-toggle');
 const recentListEl = document.getElementById('recent-list');
+const recentRefreshBtn = document.getElementById('recent-refresh');
 const quickRuleLink = document.getElementById('quick-rule-link');
 const createRuleFromMatch = document.getElementById('create-rule-from-match');
 
@@ -204,6 +205,9 @@ async function init() {
     renderClientList();
     renderChatClientList();
     updateUsage(config);
+
+    // Load recent captures (non-blocking)
+    loadRecentCaptures().catch(() => {});
 
     // Set up chat availability
     if (!config.quick_query) {
@@ -642,44 +646,97 @@ function showParserBadge(response) {
 // Recent captures (collapsible section in capture panel)
 // ---------------------------------------------------------------------------
 
-let recentLoaded = false;
+let recentLastFetched = 0;
+const RECENT_CACHE_TTL = 60 * 1000; // 60 seconds
+
+const CAPTURE_TYPE_ICONS = {
+  text_selection: '📝',
+  full_page: '📄',
+  file_url: '📎',
+  screenshot: '📸',
+  email: '✉️',
+};
 
 recentToggleBtn.addEventListener('click', () => {
   const isOpen = recentToggleBtn.classList.contains('open');
   recentToggleBtn.classList.toggle('open', !isOpen);
   recentListEl.classList.toggle('hidden', isOpen);
-  if (!isOpen && !recentLoaded) loadRecentCaptures();
+  if (!isOpen) loadRecentCaptures();
 });
 
-async function loadRecentCaptures() {
-  if (recentLoaded) return;
+recentRefreshBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  recentLastFetched = 0; // force refresh
+  loadRecentCaptures();
+});
+
+async function loadRecentCaptures(force = false) {
+  if (!force && Date.now() - recentLastFetched < RECENT_CACHE_TTL) return;
+
+  // Show loading skeleton
+  recentListEl.innerHTML = Array.from({ length: 3 }, () =>
+    `<div class="recent-skeleton">
+      <div class="skel-icon"></div>
+      <div class="skel-body">
+        <div class="skel-line skel-line-long"></div>
+        <div class="skel-line skel-line-short"></div>
+      </div>
+    </div>`
+  ).join('');
+  recentListEl.classList.remove('hidden');
+  recentSection.classList.remove('hidden');
+  recentRefreshBtn.classList.add('spinning');
 
   try {
     const captures = await getRecentCaptures();
     const items = Array.isArray(captures) ? captures : (captures?.captures || []);
+    recentLastFetched = Date.now();
 
     if (items.length === 0) {
       recentListEl.innerHTML = '<div class="rules-empty"><p>No recent captures yet.</p></div>';
-      recentListEl.classList.remove('hidden');
+      recentRefreshBtn.classList.remove('spinning');
       return;
     }
 
-    recentLoaded = true;
     const recent = items.slice(0, 10);
-    recentListEl.innerHTML = recent.map(c => {
-      const domain = c.source_url ? extractDomain(c.source_url) : '';
+    const html = recent.map(c => {
+      const icon = CAPTURE_TYPE_ICONS[c.capture_type] || '📄';
+      const name = c.filename || c.capture_type?.replace(/_/g, ' ') || 'Capture';
+      const truncName = name.length > 35 ? name.slice(0, 32) + '...' : name;
+      const client = c.client_name || 'Unknown';
       const time = c.created_at ? formatRelativeTime(c.created_at) : '';
-      return `<div class="recent-item">
-        <span class="recent-client">${escapeHtml(c.client_name || 'Unknown')}</span>
-        <div class="recent-meta">
-          ${domain ? `<span class="recent-url">${escapeHtml(domain)}</span>` : ''}
-          ${time ? `<span>${time}</span>` : ''}
+      const docId = c.document_id || '';
+      const clientId = c.client_id || '';
+      const href = clientId ? `${CONFIG.APP_URL}/dashboard/clients/${clientId}` : '';
+      return `<div class="recent-item" ${href ? `data-href="${escapeHtml(href)}"` : ''}>
+        <span class="recent-type-icon">${icon}</span>
+        <div class="recent-item-body">
+          <div class="recent-filename">${escapeHtml(truncName)}</div>
+          <div class="recent-item-meta">
+            <span class="recent-client-badge">${escapeHtml(client)}</span>
+            ${time ? `<span class="recent-time">${time}</span>` : ''}
+          </div>
         </div>
       </div>`;
     }).join('');
-    recentListEl.classList.remove('hidden');
-    recentSection.classList.remove('hidden');
+
+    recentListEl.innerHTML = html +
+      `<a class="recent-view-all" href="${CONFIG.APP_URL}/dashboard" target="_blank">View all in Callwen →</a>`;
+
+    // Make items clickable
+    recentListEl.querySelectorAll('.recent-item[data-href]').forEach(el => {
+      el.addEventListener('click', () => {
+        chrome.tabs.create({ url: el.dataset.href });
+      });
+    });
+
+    // Open the section if collapsed
+    if (!recentToggleBtn.classList.contains('open')) {
+      recentToggleBtn.classList.add('open');
+      recentListEl.classList.remove('hidden');
+    }
   } catch { /* non-critical */ }
+  recentRefreshBtn.classList.remove('spinning');
 }
 
 // ---------------------------------------------------------------------------
@@ -899,6 +956,10 @@ async function handleCapture() {
 
     setBtnLoading(false);
     showBtnSuccess();
+
+    // Refresh recent captures list
+    recentLastFetched = 0;
+    loadRecentCaptures();
 
     chrome.runtime.sendMessage({ type: 'CAPTURE_COMPLETE' }).catch(() => {});
 

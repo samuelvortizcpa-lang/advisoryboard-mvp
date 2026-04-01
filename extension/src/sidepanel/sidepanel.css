@@ -871,11 +871,16 @@ a:hover { text-decoration: underline; }
   margin-top: 12px;
 }
 
-.recent-toggle {
+.recent-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+}
+
+.recent-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px 0;
   border: none;
   background: transparent;
@@ -899,15 +904,46 @@ a:hover { text-decoration: underline; }
   transform: rotate(180deg);
 }
 
+.recent-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.recent-refresh:hover {
+  color: #c9944a;
+  background: #fdf6ec;
+}
+
+.recent-refresh.spinning svg {
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .recent-list {
   margin-top: 8px;
 }
 
 .recent-item {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 0;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
   border-bottom: 1px solid #f1f5f9;
 }
 
@@ -915,33 +951,115 @@ a:hover { text-decoration: underline; }
   border-bottom: none;
 }
 
-.recent-client {
+.recent-item:hover {
+  background: #f8fafc;
+}
+
+.recent-type-icon {
+  flex-shrink: 0;
+  width: 20px;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.recent-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-filename {
   font-size: 12px;
   font-weight: 500;
   color: #1a202c;
-}
-
-.recent-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-.recent-url {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 240px;
+}
+
+.recent-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.recent-client-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #c9944a;
+  background: #fdf6ec;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.recent-time {
+  font-size: 10px;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
 .recent-view-all {
   display: block;
-  margin-top: 8px;
+  margin-top: 10px;
+  padding: 6px 0;
   font-size: 11px;
   font-weight: 500;
   text-align: center;
+  color: #c9944a;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.recent-view-all:hover {
+  background: #fdf6ec;
+}
+
+/* Shimmer loading skeleton */
+.recent-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 6px;
+}
+
+.recent-skeleton .skel-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: #e2e8f0;
+}
+
+.recent-skeleton .skel-body {
+  flex: 1;
+}
+
+.recent-skeleton .skel-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.recent-skeleton .skel-line-short {
+  width: 60%;
+  margin-top: 6px;
+}
+
+.recent-skeleton .skel-line-long {
+  width: 85%;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* ---------------------------------------------------------------------------
