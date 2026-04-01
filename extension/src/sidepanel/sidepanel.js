@@ -115,10 +115,6 @@ let recentClientIds = [];
 let autoMatchResult = null;
 let selectedClientId = '';
 let parsedContent = null;
-// Screenshot state machine: 'idle' | 'selecting' | 'ready'
-let screenshotState = 'idle';
-let screenshotImageData = null;
-let screenshotDims = null;
 let monitoringRules = [];
 let activePanel = 'capture';
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
@@ -855,16 +851,6 @@ function setMode(mode) {
   document.querySelectorAll('.tab').forEach(t => {
     t.classList.toggle('active', t.dataset.mode === mode);
   });
-  // Reset screenshot state when switching away from screenshot mode
-  if (mode !== 'screenshot') {
-    resetScreenshotState();
-  }
-}
-
-function resetScreenshotState() {
-  screenshotState = 'idle';
-  screenshotImageData = null;
-  screenshotDims = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -936,81 +922,19 @@ function updatePreview() {
       previewBody.innerHTML = '<span class="preview-placeholder">Right-click a link and choose "Capture linked file"</span>';
       break;
 
-    case 'screenshot':
-      if (screenshotState === 'ready' && screenshotImageData) {
-        const w = screenshotDims?.width || 0;
-        const h = screenshotDims?.height || 0;
-        previewBody.innerHTML =
-          `<img src="data:image/png;base64,${screenshotImageData}" style="max-width:100%;max-height:120px;border-radius:4px;border:1px solid #e2e8f0;" />` +
-          `<div class="preview-url" style="display:flex;align-items:center;justify-content:space-between;">` +
-          `<span>${w} × ${h}px</span>` +
-          `<button id="screenshot-retake" style="background:none;border:none;color:#c9944a;font-size:11px;font-weight:500;cursor:pointer;">Retake</button>` +
-          `</div>`;
-        const retakeBtn = document.getElementById('screenshot-retake');
-        if (retakeBtn) retakeBtn.addEventListener('click', () => { resetScreenshotState(); updatePreview(); updateCaptureButton(); });
-      } else if (screenshotState === 'selecting') {
-        previewBody.innerHTML = '<span class="preview-placeholder">Selecting region on the page...</span>';
-      } else {
-        previewBody.innerHTML =
-          `<div id="screenshot-start-area" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px;border:1.5px dashed #cbd5e1;border-radius:8px;cursor:pointer;">` +
-          `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>` +
-          `<span style="font-size:12px;color:#64748b;">Click to select a region</span>` +
-          `</div>`;
-        const startArea = document.getElementById('screenshot-start-area');
-        if (startArea) startArea.addEventListener('click', () => startScreenshotCapture());
-      }
+    case 'screenshot': {
+      const title = activeTab?.title ? escapeHtml(activeTab.title) : 'Current page';
+      const url = activeTab?.url ? escapeHtml(activeTab.url) : '';
+      previewBody.innerHTML =
+        `<span class="preview-title">\u{1F4F8} Captures the visible area of the current page</span>` +
+        (url ? `<span class="preview-url">${title}</span>` : '');
       break;
+    }
 
     default:
       contentPreview.classList.add('hidden');
   }
 }
-
-// ---------------------------------------------------------------------------
-// Screenshot region selection (two-phase flow)
-// ---------------------------------------------------------------------------
-
-function startScreenshotCapture() {
-  if (screenshotState === 'selecting') return;
-  screenshotState = 'selecting';
-  screenshotImageData = null;
-  screenshotDims = null;
-
-  // Update UI to selecting state
-  captureBtn.disabled = true;
-  captureBtnText.classList.add('hidden');
-  captureSpinner.classList.remove('hidden');
-  updatePreview();
-
-  // Fire-and-forget — result comes back via SCREENSHOT_RESULT message
-  chrome.runtime.sendMessage({ type: 'START_SCREENSHOT' }).catch(() => {});
-}
-
-// Listen for screenshot results from the service worker
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === 'SCREENSHOT_RESULT') {
-    captureSpinner.classList.add('hidden');
-    captureBtnText.classList.remove('hidden');
-
-    if (message.cancelled) {
-      screenshotState = 'idle';
-      showStatus('Screenshot cancelled. Click capture to try again.', 'info');
-      updatePreview();
-      updateCaptureButton();
-    } else if (message.error) {
-      screenshotState = 'idle';
-      showStatus(message.error, 'error');
-      updatePreview();
-      updateCaptureButton();
-    } else if (message.imageData) {
-      screenshotState = 'ready';
-      screenshotImageData = message.imageData;
-      screenshotDims = { width: message.width, height: message.height };
-      updatePreview();
-      updateCaptureButton();
-    }
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Capture button state
@@ -1024,22 +948,6 @@ function updateCaptureButton() {
   }
 
   const clientName = getClientName(selectedClientId);
-
-  if (activeMode === 'screenshot') {
-    if (screenshotState === 'selecting') {
-      captureBtn.disabled = true;
-      captureBtnText.textContent = 'Selecting region...';
-    } else if (screenshotState === 'ready') {
-      captureBtn.disabled = false;
-      captureBtnText.textContent = `Capture to ${clientName}`;
-    } else {
-      // idle — button triggers region selection
-      captureBtn.disabled = false;
-      captureBtnText.textContent = `Select Region & Capture`;
-    }
-    return;
-  }
-
   captureBtn.disabled = false;
   captureBtnText.textContent = `Capture to ${clientName}`;
 }
@@ -1129,15 +1037,20 @@ async function handleCapture() {
       }
 
       case 'screenshot': {
-        if (screenshotState === 'idle' || !screenshotImageData) {
-          // Phase 1: start region selection, don't proceed to API
+        captureBtnText.textContent = 'Capturing...';
+        const ssResult = await chrome.runtime.sendMessage({ type: 'CAPTURE_VISIBLE_TAB' });
+        if (ssResult?.error) {
+          showStatus(ssResult.error, 'error');
           setBtnLoading(false);
-          startScreenshotCapture();
           return;
         }
-        // Phase 2: submit the captured image
+        if (!ssResult?.imageData) {
+          showStatus('Screenshot capture failed. Please try again.', 'error');
+          setBtnLoading(false);
+          return;
+        }
         captureType = 'screenshot';
-        capturePayload = screenshotImageData;
+        capturePayload = ssResult.imageData;
         break;
       }
     }
@@ -1155,7 +1068,7 @@ async function handleCapture() {
 
     setBtnLoading(false);
     showBtnSuccess();
-    resetScreenshotState();
+
 
     // Refresh recent captures list
     recentLastFetched = 0;
@@ -2074,7 +1987,7 @@ chrome.runtime.onMessage.addListener((message) => {
     autoMatchResult = null;
     selectedText = '';
     dismissedBadgeTabId = null;
-    resetScreenshotState();
+
     clearParserBadge(true);
     tagSelect.value = 'other';
     chrome.storage.session.remove('auto_match_result').catch(() => {});

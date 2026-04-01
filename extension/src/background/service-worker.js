@@ -323,95 +323,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async
   }
 
-  // Screenshot capture — side panel requests full screenshot pipeline.
-  // Result is broadcast back via SCREENSHOT_RESULT (not sendResponse) because
-  // the message channel can close during the long user interaction.
-  if (message.type === 'START_SCREENSHOT') {
+  // Screenshot capture — one-click full visible tab capture.
+  // captureVisibleTab completes in ~100ms so sendResponse is reliable here.
+  if (message.type === 'CAPTURE_VISIBLE_TAB') {
     (async () => {
-      const send = (data) => {
-        chrome.runtime.sendMessage({ type: 'SCREENSHOT_RESULT', ...data }).catch(() => {});
-      };
       try {
-        // 1. Find the active non-chrome tab
-        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-        const tab = tabs?.find(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         if (!tab) {
-          send({ error: 'Cannot capture Chrome system pages.' });
+          sendResponse({ error: 'No active tab found.' });
           return;
         }
-
-        // 2. Inject region selection into the tab
-        let region = null;
-        try {
-          region = await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('timeout')), 60000);
-            chrome.tabs.sendMessage(tab.id, { type: 'START_SCREENSHOT_SELECTION' }, (resp) => {
-              clearTimeout(timeout);
-              if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
-              resolve(resp?.region || null);
-            });
-          });
-        } catch {
-          // Inject content script and retry
-          try {
-            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content-script.js'] });
-            region = await new Promise((resolve, reject) => {
-              const timeout = setTimeout(() => reject(new Error('timeout')), 60000);
-              chrome.tabs.sendMessage(tab.id, { type: 'START_SCREENSHOT_SELECTION' }, (resp) => {
-                clearTimeout(timeout);
-                if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
-                resolve(resp?.region || null);
-              });
-            });
-          } catch {
-            send({ error: 'Cannot access this page. Try refreshing or switching tabs.' });
-            return;
-          }
-        }
-
-        if (!region) {
-          send({ cancelled: true });
-          return;
-        }
-
-        // 3. Capture the visible tab
         const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
-
-        // 4. Crop to the selected region using OffscreenCanvas
-        const blob = await (await fetch(dataUrl)).blob();
-        const bitmap = await createImageBitmap(blob);
-
-        const x = Math.max(0, Math.round(region.x));
-        const y = Math.max(0, Math.round(region.y));
-        const w = Math.min(Math.round(region.width), bitmap.width - x);
-        const h = Math.min(Math.round(region.height), bitmap.height - y);
-
-        if (w <= 0 || h <= 0) {
-          bitmap.close();
-          send({ error: 'Selection too small. Please select a larger area.' });
-          return;
-        }
-
-        const canvas = new OffscreenCanvas(w, h);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(bitmap, x, y, w, h, 0, 0, w, h);
-        bitmap.close();
-
-        const outputBlob = await canvas.convertToBlob({ type: 'image/png' });
-        const buffer = await outputBlob.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64 = btoa(binary);
-
-        send({ imageData: base64, width: w, height: h });
+        const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+        sendResponse({ imageData: base64 });
       } catch (err) {
-        send({ error: err.message || 'Screenshot capture failed.' });
+        sendResponse({ error: 'Cannot capture this page. Try a different tab.' });
       }
     })();
-    return false; // no sendResponse needed — result broadcast via separate message
+    return true; // async sendResponse
   }
 
   // Monitoring preferences
