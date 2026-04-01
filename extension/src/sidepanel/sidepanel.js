@@ -51,6 +51,12 @@ const usageSection = document.getElementById('usage-section');
 const usageText = document.getElementById('usage-text');
 const upgradeLink = document.getElementById('upgrade-link');
 const progressBar = document.getElementById('progress-bar');
+const usageFooter = document.getElementById('usage-footer');
+const footerUsageText = document.getElementById('footer-usage-text');
+const footerTierBadge = document.getElementById('footer-tier-badge');
+const footerProgressTrack = document.getElementById('footer-progress-track');
+const footerProgressBar = document.getElementById('footer-progress-bar');
+const footerUpgrade = document.getElementById('footer-upgrade');
 const recentSection = document.getElementById('recent-section');
 const recentToggleBtn = document.getElementById('recent-toggle');
 const recentListEl = document.getElementById('recent-list');
@@ -205,6 +211,7 @@ async function init() {
     renderClientList();
     renderChatClientList();
     updateUsage(config);
+    updateFooterUsage(config);
 
     // Load recent captures (non-blocking)
     loadRecentCaptures().catch(() => {});
@@ -970,6 +977,7 @@ async function handleCapture() {
           (extensionConfig.captures_remaining || 0) - 1);
       }
       updateUsage(extensionConfig);
+      updateFooterUsage(extensionConfig);
     }
 
   } catch (err) {
@@ -1045,6 +1053,68 @@ function updateUsage(config) {
       upgradeLink.classList.add('hidden');
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Footer usage bar (persistent across all tabs)
+// ---------------------------------------------------------------------------
+
+function updateFooterUsage(config) {
+  if (!config) return;
+
+  usageFooter.classList.remove('hidden');
+
+  const used = config.captures_today || 0;
+  const total = config.captures_per_day;
+  const tier = config.tier || 'free';
+  const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+
+  footerTierBadge.textContent = tierLabel;
+
+  // Unlimited (firm tier or captures_per_day is null/-1)
+  if (!total || total === -1) {
+    footerUsageText.textContent = `${used} captures today`;
+    footerProgressBar.style.width = '100%';
+    footerProgressBar.className = 'footer-progress-bar';
+    footerProgressTrack.style.display = '';
+    footerUpgrade.classList.add('hidden');
+    usageFooter.title = `You've used ${used} captures today. Unlimited on your plan.`;
+    return;
+  }
+
+  const remaining = config.captures_remaining ?? (total - used);
+  const pct = Math.min(100, (used / total) * 100);
+  const atLimit = remaining <= 0;
+
+  // Text
+  if (atLimit) {
+    footerUsageText.textContent = 'Daily limit reached';
+  } else {
+    footerUsageText.textContent = `${used} / ${total} captures today`;
+  }
+
+  // Progress bar color
+  footerProgressBar.style.width = `${pct}%`;
+  footerProgressBar.classList.remove('bar-warning', 'bar-danger');
+  if (pct >= 100) {
+    footerProgressBar.classList.add('bar-danger');
+  } else if (pct >= 80) {
+    footerProgressBar.classList.add('bar-warning');
+  }
+
+  // Upgrade link
+  if (atLimit) {
+    footerUpgrade.classList.remove('hidden');
+    if (tier === 'free') {
+      footerUpgrade.classList.add('prominent');
+    } else {
+      footerUpgrade.classList.remove('prominent');
+    }
+  } else {
+    footerUpgrade.classList.add('hidden');
+  }
+
+  usageFooter.title = `You've used ${used} of ${total} daily captures. Resets at midnight UTC.`;
 }
 
 // ---------------------------------------------------------------------------

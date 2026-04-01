@@ -1660,3 +1660,86 @@ a:hover { text-decoration: underline; }
 .btn-danger:hover {
   background: #dc2626;
 }
+
+/* ---------------------------------------------------------------------------
+   Usage footer (persistent across all tabs)
+   --------------------------------------------------------------------------- */
+
+.usage-footer {
+  flex-shrink: 0;
+  padding: 6px 16px 8px;
+  border-top: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  position: relative;
+}
+
+.footer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.footer-usage-text {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.footer-tier-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #c9944a;
+  background: #fdf6ec;
+  border-radius: 10px;
+  text-transform: capitalize;
+}
+
+.footer-progress-track {
+  width: 100%;
+  height: 3px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.footer-progress-bar {
+  height: 100%;
+  background: #c9944a;
+  border-radius: 2px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+  width: 0%;
+}
+
+.footer-progress-bar.bar-warning {
+  background: #e88c30;
+}
+
+.footer-progress-bar.bar-danger {
+  background: #ef4444;
+}
+
+.footer-upgrade {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #c9944a;
+  text-align: center;
+  text-decoration: none;
+}
+
+.footer-upgrade:hover {
+  text-decoration: underline;
+}
+
+.footer-upgrade.prominent {
+  font-size: 12px;
+  color: #b8842f;
+}
+
+/* Tooltip on hover */
+.usage-footer[title] {
+  cursor: default;
+}
