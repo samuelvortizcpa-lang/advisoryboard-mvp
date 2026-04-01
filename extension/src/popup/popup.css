@@ -16,7 +16,7 @@ body {
   background: #f8fafc;
 }
 
-a { color: #14b8a6; text-decoration: none; }
+a { color: #c9944a; text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .hidden { display: none !important; }
@@ -96,7 +96,7 @@ a:hover { text-decoration: underline; }
 /* Monitoring bell toggle */
 .monitoring-bell {
   position: relative;
-  color: #14b8a6;
+  color: #c9944a;
 }
 
 .monitoring-bell.muted {
@@ -171,8 +171,8 @@ a:hover { text-decoration: underline; }
 }
 
 .tab.active {
-  color: #14b8a6;
-  border-bottom-color: #14b8a6;
+  color: #c9944a;
+  border-bottom-color: #c9944a;
 }
 
 .tab svg {
@@ -181,7 +181,7 @@ a:hover { text-decoration: underline; }
 
 .tab.active svg {
   opacity: 1;
-  stroke: #14b8a6;
+  stroke: #c9944a;
 }
 
 /* Parser detection badge */
@@ -190,10 +190,10 @@ a:hover { text-decoration: underline; }
   align-items: center;
   gap: 6px;
   padding: 6px 16px;
-  background: #e6fffa;
+  background: #fdf6ec;
   border-bottom: 1px solid #e2e8f0;
   font-size: 11px;
-  color: #14b8a6;
+  color: #c9944a;
   font-weight: 500;
 }
 
@@ -249,8 +249,8 @@ a:hover { text-decoration: underline; }
 }
 
 .select:focus {
-  border-color: #14b8a6;
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.15);
+  border-color: #c9944a;
+  box-shadow: 0 0 0 2px rgba(201, 148, 74, 0.15);
 }
 
 .select option {
@@ -287,8 +287,8 @@ a:hover { text-decoration: underline; }
 }
 
 .client-picker-btn.open {
-  border-color: #14b8a6;
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.15);
+  border-color: #c9944a;
+  box-shadow: 0 0 0 2px rgba(201, 148, 74, 0.15);
 }
 
 .client-picker-text {
@@ -322,7 +322,7 @@ a:hover { text-decoration: underline; }
   content: '';
   position: absolute;
   top: 0; left: -100%; width: 200%; height: 100%;
-  background: linear-gradient(90deg, transparent 25%, rgba(20, 184, 166, 0.06) 50%, transparent 75%);
+  background: linear-gradient(90deg, transparent 25%, rgba(201, 148, 74, 0.06) 50%, transparent 75%);
   animation: shimmer 1.5s infinite;
 }
 
@@ -363,7 +363,7 @@ a:hover { text-decoration: underline; }
 }
 
 .client-search:focus {
-  border-color: #14b8a6;
+  border-color: #c9944a;
 }
 
 .client-search::placeholder {
@@ -400,12 +400,12 @@ a:hover { text-decoration: underline; }
 }
 
 .client-option.selected {
-  background: #e6fffa;
+  background: #fdf6ec;
 }
 
 .client-option.auto-match-suggestion {
-  border-left: 2px solid #14b8a6;
-  background: #f0fdfa;
+  border-left: 2px solid #c9944a;
+  background: #fdf6ec;
 }
 
 .client-option-name {
@@ -435,8 +435,8 @@ a:hover { text-decoration: underline; }
 }
 
 .match-badge.high {
-  color: #14b8a6;
-  background: #e6fffa;
+  color: #c9944a;
+  background: #fdf6ec;
 }
 
 .match-badge.medium {
@@ -533,12 +533,12 @@ a:hover { text-decoration: underline; }
 }
 
 .btn-accent {
-  background: #14b8a6;
+  background: #c9944a;
   color: #ffffff;
 }
 
 .btn-accent:hover:not(:disabled) {
-  background: #0d9488;
+  background: #b8842f;
 }
 
 .btn-full {
@@ -611,8 +611,8 @@ a:hover { text-decoration: underline; }
 }
 
 .status.loading {
-  background: #f0fdfa;
-  color: #14b8a6;
+  background: #fdf6ec;
+  color: #c9944a;
 }
 
 /* ---------------------------------------------------------------------------
@@ -638,7 +638,7 @@ a:hover { text-decoration: underline; }
 .upgrade-link {
   font-size: 11px;
   font-weight: 600;
-  color: #14b8a6;
+  color: #c9944a;
 }
 
 .progress-track {
@@ -650,7 +650,7 @@ a:hover { text-decoration: underline; }
 
 .progress-bar {
   height: 100%;
-  background: #14b8a6;
+  background: #c9944a;
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -774,8 +774,8 @@ a:hover { text-decoration: underline; }
 }
 
 .main-tab.active {
-  color: #14b8a6;
-  border-bottom-color: #14b8a6;
+  color: #c9944a;
+  border-bottom-color: #c9944a;
 }
 
 .main-tab svg {
@@ -784,7 +784,7 @@ a:hover { text-decoration: underline; }
 
 .main-tab.active svg {
   opacity: 1;
-  stroke: #14b8a6;
+  stroke: #c9944a;
 }
 
 /* Panels (shown/hidden by main tabs) */
@@ -810,12 +810,12 @@ a:hover { text-decoration: underline; }
 }
 
 .quick-rule-link svg {
-  stroke: #14b8a6;
+  stroke: #c9944a;
   flex-shrink: 0;
 }
 
 .quick-rule-link a {
-  color: #14b8a6;
+  color: #c9944a;
   font-weight: 500;
 }
 
@@ -871,8 +871,8 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  background: #e6fffa;
-  color: #14b8a6;
+  background: #fdf6ec;
+  color: #c9944a;
   font-size: 13px;
 }
 
@@ -920,7 +920,7 @@ a:hover { text-decoration: underline; }
 }
 
 .toggle.on {
-  background: #14b8a6;
+  background: #c9944a;
 }
 
 .toggle::after {
@@ -990,8 +990,8 @@ a:hover { text-decoration: underline; }
 }
 
 .rule-input:focus {
-  border-color: #14b8a6;
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.15);
+  border-color: #c9944a;
+  box-shadow: 0 0 0 2px rgba(201, 148, 74, 0.15);
 }
 
 .rule-input::placeholder {

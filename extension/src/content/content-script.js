@@ -173,7 +173,7 @@ function startScreenshotSelection() {
     // Selection box
     const selBox = document.createElement('div');
     Object.assign(selBox.style, {
-      position: 'fixed', border: '2px solid #14b8a6', background: 'rgba(20, 184, 166, 0.1)',
+      position: 'fixed', border: '2px solid #c9944a', background: 'rgba(201, 148, 74, 0.1)',
       zIndex: '2147483647', pointerEvents: 'none', display: 'none',
     });
 
@@ -287,7 +287,7 @@ function showMonitoringBanner(clientName, ruleName) {
   const captureBtn = document.createElement('button');
   Object.assign(captureBtn.style, {
     padding: '4px 12px', borderRadius: '4px', border: 'none',
-    background: '#14b8a6', color: '#0f1419', fontSize: '12px',
+    background: '#c9944a', color: '#ffffff', fontSize: '12px',
     fontWeight: '600', cursor: 'pointer',
   });
   captureBtn.textContent = 'Capture';

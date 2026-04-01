@@ -17,7 +17,7 @@ body {
   overflow: hidden;
 }
 
-a { color: #14b8a6; text-decoration: none; }
+a { color: #c9944a; text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .hidden { display: none !important; }
@@ -71,12 +71,12 @@ a:hover { text-decoration: underline; }
 }
 
 .btn-accent {
-  background: #14b8a6;
+  background: #c9944a;
   color: #ffffff;
 }
 
 .btn-accent:hover {
-  background: #0d9488;
+  background: #b8842f;
 }
 
 .btn-full {
@@ -145,7 +145,7 @@ a:hover { text-decoration: underline; }
 }
 
 .sp-client-btn.open {
-  border-color: #14b8a6;
+  border-color: #c9944a;
 }
 
 .sp-client-text {
@@ -201,7 +201,7 @@ a:hover { text-decoration: underline; }
 }
 
 .sp-client-search:focus {
-  border-color: #14b8a6;
+  border-color: #c9944a;
 }
 
 .sp-client-search::placeholder {
@@ -229,7 +229,7 @@ a:hover { text-decoration: underline; }
 }
 
 .sp-client-option.selected {
-  background: #e6fffa;
+  background: #fdf6ec;
 }
 
 .sp-client-divider {
@@ -297,7 +297,7 @@ a:hover { text-decoration: underline; }
   align-self: flex-end;
   max-width: 85%;
   padding: 8px 12px;
-  background: #14b8a6;
+  background: #c9944a;
   color: #ffffff;
   border-radius: 12px 12px 2px 12px;
   font-size: 13px;
@@ -371,14 +371,14 @@ a:hover { text-decoration: underline; }
   border: 1px solid #e2e8f0;
   border-radius: 4px;
   font-size: 10px;
-  color: #14b8a6;
+  color: #c9944a;
   cursor: pointer;
   transition: background 0.1s;
   max-width: 180px;
 }
 
 .source-pill:hover {
-  background: #e6fffa;
+  background: #fdf6ec;
 }
 
 .source-pill-name {
@@ -441,7 +441,7 @@ a:hover { text-decoration: underline; }
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: #f0fdfa;
+  background: #fdf6ec;
   border-top: 1px solid #e2e8f0;
   flex-shrink: 0;
 }
@@ -456,7 +456,7 @@ a:hover { text-decoration: underline; }
   padding: 2px 8px;
   border: none;
   border-radius: 4px;
-  background: #14b8a6;
+  background: #c9944a;
   color: #ffffff;
   font-size: 11px;
   font-weight: 600;
@@ -464,7 +464,7 @@ a:hover { text-decoration: underline; }
 }
 
 .context-insert-btn:hover {
-  background: #0d9488;
+  background: #b8842f;
 }
 
 .context-dismiss-btn {
@@ -503,7 +503,7 @@ a:hover { text-decoration: underline; }
 }
 
 .input-wrap:focus-within {
-  border-color: #14b8a6;
+  border-color: #c9944a;
 }
 
 .query-input {
@@ -535,7 +535,7 @@ a:hover { text-decoration: underline; }
   height: 30px;
   border: none;
   border-radius: 6px;
-  background: #14b8a6;
+  background: #c9944a;
   color: #ffffff;
   cursor: pointer;
   flex-shrink: 0;
@@ -543,7 +543,7 @@ a:hover { text-decoration: underline; }
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #0d9488;
+  background: #b8842f;
 }
 
 .send-btn:disabled {
