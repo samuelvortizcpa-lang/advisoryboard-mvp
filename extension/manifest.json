@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Callwen — Capture for Advisory",
+  "version": "1.0.0",
+  "description": "Capture documents, emails, and data from any webpage directly into your Callwen client workspace.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "sidePanel",
+    "contextMenus",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://callwen.com/*",
+    "https://advisoryboard-mvp-production.up.railway.app/*"
+  ],
+  "background": {
+    "service_worker": "dist/service-worker.js"
+  },
+  "action": {
+    "default_popup": "dist/popup.html",
+    "default_icon": {
+      "16": "src/assets/icon-16.png",
+      "32": "src/assets/icon-32.png",
+      "48": "src/assets/icon-48.png",
+      "128": "src/assets/icon-128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "dist/sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "src/assets/icon-16.png",
+    "48": "src/assets/icon-48.png",
+    "128": "src/assets/icon-128.png"
+  }
+}
