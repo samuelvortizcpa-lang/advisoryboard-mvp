@@ -195,6 +195,16 @@ def process_document_sync(document_id: str, database_url: str) -> None:
         asyncio.run(process_document(db, document))
     except Exception as exc:
         logger.error("process_document_sync failed for %s: %s", document_id, exc)
+        # Mark document so it doesn't stay stuck at "(processing...)" forever
+        try:
+            doc = db.query(Document).filter(Document.id == document_id).first()
+            if doc and not doc.processed:
+                doc.processed = True
+                doc.processing_error = f"Processing failed: {str(exc)[:500]}"
+                db.commit()
+                logger.info("Marked document %s as processed with error", document_id)
+        except Exception:
+            logger.exception("Could not update stuck document %s", document_id)
     finally:
         db.close()
         engine.dispose()
@@ -391,12 +401,15 @@ async def process_document(db: Session, document: Document) -> None:
         sentry_sdk.capture_exception(exc)
         db.rollback()
 
-        # Persist the error message (fresh fetch after rollback)
-        doc = db.query(Document).filter(Document.id == document.id).first()
-        if doc:
-            doc.processed = False
-            doc.processing_error = str(exc)[:1000]
-            db.commit()
+        # Mark as processed with error so it doesn't stay stuck at "(processing...)"
+        try:
+            doc = db.query(Document).filter(Document.id == document.id).first()
+            if doc:
+                doc.processed = True
+                doc.processing_error = str(exc)[:1000]
+                db.commit()
+        except Exception:
+            logger.exception("RAG: could not persist error for %s", doc_label)
 
 
 # ---------------------------------------------------------------------------

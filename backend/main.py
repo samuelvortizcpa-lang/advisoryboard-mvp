@@ -160,12 +160,13 @@ async def _startup_log() -> None:
     from app.services.auto_sync_service import start_scheduler
     start_scheduler()
 
-    # ── Fix stuck image documents (one-time) ─────────────────────────────
+    # ── Fix stuck documents on startup ──────────────────────────────────
     try:
         from sqlalchemy import text as sa_text
         from app.core.database import SessionLocal
         db = SessionLocal()
-        result = db.execute(sa_text(
+        # 1. Image files should always be marked processed
+        r1 = db.execute(sa_text(
             "UPDATE documents SET processed = true, processing_error = NULL "
             "WHERE processed = false AND ("
             "  file_type IN ('png','jpg','jpeg','gif','webp','bmp','tiff')"
@@ -173,12 +174,21 @@ async def _startup_log() -> None:
             "  OR filename ILIKE '%.jpeg'"
             ")"
         ))
+        # 2. Any document stuck >10 min is likely a failed pipeline run
+        r2 = db.execute(sa_text(
+            "UPDATE documents SET processed = true, "
+            "  processing_error = 'Processing timed out — document stored but not indexed for search' "
+            "WHERE processed = false "
+            "  AND upload_date < NOW() - INTERVAL '10 minutes'"
+        ))
         db.commit()
-        if result.rowcount > 0:
-            logger.info("Fixed %d stuck image document(s)", result.rowcount)
+        total = (r1.rowcount or 0) + (r2.rowcount or 0)
+        if total > 0:
+            logger.info("Fixed %d stuck document(s) on startup (%d image, %d timed out)",
+                        total, r1.rowcount or 0, r2.rowcount or 0)
         db.close()
     except Exception as exc:
-        logger.warning("Image document fix skipped: %s", exc)
+        logger.warning("Stuck document fix skipped: %s", exc)
 
 
 @app.on_event("shutdown")
