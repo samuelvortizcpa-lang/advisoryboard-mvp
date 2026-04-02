@@ -14,7 +14,7 @@ import {
   getRecentCaptures, getMonitoringRules, createMonitoringRule,
   updateMonitoringRule, deleteMonitoringRule, askQuestion, ERROR_CODES,
 } from '../services/api.js';
-import { captureFileUrl, getPageMetadata } from '../services/capture.js';
+import { getPageMetadata } from '../services/capture.js';
 import { getCachedClients, addRecentClientId, getRecentClientIds } from '../utils/storage.js';
 
 // ---------------------------------------------------------------------------
@@ -117,6 +117,7 @@ let selectedClientId = '';
 let parsedContent = null;
 let monitoringRules = [];
 let activePanel = 'capture';
+let pendingFileUrl = null;
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
 
 // Parser badge state
@@ -187,16 +188,18 @@ async function init() {
   activeTab = await getActiveTab();
 
   // Check for pending capture from context menu
-  let pendingCapture = null;
   try {
     const session = await chrome.storage.session.get('pending_capture');
-    pendingCapture = session.pending_capture;
+    const pendingCapture = session.pending_capture;
     if (pendingCapture && Date.now() - pendingCapture.timestamp < 30000) {
-      setMode(pendingCapture.capture_type === 'text_selection' ? 'text' :
-              pendingCapture.capture_type === 'full_page' ? 'page' :
-              pendingCapture.capture_type === 'file_url' ? 'file' : 'page');
-    } else {
-      pendingCapture = null;
+      const mode = pendingCapture.capture_type === 'text_selection' ? 'text' :
+                   pendingCapture.capture_type === 'full_page' ? 'page' :
+                   pendingCapture.capture_type === 'file_url' ? 'file' : 'page';
+      setMode(mode);
+      // Store file URL in module state so the capture handler can access it
+      if (pendingCapture.capture_type === 'file_url' && pendingCapture.data?.fileUrl) {
+        pendingFileUrl = pendingCapture.data.fileUrl;
+      }
     }
     await chrome.storage.session.remove('pending_capture');
   } catch { /* no session storage */ }
@@ -919,7 +922,15 @@ function updatePreview() {
       break;
 
     case 'file':
-      previewBody.innerHTML = '<span class="preview-placeholder">Right-click a link and choose "Capture linked file"</span>';
+      if (pendingFileUrl) {
+        const fname = decodeURIComponent(pendingFileUrl.split('/').pop().split('?')[0] || 'linked-file');
+        const truncUrl = pendingFileUrl.length > 60 ? pendingFileUrl.slice(0, 60) + '...' : pendingFileUrl;
+        previewBody.innerHTML =
+          `<span class="preview-title">\u{1F517} ${escapeHtml(fname)}</span>` +
+          `<span class="preview-url">${escapeHtml(truncUrl)}</span>`;
+      } else {
+        previewBody.innerHTML = '<span class="preview-placeholder">Right-click a link and choose "Capture linked file"</span>';
+      }
       break;
 
     case 'screenshot': {
@@ -1023,16 +1034,13 @@ async function handleCapture() {
         break;
 
       case 'file': {
-        const session = await chrome.storage.session.get('pending_capture');
-        const pending = session?.pending_capture;
-        if (!pending?.data?.fileUrl) {
+        if (!pendingFileUrl) {
           showStatus('No file link captured. Right-click a link to capture.', 'error');
           setBtnLoading(false);
           return;
         }
-        const filePayload = await captureFileUrl(pending.data.fileUrl);
-        captureType = filePayload.type;
-        capturePayload = filePayload.file_url;
+        captureType = 'file_url';
+        capturePayload = pendingFileUrl;
         break;
       }
 
@@ -1078,18 +1086,22 @@ async function handleCapture() {
     };
 
     const isScreenshot = captureType === 'screenshot';
+    const isFileUrl = captureType === 'file_url';
     await captureContent(
       clientId, captureType,
-      isScreenshot ? null : capturePayload,
+      (isScreenshot || isFileUrl) ? null : capturePayload,
       metadata, tag,
       isScreenshot ? capturePayload : null,
+      isFileUrl ? capturePayload : null,
     );
 
     await addRecentClientId(clientId);
 
+    // Clear file URL after successful capture
+    if (isFileUrl) pendingFileUrl = null;
+
     setBtnLoading(false);
     showBtnSuccess();
-
 
     // Refresh recent captures list
     recentLastFetched = 0;
@@ -2007,6 +2019,7 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'TAB_CHANGED') {
     autoMatchResult = null;
     selectedText = '';
+    pendingFileUrl = null;
     dismissedBadgeTabId = null;
 
     clearParserBadge(true);

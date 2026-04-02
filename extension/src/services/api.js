@@ -111,7 +111,7 @@ export async function getExtensionConfig() {
 // Capture
 // ---------------------------------------------------------------------------
 
-export async function captureContent(clientId, captureType, content, metadata, documentTag, imageData = null) {
+export async function captureContent(clientId, captureType, content, metadata, documentTag, imageData = null, fileUrl = null) {
   const payload = {
     client_id: clientId,
     capture_type: captureType,
@@ -120,6 +120,7 @@ export async function captureContent(clientId, captureType, content, metadata, d
     document_tag: documentTag,
   };
   if (imageData) payload.image_data = imageData;
+  if (fileUrl) payload.file_url = fileUrl;
   return request('/extension/capture', {
     method: 'POST',
     body: JSON.stringify(payload),
