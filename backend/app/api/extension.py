@@ -209,6 +209,10 @@ async def capture(
 
     # 6. Create Document record
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "txt"
+    is_image = ext in ("png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff")
+    # external_id has a unique constraint per client — append file_id to avoid
+    # collisions when the same URL is captured multiple times.
+    external_id = f"{body.metadata.url}#ext-{file_id}" if body.metadata.url else None
     try:
         document = Document(
             client_id=body.client_id,
@@ -218,8 +222,8 @@ async def capture(
             file_type=ext,
             file_size=len(file_bytes),
             source="extension",
-            external_id=body.metadata.url,
-            processed=False if pause_processing else False,  # starts unprocessed; pipeline sets True
+            external_id=external_id,
+            processed=True if is_image else (False if not pause_processing else False),
         )
         db.add(document)
         db.commit()
@@ -229,8 +233,8 @@ async def capture(
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to save document metadata.")
 
-    # 7. Kick off RAG processing (unless consent-paused)
-    if not pause_processing:
+    # 7. Kick off RAG processing (unless consent-paused or image file)
+    if not pause_processing and not is_image:
         from app.core.config import get_settings
         from app.services import rag_service
         from app.services.background_processor import run_in_process
@@ -258,7 +262,7 @@ async def capture(
     return CaptureResponse(
         document_id=document.id,
         filename=filename,
-        status="saved_pending_consent" if pause_processing else "processing",
+        status="saved_pending_consent" if pause_processing else ("processed" if is_image else "processing"),
         client_name=client.name,
         warning=consent_warning,
     )
