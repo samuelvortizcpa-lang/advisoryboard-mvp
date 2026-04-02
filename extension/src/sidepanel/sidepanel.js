@@ -188,9 +188,10 @@ async function init() {
   activeTab = await getActiveTab();
 
   // Check for pending capture from context menu
+  let pendingCapture = null;
   try {
     const session = await chrome.storage.session.get('pending_capture');
-    const pendingCapture = session.pending_capture;
+    pendingCapture = session.pending_capture;
     if (pendingCapture && Date.now() - pendingCapture.timestamp < 30000) {
       const mode = pendingCapture.capture_type === 'text_selection' ? 'text' :
                    pendingCapture.capture_type === 'full_page' ? 'page' :
