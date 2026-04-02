@@ -103,18 +103,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       return;
   }
 
-  // Store the pending capture in session storage so the popup can pick it up
-  await chrome.storage.session.set({
-    pending_capture: {
-      capture_type: captureType,
-      data: captureData,
-      tab: { id: tab.id, url: tab.url, title: tab.title },
-      timestamp: Date.now(),
-    },
-  });
+  // Store the pending capture in session storage so the side panel can pick it up on init
+  const pendingPayload = {
+    capture_type: captureType,
+    data: captureData,
+    tab: { id: tab.id, url: tab.url, title: tab.title },
+    timestamp: Date.now(),
+  };
+  await chrome.storage.session.set({ pending_capture: pendingPayload });
 
   // Open the side panel for client selection
   chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+
+  // Also broadcast to the side panel in case it's already open (sidePanel.open is a no-op then)
+  chrome.runtime.sendMessage({
+    type: 'CONTEXT_MENU_CAPTURE',
+    capture_type: captureType,
+    data: captureData,
+  }).catch(() => { /* side panel may not be open yet */ });
 });
 
 // ---------------------------------------------------------------------------

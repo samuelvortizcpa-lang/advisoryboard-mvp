@@ -2017,6 +2017,22 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'AUTH_STATE_CHANGED' && message.authenticated) {
     init();
   }
+  if (message.type === 'CONTEXT_MENU_CAPTURE') {
+    const mode = message.capture_type === 'text_selection' ? 'text' :
+                 message.capture_type === 'full_page' ? 'page' :
+                 message.capture_type === 'file_url' ? 'file' : 'page';
+    setMode(mode);
+    if (message.capture_type === 'file_url' && message.data?.fileUrl) {
+      pendingFileUrl = message.data.fileUrl;
+    }
+    if (message.capture_type === 'text_selection' && message.data?.text) {
+      selectedText = message.data.text;
+    }
+    updatePreview();
+    updateCaptureButton();
+    // Clear from storage since we've handled it
+    chrome.storage.session.remove('pending_capture').catch(() => {});
+  }
   if (message.type === 'TAB_CHANGED') {
     autoMatchResult = null;
     selectedText = '';
