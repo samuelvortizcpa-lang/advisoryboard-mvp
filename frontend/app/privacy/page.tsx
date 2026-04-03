@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="mt-2 text-sm text-gray-500">
-          Last Updated: March 22, 2026
+          Last Updated: April 2, 2026
         </p>
 
         <div className="mt-10 space-y-10 text-[15px] leading-relaxed text-gray-700">
@@ -71,6 +71,70 @@ export default function PrivacyPolicyPage() {
             <p className="mt-2">
               We collect query counts, feature usage, login timestamps, browser
               type, and IP address to operate and improve the service.
+            </p>
+
+            <h3 className="mt-4 font-medium text-gray-900">
+              Browser Extension Data
+            </h3>
+            <p className="mt-2">
+              The Callwen browser extension allows you to capture content from
+              web pages directly into your Callwen workspace. The extension
+              collects the following data only when you explicitly initiate a
+              capture:
+            </p>
+            <ul className="mt-2 list-disc space-y-1.5 pl-5">
+              <li>
+                <strong>Captured content:</strong> text selections, full page
+                text, screenshot images, and file URLs — transmitted only when
+                you click the capture button
+              </li>
+              <li>
+                <strong>Page metadata:</strong> URL and title of pages you
+                capture from, used for source tracking and deduplication
+              </li>
+              <li>
+                <strong>Auto-match signals:</strong> domain name and detected
+                company names on the current page, sent to the server to suggest
+                the correct client (paid plans only, only when auto-match is
+                active)
+              </li>
+              <li>
+                <strong>Parser-extracted data:</strong> when viewing Gmail,
+                QuickBooks Online, or tax software, structured data is extracted
+                (email fields, financial report data, form fields) — parsers
+                activate only on paid plans, only on recognized platforms, and
+                only when you initiate a capture
+              </li>
+              <li>
+                <strong>Monitoring rule matches:</strong> if you configure
+                monitoring rules, the extension checks page URLs and domains
+                against your rules locally in the browser; only match
+                notifications are generated, and page content is not transmitted
+                unless you choose to capture
+              </li>
+            </ul>
+            <p className="mt-3 font-medium text-gray-900">
+              The extension does NOT collect:
+            </p>
+            <ul className="mt-2 list-disc space-y-1.5 pl-5">
+              <li>
+                Browsing history or page content from sites you visit without
+                capturing
+              </li>
+              <li>
+                Passwords, cookies, or authentication tokens from other websites
+              </li>
+              <li>
+                Data from browser tabs other than the active tab during a
+                capture
+              </li>
+              <li>Any data when the extension is not actively being used</li>
+            </ul>
+            <p className="mt-3">
+              <strong>Local storage:</strong> the extension stores only your
+              Callwen authentication token and a cache of client ID/name pairs
+              in chrome.storage.local. No document content, email bodies, or
+              client-sensitive data is persisted in the extension.
             </p>
 
             <h3 className="mt-4 font-medium text-gray-900">
