@@ -471,6 +471,8 @@ export default function LandingPage() {
             <div className="nav-links">
               <a href="#features">Features</a>
               <a href="#pricing">Pricing</a>
+              {/* TODO: Update href to Chrome Web Store URL after publishing */}
+              <a href="#features">Extension</a>
               <Link href="/sign-in" className="nav-cta">Get started</Link>
             </div>
             <button
@@ -485,6 +487,8 @@ export default function LandingPage() {
             <div className="mobile-menu">
               <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
+              {/* TODO: Update href to Chrome Web Store URL after publishing */}
+              <a href="#features" onClick={() => setMenuOpen(false)}>Extension</a>
               <Link href="/sign-in" className="mobile-menu-cta" onClick={() => setMenuOpen(false)}>Get started</Link>
             </div>
           )}
@@ -614,6 +618,37 @@ export default function LandingPage() {
                 <div className="team-avatar">SV</div>
                 <div className="team-avatar">JM</div>
                 <div className="team-avatar">KL</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="section left" data-reveal>
+            <div className="number">05</div>
+            <div className="content">
+              <h2>Capture anything,<br /><em>from anywhere</em></h2>
+              <p>The Callwen browser extension lives in your sidebar. Select text from an email, screenshot a chart, right-click a PDF link — two clicks and it&apos;s in your client&apos;s file. Auto-matching knows which client you&apos;re working on. Quick Query lets you ask questions without leaving the page.</p>
+              <span className="tag">Chrome Extension · Auto-match · Quick Query</span>
+            </div>
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-ext">
+                <div className="ext-panel">
+                  <div className="ext-header">
+                    <div className="ext-logo">C</div>
+                    <span className="ext-title">Callwen</span>
+                  </div>
+                  <div className="ext-client">
+                    <div className="ext-dot" />
+                    <span>Apex Corp</span>
+                  </div>
+                  <div className="ext-tabs">
+                    <span>Text</span>
+                    <span>Page</span>
+                    <span className="active">File</span>
+                    <span>Shot</span>
+                  </div>
+                  <div className="ext-preview">f1040s1a.pdf</div>
+                  <div className="ext-btn">Capture</div>
+                </div>
               </div>
             </div>
           </div>
@@ -780,6 +815,7 @@ export default function LandingPage() {
                   <li>5 clients</li>
                   <li>Unlimited documents</li>
                   <li>50 AI queries/month</li>
+                  <li>10 extension captures/day</li>
                   <li>Standard AI</li>
                 </ul>
                 <Link href="/sign-in" className="p-btn p-btn-ghost">Start free</Link>
@@ -793,6 +829,7 @@ export default function LandingPage() {
                   <li>25 clients</li>
                   <li>500 documents</li>
                   <li>500 AI queries/month</li>
+                  <li>50 extension captures/day</li>
                   <li>All integrations</li>
                 </ul>
                 <Link href="/sign-in" className="p-btn p-btn-ghost">Start 14-day trial</Link>
@@ -806,6 +843,7 @@ export default function LandingPage() {
                   <li>100 clients</li>
                   <li>5,000 documents</li>
                   <li>Advanced AI analysis</li>
+                  <li>200 extension captures/day</li>
                   <li>Smart alerts + compliance</li>
                 </ul>
                 <Link href="/sign-in" className="p-btn p-btn-primary">Start 14-day trial</Link>
@@ -816,6 +854,7 @@ export default function LandingPage() {
                 <div className="p-desc">$349 base (3 seats) + $79/seat.</div>
                 <ul className="p-list">
                   <li>Unlimited everything</li>
+                  <li>Unlimited extension captures</li>
                   <li>Premium AI suite</li>
                   <li>Dedicated onboarding</li>
                   <li>Client allocation</li>
@@ -1033,6 +1072,18 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .shield-icon svg { width: 100%; height: 100%; stroke: var(--teal); fill: none; stroke-width: 1; opacity: 0.6; }
 .shield-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--teal); white-space: nowrap; opacity: 0.7; }
 .vis-team { display: flex; align-items: center; justify-content: center; height: 100%; gap: 12px; }
+.vis-ext { display: flex; align-items: center; justify-content: center; height: 100%; }
+.ext-panel { width: 160px; background: var(--bg-card); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; font-size: 0.65rem; }
+.ext-header { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.ext-logo { width: 20px; height: 20px; border-radius: 4px; background: var(--accent); color: var(--bg-deep); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.6rem; }
+.ext-title { font-weight: 600; color: var(--white); font-size: 0.7rem; }
+.ext-client { display: flex; align-items: center; gap: 5px; color: var(--white-dim); margin-bottom: 8px; font-size: 0.62rem; }
+.ext-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+.ext-tabs { display: flex; gap: 2px; margin-bottom: 8px; }
+.ext-tabs span { padding: 3px 6px; border-radius: 3px; font-size: 0.55rem; color: var(--white-dim); background: rgba(255,255,255,0.03); }
+.ext-tabs span.active { background: var(--accent-glow); color: var(--accent); font-weight: 600; }
+.ext-preview { padding: 6px 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 4px; color: var(--white-dim); font-size: 0.58rem; margin-bottom: 8px; }
+.ext-btn { text-align: center; padding: 5px; border-radius: 5px; background: var(--accent); color: var(--bg-deep); font-weight: 600; font-size: 0.6rem; }
 .team-avatar { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 500; border: 2px solid rgba(18,21,28,0.8); }
 .team-avatar:nth-child(1) { background: rgba(201,148,74,0.2); color: var(--accent-light); margin-right: -8px; z-index: 3; }
 .team-avatar:nth-child(2) { background: rgba(91,184,175,0.2); color: var(--teal); margin-right: -8px; z-index: 2; }
