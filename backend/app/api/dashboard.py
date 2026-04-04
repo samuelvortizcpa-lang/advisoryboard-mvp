@@ -97,6 +97,7 @@ class CountWithLimit(BaseModel):
 class ActionItemStats(BaseModel):
     pending: int
     overdue: int
+    completed_this_week: int = 0
 
 
 class QueryStats(BaseModel):
@@ -282,9 +283,24 @@ def _build_dashboard_summary(
         overdue_q = overdue_q.filter(Client.id.in_(accessible_ids))
     overdue_count = overdue_q.scalar() or 0
 
+    # Completed this week
+    week_ago = now - timedelta(days=7)
+    completed_q = (
+        db.query(func.count(ActionItem.id))
+        .join(Client, ActionItem.client_id == Client.id)
+        .filter(
+            Client.org_id == auth.org_id,
+            ActionItem.status == "completed",
+            ActionItem.completed_at >= week_ago,
+        )
+    )
+    if accessible_ids is not None:
+        completed_q = completed_q.filter(Client.id.in_(accessible_ids))
+    completed_week = completed_q.scalar() or 0
+
     stats = StatsBlock(
         clients=CountWithLimit(count=client_count, limit=tier_config.get("max_clients")),
-        action_items=ActionItemStats(pending=pending_count, overdue=overdue_count),
+        action_items=ActionItemStats(pending=pending_count, overdue=overdue_count, completed_this_week=completed_week),
         documents=CountWithLimit(count=doc_count, limit=tier_config.get("max_documents")),
         ai_queries=QueryStats(
             used=sub.strategic_queries_used,
@@ -774,3 +790,72 @@ async def revenue_impact(
         clients_impacted=len(clients_set),
         monthly_trend=trend,
     )
+
+
+# ─── Upcoming deadlines endpoint ────────────────────────────────────────────
+
+
+class DeadlineItem(BaseModel):
+    id: str
+    text: str
+    client_id: str
+    client_name: str
+    due_date: str
+    overdue_days: Optional[int] = None
+    priority: str  # critical, warning, info
+
+
+@router.get(
+    "/dashboard/upcoming-deadlines",
+    response_model=List[DeadlineItem],
+    summary="Pending action items due within 7 days or overdue, with client names",
+)
+async def upcoming_deadlines(
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> List[DeadlineItem]:
+    today = date.today()
+    seven_days = today + timedelta(days=7)
+
+    accessible_ids = get_accessible_client_ids(
+        auth.user_id, auth.org_id, auth.org_role == "admin", db
+    )
+
+    q = (
+        db.query(ActionItem, Client.name)
+        .join(Client, ActionItem.client_id == Client.id)
+        .filter(
+            Client.org_id == auth.org_id,
+            ActionItem.status == "pending",
+            ActionItem.due_date.isnot(None),
+            ActionItem.due_date <= seven_days,
+        )
+    )
+    if accessible_ids is not None:
+        q = q.filter(Client.id.in_(accessible_ids))
+
+    rows = q.order_by(ActionItem.due_date.asc()).limit(20).all()
+
+    items: list[DeadlineItem] = []
+    for ai, client_name in rows:
+        if ai.due_date < today:
+            overdue_d = (today - ai.due_date).days
+            priority = "critical"
+        elif (ai.due_date - today).days <= 2:
+            overdue_d = None
+            priority = "warning"
+        else:
+            overdue_d = None
+            priority = "info"
+
+        items.append(DeadlineItem(
+            id=str(ai.id),
+            text=ai.text or "Untitled",
+            client_id=str(ai.client_id),
+            client_name=client_name or "",
+            due_date=ai.due_date.isoformat(),
+            overdue_days=overdue_d,
+            priority=priority,
+        ))
+
+    return items

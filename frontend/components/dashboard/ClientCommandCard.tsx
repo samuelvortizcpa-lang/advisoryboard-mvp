@@ -55,17 +55,9 @@ export default function ClientCommandCard({ clients }: Props) {
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-md">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-900">Your clients</h3>
-        <Link href="/dashboard/clients" className="text-xs text-gray-500 hover:text-gray-700">
-          View all &rarr;
-        </Link>
-      </div>
-
+    <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-md">
       {/* Search */}
-      <div className="relative mt-3">
+      <div className="relative">
         <svg
           className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
           viewBox="0 0 24 24"
@@ -113,8 +105,8 @@ export default function ClientCommandCard({ clients }: Props) {
                 {initials(c.name)}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-gray-900">{c.name}</p>
-                <p className="text-xs text-gray-500">
+                <p className="truncate text-[13px] font-semibold text-gray-900">{c.name}</p>
+                <p className="text-[11px] text-gray-500">
                   {c.document_count} doc{c.document_count !== 1 ? "s" : ""}
                   {" \u00B7 "}
                   {c.action_item_count} action item{c.action_item_count !== 1 ? "s" : ""}
@@ -127,6 +119,15 @@ export default function ClientCommandCard({ clients }: Props) {
           ))
         )}
       </div>
+
+      {/* View all */}
+      {clients.length > 0 && (
+        <div className="mt-auto pt-2 text-right">
+          <Link href="/dashboard/clients" className="text-xs text-gray-500 hover:text-gray-700">
+            View all &rarr;
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

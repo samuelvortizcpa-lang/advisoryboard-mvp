@@ -1645,7 +1645,7 @@ export function createClientAssignmentsApi(getToken: GetToken, orgId?: string) {
 export interface DashboardSummary {
   stats: {
     clients: { count: number; limit: number | null };
-    action_items: { pending: number; overdue: number };
+    action_items: { pending: number; overdue: number; completed_this_week: number };
     documents: { count: number; limit: number | null };
     ai_queries: { used: number; limit: number };
   };
@@ -1699,12 +1699,23 @@ export interface RevenueImpact {
   monthly_trend: Array<{ month: string; amount: number }>;
 }
 
+export interface DeadlineItem {
+  id: string;
+  text: string;
+  client_id: string;
+  client_name: string;
+  due_date: string;
+  overdue_days: number | null;
+  priority: "critical" | "warning" | "info";
+}
+
 export function createDashboardApi(getToken: GetToken, orgId?: string) {
   const f = boundFetch(getToken, orgId);
   return {
     summary: (days = 30) => f<DashboardSummary>(`/dashboard/summary?days=${days}`),
     priorityFeed: () => f<PriorityFeedItem[]>(`/dashboard/priority-feed`),
     revenueImpact: (year: number) => f<RevenueImpact>(`/dashboard/revenue-impact?year=${year}`),
+    upcomingDeadlines: () => f<DeadlineItem[]>(`/dashboard/upcoming-deadlines`),
   };
 }
 
