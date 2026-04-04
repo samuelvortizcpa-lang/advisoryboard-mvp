@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
-import type { DashboardSummary, PriorityFeedItem, StrategyOverview } from "@/lib/api";
+import type { DashboardSummary, PriorityFeedItem, RevenueImpact, StrategyOverview } from "@/lib/api";
 import { createDashboardApi, createStrategyDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
 import CoverageRing from "@/components/dashboard/CoverageRing";
+import RevenueImpactCard from "@/components/dashboard/RevenueImpactCard";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
 import HelpTooltip from "@/components/ui/HelpTooltip";
@@ -18,7 +19,6 @@ import {
   DIST_COLORS,
   AttentionCard,
   RecentClientsCard,
-  QuickActionsCard,
   UsageCard,
 } from "./shared";
 
@@ -34,6 +34,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
   const { activeOrg } = useOrg();
   const [strategyOverview, setStrategyOverview] = useState<StrategyOverview | null>(null);
   const [feedItems, setFeedItems] = useState<PriorityFeedItem[] | null>(null);
+  const [revenueImpact, setRevenueImpact] = useState<RevenueImpact | null>(null);
   const { stats } = data;
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
   useEffect(() => {
     const api = createDashboardApi(getToken, activeOrg?.id);
     api.priorityFeed().then(setFeedItems).catch(() => {});
+    api.revenueImpact(new Date().getFullYear()).then(setRevenueImpact).catch(() => {});
   }, [getToken, activeOrg]);
 
   // Empty state: org member with no assigned clients
@@ -157,7 +159,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
 
       {/* Row 4: Utility cards */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <QuickActionsCard data={data} />
+        <RevenueImpactCard data={revenueImpact} />
         <UsageCard data={data} showSeats={false} showUpgrade={false} />
       </div>
     </div>

@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
 
-import type { DashboardSummary, MemberAssignments, PriorityFeedItem, StrategyOverview } from "@/lib/api";
+import type { DashboardSummary, MemberAssignments, PriorityFeedItem, RevenueImpact, StrategyOverview } from "@/lib/api";
 import { createClientAssignmentsApi, createDashboardApi, createStrategyDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
 import CoverageRing from "@/components/dashboard/CoverageRing";
+import RevenueImpactCard from "@/components/dashboard/RevenueImpactCard";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
 import SectionCard from "@/components/ui/SectionCard";
@@ -20,7 +21,6 @@ import {
   DIST_COLORS,
   AttentionCard,
   RecentClientsCard,
-  QuickActionsCard,
   UsageCard,
 } from "./shared";
 
@@ -37,6 +37,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
   const [assignmentMap, setAssignmentMap] = useState<Record<string, MemberAssignments>>({});
   const [strategyOverview, setStrategyOverview] = useState<StrategyOverview | null>(null);
   const [feedItems, setFeedItems] = useState<PriorityFeedItem[] | null>(null);
+  const [revenueImpact, setRevenueImpact] = useState<RevenueImpact | null>(null);
 
   const loadAssignments = useCallback(async () => {
     if (!activeOrg || activeOrg.org_type === "personal") return;
@@ -67,6 +68,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
   useEffect(() => {
     const api = createDashboardApi(getToken, activeOrg?.id);
     api.priorityFeed().then(setFeedItems).catch(() => {});
+    api.revenueImpact(new Date().getFullYear()).then(setRevenueImpact).catch(() => {});
   }, [getToken, activeOrg]);
 
   const { stats } = data;
@@ -180,7 +182,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
 
       {/* Row 4: Utility cards */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {data.team_members ? <RecentClientsCard data={data} /> : <QuickActionsCard data={data} />}
+        <RevenueImpactCard data={revenueImpact} />
         <UsageCard data={data} />
       </div>
     </div>

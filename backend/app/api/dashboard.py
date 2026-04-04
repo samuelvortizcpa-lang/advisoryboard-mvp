@@ -679,3 +679,98 @@ async def priority_feed(
     # ── Merge & sort by priority, limit to 10 ─────────────────────────────
     items.sort(key=lambda x: _PRIORITY_ORDER.get(x.priority, 99))
     return items[:10]
+
+
+# ─── Revenue impact endpoint ─────────────────────────────────────────────────
+
+
+class MonthAmount(BaseModel):
+    month: str
+    amount: float
+
+
+class RevenueImpact(BaseModel):
+    total_estimated_savings: float
+    strategies_implemented: int
+    clients_impacted: int
+    monthly_trend: List[MonthAmount]
+
+
+_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+@router.get(
+    "/dashboard/revenue-impact",
+    response_model=RevenueImpact,
+    summary="Revenue impact from implemented strategies for a given year",
+)
+async def revenue_impact(
+    year: int = Query(default=None),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> RevenueImpact:
+    if year is None:
+        year = date.today().year
+
+    accessible_ids = get_accessible_client_ids(
+        auth.user_id, auth.org_id, auth.org_role == "admin", db
+    )
+
+    # Get all clients the user can see
+    client_q = db.query(Client.id).filter(Client.org_id == auth.org_id)
+    if accessible_ids is not None:
+        client_q = client_q.filter(Client.id.in_(accessible_ids))
+    client_ids = [row[0] for row in client_q.all()]
+
+    if not client_ids:
+        return RevenueImpact(
+            total_estimated_savings=0,
+            strategies_implemented=0,
+            clients_impacted=0,
+            monthly_trend=[MonthAmount(month=m, amount=0) for m in _MONTH_NAMES[-6:]],
+        )
+
+    # Get all implemented statuses for the year
+    implemented = (
+        db.query(ClientStrategyStatus)
+        .filter(
+            ClientStrategyStatus.client_id.in_(client_ids),
+            ClientStrategyStatus.tax_year == year,
+            ClientStrategyStatus.status == "implemented",
+        )
+        .all()
+    )
+
+    total_savings = 0.0
+    clients_set: set[UUID] = set()
+    # Track cumulative savings by month (based on updated_at)
+    month_savings: dict[int, float] = {}
+
+    for s in implemented:
+        impact = float(s.estimated_impact) if s.estimated_impact is not None else 0.0
+        total_savings += impact
+        clients_set.add(s.client_id)
+        if s.updated_at:
+            m = s.updated_at.month
+            month_savings[m] = month_savings.get(m, 0) + impact
+
+    # Build 6-month cumulative trend ending at current month
+    today = date.today()
+    current_month = today.month
+    trend: list[MonthAmount] = []
+    cumulative = 0.0
+    # Start from 5 months ago
+    for offset in range(5, -1, -1):
+        m = current_month - offset
+        if m <= 0:
+            m += 12
+        cumulative += month_savings.get(m, 0)
+        trend.append(MonthAmount(month=_MONTH_NAMES[m - 1], amount=round(cumulative, 2)))
+
+    return RevenueImpact(
+        total_estimated_savings=round(total_savings, 2),
+        strategies_implemented=len(implemented),
+        clients_impacted=len(clients_set),
+        monthly_trend=trend,
+    )

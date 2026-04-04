@@ -1692,11 +1692,19 @@ export interface PriorityFeedItem {
   link: string;
 }
 
+export interface RevenueImpact {
+  total_estimated_savings: number;
+  strategies_implemented: number;
+  clients_impacted: number;
+  monthly_trend: Array<{ month: string; amount: number }>;
+}
+
 export function createDashboardApi(getToken: GetToken, orgId?: string) {
   const f = boundFetch(getToken, orgId);
   return {
     summary: (days = 30) => f<DashboardSummary>(`/dashboard/summary?days=${days}`),
     priorityFeed: () => f<PriorityFeedItem[]>(`/dashboard/priority-feed`),
+    revenueImpact: (year: number) => f<RevenueImpact>(`/dashboard/revenue-impact?year=${year}`),
   };
 }
 
