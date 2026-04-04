@@ -8,6 +8,7 @@ import type { DashboardSummary, MemberAssignments, StrategyOverview } from "@/li
 import { createClientAssignmentsApi, createStrategyDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
+import CoverageRing from "@/components/dashboard/CoverageRing";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
 import SectionCard from "@/components/ui/SectionCard";
@@ -114,12 +115,9 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
           accentColor="border-l-amber-500"
           href="/dashboard/action-items"
         />
-        <StatCard
-          label="Strategies reviewed"
-          value={strategyOverview?.clients_reviewed ?? "—"}
-          context={strategyOverview ? `of ${strategyOverview.total_clients}` : undefined}
-          contextType="muted"
-          accentColor="border-l-teal-500"
+        <CoverageRing
+          reviewed={strategyOverview?.clients_reviewed ?? null}
+          total={strategyOverview?.total_clients ?? null}
           href="/dashboard/strategy-dashboard"
         />
         <StatCard
