@@ -31,6 +31,7 @@ export default function ExtensionAuthCallback() {
     }
 
     const isRefresh = params.get("refresh") === "true";
+    const isOffscreen = params.get("offscreen") === "true";
 
     if (!isSignedIn) {
       if (isRefresh) {
@@ -51,6 +52,13 @@ export default function ExtensionAuthCallback() {
         if (!token) {
           setStatus("error");
           setErrorMsg("Could not retrieve session token.");
+          return;
+        }
+
+        // If loaded in an iframe (offscreen document case), postMessage the token
+        // to the parent frame and skip the rest of the UI flow.
+        if (isOffscreen && window !== window.top) {
+          window.parent.postMessage({ type: 'CALLWEN_TOKEN', token }, '*');
           return;
         }
 

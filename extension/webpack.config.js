@@ -6,6 +6,7 @@ module.exports = {
     'service-worker': './src/background/service-worker.js',
     sidepanel: './src/sidepanel/sidepanel.js',
     'content-script': './src/content/content-script.js',
+    offscreen: './src/offscreen/offscreen.js',
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -18,6 +19,7 @@ module.exports = {
         { from: 'manifest.json', to: 'manifest.json' },
         { from: 'src/sidepanel/sidepanel.html', to: 'sidepanel.html' },
         { from: 'src/sidepanel/sidepanel.css', to: 'sidepanel.css' },
+        { from: 'src/offscreen/offscreen.html', to: 'offscreen.html' },
         { from: 'src/assets', to: 'assets' },
       ],
     }),

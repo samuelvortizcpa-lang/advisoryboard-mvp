@@ -127,7 +127,7 @@ export function cancelRefreshTimer() {
 // Silent refresh — open background tab to get fresh token
 // ---------------------------------------------------------------------------
 
-const SILENT_REFRESH_TIMEOUT_MS = 8_000;
+const SILENT_REFRESH_TIMEOUT_MS = 10_000;
 
 export async function silentRefresh() {
   // Guard: only one refresh at a time
@@ -157,60 +157,59 @@ export async function silentRefresh() {
   }
 }
 
-function _doSilentRefresh() {
-  return new Promise((resolve, reject) => {
-    let tabId = null;
-    let settled = false;
+async function _doSilentRefresh() {
+  console.log('[Callwen Auth] Starting silent refresh via offscreen document');
 
-    function cleanup() {
-      if (tabId) {
-        chrome.tabs.remove(tabId).catch(() => {});
-        tabId = null;
-      }
-    }
-
-    const timeout = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      chrome.runtime.onMessage.removeListener(listener);
-      cleanup();
-      reject(new Error('Silent refresh timed out'));
-    }, SILENT_REFRESH_TIMEOUT_MS);
-
-    function listener(message, sender) {
-      if (settled) return;
-      if (message.type !== 'AUTH_TOKEN_FROM_PAGE') return;
-      // Only accept tokens from our auth callback tab
-      if (sender.tab?.id !== tabId) return;
-
-      settled = true;
-      clearTimeout(timeout);
-      chrome.runtime.onMessage.removeListener(listener);
-
-      resolve(message.token);
-
-      // Close the background tab after a short delay so the message channel settles
-      setTimeout(cleanup, 300);
-    }
-
-    chrome.runtime.onMessage.addListener(listener);
-
-    // Open the auth callback page in a background tab
-    chrome.tabs.create({
-      url: `${CONFIG.APP_URL}/extension-auth-callback?refresh=true`,
-      active: false,
-    }).then((tab) => {
-      tabId = tab.id;
-    }).catch((err) => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timeout);
-        chrome.runtime.onMessage.removeListener(listener);
-        cleanup();
-        reject(err);
-      }
-    });
+  // Create offscreen document if it doesn't already exist
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
   });
+
+  if (existingContexts.length === 0) {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['DOM_PARSER'],
+      justification: 'Refresh Clerk authentication token without visible tab',
+    });
+  }
+
+  try {
+    // Send refresh request and wait for the response
+    const response = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        chrome.runtime.onMessage.removeListener(listener);
+        reject(new Error('Offscreen refresh timed out'));
+      }, SILENT_REFRESH_TIMEOUT_MS);
+
+      function listener(message) {
+        if (message.type === 'REFRESH_TOKEN_RESULT') {
+          chrome.runtime.onMessage.removeListener(listener);
+          clearTimeout(timeout);
+          resolve(message);
+        }
+      }
+
+      chrome.runtime.onMessage.addListener(listener);
+      chrome.runtime.sendMessage({ type: 'REFRESH_TOKEN' });
+    });
+
+    if (response.token) {
+      console.log('[Callwen Auth] Silent refresh succeeded via offscreen');
+      await setAuthToken(response.token);
+      scheduleProactiveRefresh(response.token);
+      chrome.runtime.sendMessage({ type: 'AUTH_STATE_CHANGED', authenticated: true }).catch(() => {});
+      return response.token;
+    }
+
+    throw new Error(response.error || 'No token received');
+  } finally {
+    // Close offscreen document to free resources
+    try {
+      await chrome.offscreen.closeDocument();
+    } catch {
+      // May already be closed
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

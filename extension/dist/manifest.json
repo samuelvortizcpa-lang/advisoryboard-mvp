@@ -12,7 +12,8 @@
     "contextMenus",
     "storage",
     "scripting",
-    "notifications"
+    "notifications",
+    "offscreen"
   ],
   "host_permissions": [
     "https://advisoryboard-mvp-production.up.railway.app/*"
