@@ -237,7 +237,7 @@ export default function TaskBoard({ data }: Props) {
   // Collapsible state
   const [expanded, setExpanded] = useState<Record<SectionKey, boolean>>({
     today: true,
-    overdue: true,
+    overdue: false,
     next: false,
     unscheduled: false,
   });
@@ -319,22 +319,30 @@ export default function TaskBoard({ data }: Props) {
             </div>
           ) : (
             <div className="space-y-1">
-              <TaskSection
-                label="TODAY"
-                count={grouped.today.length}
-                bgClass="bg-blue-50"
-                textClass="text-blue-500"
-                dotClass="bg-blue-500"
-                badgeClass="bg-blue-50 text-blue-600"
-                items={grouped.today}
-                maxItems={5}
-                moreHref="/dashboard/actions?filter=today"
-                moreTextClass="text-blue-400"
-                renderRight={() => "Today"}
-                emptyText="Nothing due today"
-                expanded={expanded.today}
-                onToggle={() => toggle("today")}
-              />
+              {grouped.today.length === 0 ? (
+                <div className="flex items-center gap-1.5 py-1">
+                  <svg className="h-4 w-4 text-emerald-600/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-[12px] font-medium text-emerald-600/70">All clear for today</span>
+                </div>
+              ) : (
+                <TaskSection
+                  label="TODAY"
+                  count={grouped.today.length}
+                  bgClass="bg-blue-50"
+                  textClass="text-blue-500"
+                  dotClass="bg-blue-500"
+                  badgeClass="bg-blue-50 text-blue-600"
+                  items={grouped.today}
+                  maxItems={5}
+                  moreHref="/dashboard/actions?filter=today"
+                  moreTextClass="text-blue-400"
+                  renderRight={() => "Today"}
+                  expanded={expanded.today}
+                  onToggle={() => toggle("today")}
+                />
+              )}
 
               <TaskSection
                 label="OVERDUE"

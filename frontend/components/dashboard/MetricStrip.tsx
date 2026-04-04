@@ -162,20 +162,18 @@ export default function MetricStrip({
   const clientSubtitle =
     activeClients.limit != null && (tier === "free" || tier === "starter")
       ? `of ${activeClients.limit}`
-      : "managed";
+      : "across all engagements";
 
   // Connection status
   const conn = connections ?? { email: false, calendar: false, zoom: false };
   const allConnected = conn.email && conn.calendar && conn.zoom;
   const anyConnected = conn.email || conn.calendar || conn.zoom;
 
+  const connCount = [conn.email, conn.calendar, conn.zoom].filter(Boolean).length;
+
   const connIndicator = allConnected ? (
     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-50">
       <CheckIcon className="h-5 w-5 text-green-500" />
-    </div>
-  ) : anyConnected ? (
-    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-50">
-      <AlertTriangleIcon className="h-5 w-5 text-amber-500" />
     </div>
   ) : (
     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50">
@@ -189,7 +187,7 @@ export default function MetricStrip({
         href="/dashboard/strategy-dashboard"
         label="Client Savings"
         value={savingsStr}
-        subtitle="this year"
+        subtitle="2026 year to date"
         indicator={
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-50">
             <TrendingUpIcon className="h-5 w-5 text-green-500" />
@@ -201,7 +199,7 @@ export default function MetricStrip({
         href="/dashboard/settings/subscriptions"
         label="AI Queries"
         value={`${aiQueries.used} / ${aiQueries.limit}`}
-        subtitle="this period"
+        subtitle="current billing period"
         indicator={<MiniRing pct={pct} />}
       />
 
@@ -220,24 +218,14 @@ export default function MetricStrip({
       <MetricCard
         href="/dashboard/settings/integrations"
         label="Connections"
+        value={`${connCount} / 3`}
+        subtitle="integrations active"
         indicator={connIndicator}
       >
-        <div className="mt-1.5 space-y-1">
-          <div className="flex items-center gap-1.5">
-            <ConnectionDot status={conn.email ? "connected" : "not_configured"} />
-            <span className="text-[12px] text-gray-600">Email</span>
-            <span className="text-[11px] text-gray-400">{conn.email ? "Connected" : "Not set up"}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <ConnectionDot status={conn.calendar ? "connected" : "not_configured"} />
-            <span className="text-[12px] text-gray-600">Calendar</span>
-            <span className="text-[11px] text-gray-400">{conn.calendar ? "Connected" : "Not set up"}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <ConnectionDot status={conn.zoom ? "connected" : "not_configured"} />
-            <span className="text-[12px] text-gray-600">Zoom</span>
-            <span className="text-[11px] text-gray-400">{conn.zoom ? "Connected" : "Not set up"}</span>
-          </div>
+        <div className="mt-1 flex items-center gap-1">
+          <span className={`inline-block h-2 w-2 rounded-full ${conn.email ? "bg-green-500" : "bg-gray-300"}`} />
+          <span className={`inline-block h-2 w-2 rounded-full ${conn.calendar ? "bg-green-500" : "bg-gray-300"}`} />
+          <span className={`inline-block h-2 w-2 rounded-full ${conn.zoom ? "bg-green-500" : "bg-gray-300"}`} />
         </div>
       </MetricCard>
     </div>

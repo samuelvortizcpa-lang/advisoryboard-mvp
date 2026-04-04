@@ -96,15 +96,16 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
         >
           + New client
         </Link>
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-700">
-          {initials}
-        </div>
       </div>
 
       {/* Row 1: Client Hub + Task Board */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <ClientCommandCard clients={data.recent_clients} />
-        <TaskBoard data={data} />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <ClientCommandCard clients={data.recent_clients} />
+        </div>
+        <div className="lg:col-span-7">
+          <TaskBoard data={data} />
+        </div>
       </div>
 
       {/* Row 2: Metric Strip */}
