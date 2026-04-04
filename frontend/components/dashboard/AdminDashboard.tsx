@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
 
-import type { DashboardSummary, MemberAssignments, StrategyOverview } from "@/lib/api";
-import { createClientAssignmentsApi, createStrategyDashboardApi } from "@/lib/api";
+import type { DashboardSummary, MemberAssignments, PriorityFeedItem, StrategyOverview } from "@/lib/api";
+import { createClientAssignmentsApi, createDashboardApi, createStrategyDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
 import CoverageRing from "@/components/dashboard/CoverageRing";
@@ -36,6 +36,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
   const { activeOrg } = useOrg();
   const [assignmentMap, setAssignmentMap] = useState<Record<string, MemberAssignments>>({});
   const [strategyOverview, setStrategyOverview] = useState<StrategyOverview | null>(null);
+  const [feedItems, setFeedItems] = useState<PriorityFeedItem[] | null>(null);
 
   const loadAssignments = useCallback(async () => {
     if (!activeOrg || activeOrg.org_type === "personal") return;
@@ -61,6 +62,11 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
   useEffect(() => {
     const api = createStrategyDashboardApi(getToken, activeOrg?.id);
     api.fetchOverview(new Date().getFullYear()).then(setStrategyOverview).catch(() => {});
+  }, [getToken, activeOrg]);
+
+  useEffect(() => {
+    const api = createDashboardApi(getToken, activeOrg?.id);
+    api.priorityFeed().then(setFeedItems).catch(() => {});
   }, [getToken, activeOrg]);
 
   const { stats } = data;
@@ -143,7 +149,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
 
       {/* Row 3: Content cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <AttentionCard data={data} />
+        <AttentionCard data={data} feedItems={feedItems} />
         {data.team_members ? (
           <SectionCard title="Team" action={{ label: "Manage", href: "/dashboard/settings/organization" }}>
             {data.team_members.slice(0, 5).map((m) => {

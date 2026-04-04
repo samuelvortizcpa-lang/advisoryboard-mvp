@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
-import type { DashboardSummary, StrategyOverview } from "@/lib/api";
-import { createStrategyDashboardApi } from "@/lib/api";
+import type { DashboardSummary, PriorityFeedItem, StrategyOverview } from "@/lib/api";
+import { createDashboardApi, createStrategyDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
 import CoverageRing from "@/components/dashboard/CoverageRing";
@@ -33,11 +33,17 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
   const { getToken } = useAuth();
   const { activeOrg } = useOrg();
   const [strategyOverview, setStrategyOverview] = useState<StrategyOverview | null>(null);
+  const [feedItems, setFeedItems] = useState<PriorityFeedItem[] | null>(null);
   const { stats } = data;
 
   useEffect(() => {
     const api = createStrategyDashboardApi(getToken, activeOrg?.id);
     api.fetchOverview(new Date().getFullYear()).then(setStrategyOverview).catch(() => {});
+  }, [getToken, activeOrg]);
+
+  useEffect(() => {
+    const api = createDashboardApi(getToken, activeOrg?.id);
+    api.priorityFeed().then(setFeedItems).catch(() => {});
   }, [getToken, activeOrg]);
 
   // Empty state: org member with no assigned clients
@@ -145,7 +151,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
 
       {/* Row 3: Content cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <AttentionCard data={data} />
+        <AttentionCard data={data} feedItems={feedItems} />
         <RecentClientsCard data={data} />
       </div>
 

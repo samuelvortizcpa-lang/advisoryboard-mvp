@@ -1,5 +1,5 @@
 export interface PriorityDotProps {
-  priority: "critical" | "warning" | "info" | "success";
+  priority: "critical" | "warning" | "info" | "success" | "low";
 }
 
 const dotColors: Record<PriorityDotProps["priority"], string> = {
@@ -7,6 +7,7 @@ const dotColors: Record<PriorityDotProps["priority"], string> = {
   warning: "bg-amber-500",
   info: "bg-blue-500",
   success: "bg-green-500",
+  low: "bg-gray-400",
 };
 
 export default function PriorityDot({ priority }: PriorityDotProps) {

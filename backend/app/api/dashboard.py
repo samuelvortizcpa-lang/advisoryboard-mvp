@@ -18,13 +18,16 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.action_item import ActionItem
 from app.models.client import Client
+from app.models.client_strategy_status import ClientStrategyStatus
 from app.models.document import Document
 from app.models.organization_member import OrganizationMember
+from app.models.tax_strategy import TaxStrategy
 from app.models.token_usage import TokenUsage
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
 from app.services.assignment_service import get_accessible_client_ids
 from app.services.auth_context import AuthContext, get_auth
+from app.services.strategy_service import PROFILE_FLAG_COLUMNS, _strategy_applicable
 from app.services.subscription_service import (
     TIER_DEFAULTS,
     get_or_create_subscription,
@@ -510,3 +513,169 @@ def _build_dashboard_summary(
         team_members=team_members,
         plan=plan,
     )
+
+
+# ─── Priority feed endpoint ──────────────────────────────────────────────────
+
+
+class PriorityFeedItem(BaseModel):
+    type: str  # action_item, strategy_alert, inactive_client
+    priority: str  # critical, warning, info, low
+    title: str
+    subtitle: str
+    client_id: Optional[str] = None
+    link: str
+
+
+_PRIORITY_ORDER = {"critical": 0, "warning": 1, "info": 2, "low": 3}
+
+
+@router.get(
+    "/dashboard/priority-feed",
+    response_model=List[PriorityFeedItem],
+    summary="Unified priority feed merging action items, strategy alerts, and inactive clients",
+)
+async def priority_feed(
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> List[PriorityFeedItem]:
+    today = date.today()
+
+    # ── Scoping ────────────────────────────────────────────────────────────
+    accessible_ids = get_accessible_client_ids(
+        auth.user_id, auth.org_id, auth.org_role == "admin", db
+    )
+
+    def scoped_client_filter(query):
+        query = query.filter(Client.org_id == auth.org_id)
+        if accessible_ids is not None:
+            query = query.filter(Client.id.in_(accessible_ids))
+        return query
+
+    items: list[PriorityFeedItem] = []
+
+    # ── Source 1: overdue / upcoming action items ──────────────────────────
+    action_q = (
+        db.query(ActionItem, Client.name)
+        .join(Client, ActionItem.client_id == Client.id)
+        .filter(
+            Client.org_id == auth.org_id,
+            ActionItem.status == "pending",
+        )
+    )
+    if accessible_ids is not None:
+        action_q = action_q.filter(Client.id.in_(accessible_ids))
+
+    # Only include overdue or due within 7 days
+    seven_days = today + timedelta(days=7)
+    action_q = action_q.filter(
+        ActionItem.due_date.isnot(None),
+        ActionItem.due_date <= seven_days,
+    )
+    action_rows = (
+        action_q
+        .order_by(ActionItem.due_date.asc())
+        .limit(10)
+        .all()
+    )
+
+    for ai, client_name in action_rows:
+        if ai.due_date < today:
+            overdue_d = (today - ai.due_date).days
+            priority = "critical"
+            subtitle = f"{client_name} — Overdue by {overdue_d} day{'s' if overdue_d != 1 else ''}"
+        else:
+            diff = (ai.due_date - today).days
+            priority = "warning"
+            if diff == 0:
+                subtitle = f"{client_name} — Due today"
+            elif diff == 1:
+                subtitle = f"{client_name} — Due tomorrow"
+            else:
+                subtitle = f"{client_name} — Due in {diff} days"
+
+        items.append(PriorityFeedItem(
+            type="action_item",
+            priority=priority,
+            title=ai.text or "Untitled action item",
+            subtitle=subtitle,
+            client_id=str(ai.client_id),
+            link="/dashboard/action-items",
+        ))
+
+    # ── Source 2: unreviewed strategy alerts ───────────────────────────────
+    try:
+        year = today.year
+        clients_for_strat = scoped_client_filter(db.query(Client)).all()
+
+        if clients_for_strat:
+            client_ids = [c.id for c in clients_for_strat]
+            all_strategies = (
+                db.query(TaxStrategy)
+                .filter(TaxStrategy.is_active == True)  # noqa: E712
+                .all()
+            )
+
+            existing_statuses = (
+                db.query(ClientStrategyStatus)
+                .filter(
+                    ClientStrategyStatus.client_id.in_(client_ids),
+                    ClientStrategyStatus.tax_year == year,
+                )
+                .all()
+            )
+            reviewed_keys = {
+                (s.client_id, s.strategy_id)
+                for s in existing_statuses
+                if s.status != "not_reviewed"
+            }
+
+            # Count unreviewed strategies per client
+            unreviewed_counts: dict[str, tuple[str, int]] = {}  # client_id -> (name, count)
+            for client in clients_for_strat:
+                flags = {col: getattr(client, col, False) for col in PROFILE_FLAG_COLUMNS}
+                count = 0
+                for strat in all_strategies:
+                    if not _strategy_applicable(flags, strat.required_flags or []):
+                        continue
+                    if (client.id, strat.id) not in reviewed_keys:
+                        count += 1
+                if count > 0:
+                    unreviewed_counts[str(client.id)] = (client.name, count)
+
+            # Sort by count descending, take top entries
+            for cid, (cname, cnt) in sorted(
+                unreviewed_counts.items(), key=lambda x: -x[1]
+            )[:5]:
+                items.append(PriorityFeedItem(
+                    type="strategy_alert",
+                    priority="info",
+                    title=f"{cname} has unreviewed strategies",
+                    subtitle=f"{cnt} strateg{'y' if cnt == 1 else 'ies'} pending review",
+                    client_id=cid,
+                    link=f"/dashboard/clients/{cid}?tab=strategies",
+                ))
+    except Exception:
+        logger.debug("Strategy alert query skipped (tables may not exist)", exc_info=True)
+
+    # ── Source 3: inactive clients (no update in 30+ days) ─────────────────
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
+    inactive_q = scoped_client_filter(
+        db.query(Client).filter(Client.updated_at < cutoff_date)
+    )
+    inactive_clients = inactive_q.order_by(Client.updated_at.asc()).limit(5).all()
+
+    for client in inactive_clients:
+        days_inactive = (datetime.now(timezone.utc) - client.updated_at).days
+        items.append(PriorityFeedItem(
+            type="inactive_client",
+            priority="low",
+            title=f"{client.name} — no activity in {days_inactive} days",
+            subtitle="Consider scheduling a check-in",
+            client_id=str(client.id),
+            link=f"/dashboard/clients/{client.id}",
+        ))
+
+    # ── Merge & sort by priority, limit to 10 ─────────────────────────────
+    items.sort(key=lambda x: _PRIORITY_ORDER.get(x.priority, 99))
+    return items[:10]

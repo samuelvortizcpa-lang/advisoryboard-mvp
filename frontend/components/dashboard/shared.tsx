@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import type { DashboardSummary } from "@/lib/api";
+import type { DashboardSummary, PriorityFeedItem } from "@/lib/api";
 import SectionCard from "@/components/ui/SectionCard";
 import PriorityDot from "@/components/ui/PriorityDot";
 import ThinProgress from "@/components/ui/ThinProgress";
@@ -93,18 +93,85 @@ export function DashboardSkeleton() {
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
-export function AttentionCard({ data }: { data: DashboardSummary }) {
+// ─── Type icons for priority feed items ──────────────────────────────────────
+
+const TYPE_ICON_COLORS: Record<string, string> = {
+  critical: "text-red-500",
+  warning: "text-amber-500",
+  info: "text-blue-500",
+  low: "text-gray-400",
+};
+
+function FeedItemIcon({ type, priority }: { type: string; priority: string }) {
+  const color = TYPE_ICON_COLORS[priority] ?? "text-gray-400";
+  const cls = `h-3.5 w-3.5 shrink-0 ${color}`;
+
+  if (type === "action_item") {
+    // CheckSquare
+    return (
+      <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="9 11 12 14 22 4" />
+        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+      </svg>
+    );
+  }
+  if (type === "strategy_alert") {
+    // Target
+    return (
+      <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+    );
+  }
+  // inactive_client — Clock
+  return (
+    <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+// ─── Attention card (unified priority feed) ──────────────────────────────────
+
+export function AttentionCard({ data, feedItems }: { data: DashboardSummary; feedItems?: PriorityFeedItem[] | null }) {
+  // Use priority feed if available, fall back to legacy attention_items
+  const hasFeed = feedItems && feedItems.length > 0;
+  const hasLegacy = data.attention_items.length > 0;
+  const isEmpty = !hasFeed && !hasLegacy;
+
   return (
     <SectionCard
       title="Needs attention"
-      action={{ label: "View all", href: "/dashboard/actions" }}
+      action={{ label: "View all", href: "/dashboard/action-items" }}
     >
-      {data.attention_items.length === 0 ? (
+      {isEmpty ? (
         <div className="flex items-center gap-2 py-2">
           <svg className="h-4 w-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className="text-sm text-gray-500">All caught up</span>
+        </div>
+      ) : hasFeed ? (
+        <div>
+          {feedItems.slice(0, 10).map((item, idx) => (
+            <Link
+              key={`${item.type}-${item.client_id}-${idx}`}
+              href={item.link}
+              className="flex items-start gap-2.5 border-b border-gray-100 py-2.5 last:border-b-0 -mx-1 px-1 rounded hover:bg-gray-50"
+            >
+              <div className="mt-1 flex items-center gap-1.5">
+                <FeedItemIcon type={item.type} priority={item.priority} />
+                <PriorityDot priority={item.priority as "critical" | "warning" | "info" | "low"} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-gray-900 line-clamp-1">{item.title}</p>
+                <p className="text-xs text-gray-500">{item.subtitle}</p>
+              </div>
+            </Link>
+          ))}
         </div>
       ) : (
         <div>

@@ -1683,10 +1683,20 @@ export interface DashboardSummary {
   };
 }
 
+export interface PriorityFeedItem {
+  type: "action_item" | "strategy_alert" | "inactive_client";
+  priority: "critical" | "warning" | "info" | "low";
+  title: string;
+  subtitle: string;
+  client_id: string | null;
+  link: string;
+}
+
 export function createDashboardApi(getToken: GetToken, orgId?: string) {
   const f = boundFetch(getToken, orgId);
   return {
     summary: (days = 30) => f<DashboardSummary>(`/dashboard/summary?days=${days}`),
+    priorityFeed: () => f<PriorityFeedItem[]>(`/dashboard/priority-feed`),
   };
 }
 
