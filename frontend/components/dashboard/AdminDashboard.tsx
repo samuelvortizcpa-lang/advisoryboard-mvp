@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
 
-import type { DashboardSummary, MemberAssignments } from "@/lib/api";
-import { createClientAssignmentsApi } from "@/lib/api";
+import type { DashboardSummary, MemberAssignments, StrategyOverview } from "@/lib/api";
+import { createClientAssignmentsApi, createStrategyDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
 import AreaChartCard from "@/components/ui/AreaChartCard";
@@ -34,6 +34,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
   const { getToken } = useAuth();
   const { activeOrg } = useOrg();
   const [assignmentMap, setAssignmentMap] = useState<Record<string, MemberAssignments>>({});
+  const [strategyOverview, setStrategyOverview] = useState<StrategyOverview | null>(null);
 
   const loadAssignments = useCallback(async () => {
     if (!activeOrg || activeOrg.org_type === "personal") return;
@@ -55,6 +56,11 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
       loadAssignments();
     }
   }, [data.team_members, loadAssignments]);
+
+  useEffect(() => {
+    const api = createStrategyDashboardApi(getToken, activeOrg?.id);
+    api.fetchOverview(new Date().getFullYear()).then(setStrategyOverview).catch(() => {});
+  }, [getToken, activeOrg]);
 
   const { stats } = data;
   const queryPct =
@@ -98,6 +104,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
           context={stats.clients.limit != null ? `of ${stats.clients.limit}` : undefined}
           contextType="muted"
           accentColor="border-l-blue-500"
+          href="/dashboard/clients"
         />
         <StatCard
           label="Action items"
@@ -105,13 +112,15 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
           context={stats.action_items.overdue > 0 ? `${stats.action_items.overdue} overdue` : "All on track"}
           contextType={stats.action_items.overdue > 0 ? "warning" : "success"}
           accentColor="border-l-amber-500"
+          href="/dashboard/action-items"
         />
         <StatCard
-          label="Documents"
-          value={stats.documents.count}
-          context={stats.documents.limit != null ? `of ${stats.documents.limit}` : undefined}
+          label="Strategies reviewed"
+          value={strategyOverview?.clients_reviewed ?? "—"}
+          context={strategyOverview ? `of ${strategyOverview.total_clients}` : undefined}
           contextType="muted"
           accentColor="border-l-teal-500"
+          href="/dashboard/strategy-dashboard"
         />
         <StatCard
           label="AI queries"
@@ -119,6 +128,7 @@ export default function AdminDashboard({ data, initials, timeRange, onTimeRangeC
           context={`of ${stats.ai_queries.limit}`}
           contextType={queryPct > 80 ? "warning" : "muted"}
           accentColor="border-l-purple-500"
+          href="/dashboard/usage-analytics"
           labelExtra={<HelpTooltip content="Total AI questions asked across all clients this billing period." />}
         />
       </div>

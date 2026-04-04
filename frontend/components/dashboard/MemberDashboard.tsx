@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
+import { useEffect, useState } from "react";
 
-import type { DashboardSummary } from "@/lib/api";
+import type { DashboardSummary, StrategyOverview } from "@/lib/api";
+import { createStrategyDashboardApi } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
 import StatCard from "@/components/ui/StatCard";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
@@ -25,7 +29,15 @@ interface Props {
 }
 
 export default function MemberDashboard({ data, initials, timeRange, onTimeRangeChange }: Props) {
+  const { getToken } = useAuth();
+  const { activeOrg } = useOrg();
+  const [strategyOverview, setStrategyOverview] = useState<StrategyOverview | null>(null);
   const { stats } = data;
+
+  useEffect(() => {
+    const api = createStrategyDashboardApi(getToken, activeOrg?.id);
+    api.fetchOverview(new Date().getFullYear()).then(setStrategyOverview).catch(() => {});
+  }, [getToken, activeOrg]);
 
   // Empty state: org member with no assigned clients
   const isOrgMember = data.team_members != null;
@@ -94,6 +106,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
           context={stats.clients.limit != null ? `of ${stats.clients.limit}` : undefined}
           contextType="muted"
           accentColor="border-l-blue-500"
+          href="/dashboard/clients"
         />
         <StatCard
           label="My action items"
@@ -101,13 +114,15 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
           context={stats.action_items.overdue > 0 ? `${stats.action_items.overdue} overdue` : "All on track"}
           contextType={stats.action_items.overdue > 0 ? "warning" : "success"}
           accentColor="border-l-amber-500"
+          href="/dashboard/action-items"
         />
         <StatCard
-          label="My documents"
-          value={stats.documents.count}
-          context={stats.documents.limit != null ? `of ${stats.documents.limit}` : undefined}
+          label="Strategies reviewed"
+          value={strategyOverview?.clients_reviewed ?? "—"}
+          context={strategyOverview ? `of ${strategyOverview.total_clients}` : undefined}
           contextType="muted"
           accentColor="border-l-teal-500"
+          href="/dashboard/strategy-dashboard"
         />
         <StatCard
           label="My AI queries"
@@ -115,6 +130,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
           context={`of ${stats.ai_queries.limit}`}
           contextType={queryPct > 80 ? "warning" : "muted"}
           accentColor="border-l-purple-500"
+          href="/dashboard/usage-analytics"
           labelExtra={<HelpTooltip content="Total AI questions asked across all clients this billing period." />}
         />
       </div>
