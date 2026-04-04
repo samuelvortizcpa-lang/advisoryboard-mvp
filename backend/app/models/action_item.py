@@ -15,9 +15,9 @@ if TYPE_CHECKING:
 
 class ActionItem(Base):
     """
-    An action item extracted from a client document.
+    An action item — either AI-extracted from a document or manually created.
 
-    Extracted automatically by GPT-4o-mini during document processing.
+    Source: 'ai_extracted' (from document processing) or 'manual' (user-created).
     Status lifecycle: pending → completed | cancelled
     """
 
@@ -29,10 +29,10 @@ class ActionItem(Base):
         default=uuid.uuid4,
     )
 
-    document_id: Mapped[uuid.UUID] = mapped_column(
+    document_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("documents.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     client_id: Mapped[uuid.UUID] = mapped_column(
@@ -55,10 +55,21 @@ class ActionItem(Base):
 
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
-    extracted_at: Mapped[datetime] = mapped_column(
+    # Assignment fields
+    assigned_to: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    assigned_to_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Provenance
+    created_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="ai_extracted"
+    )
+
+    extracted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        nullable=False,
+        nullable=True,
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
@@ -80,7 +91,7 @@ class ActionItem(Base):
     # Relationships
     # -----------------------------------------------------------------------
 
-    document: Mapped["Document"] = relationship(
+    document: Mapped[Optional["Document"]] = relationship(
         "Document",
         back_populates="action_items",
     )

@@ -7,17 +7,23 @@ from pydantic import BaseModel
 
 class ActionItemResponse(BaseModel):
     id: UUID
-    document_id: UUID
+    document_id: Optional[UUID] = None
     client_id: UUID
     text: str
     status: str
     priority: Optional[str]
     due_date: Optional[date]
-    extracted_at: datetime
+    assigned_to: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    notes: Optional[str] = None
+    created_by: Optional[str] = None
+    source: str = "ai_extracted"
+    extracted_at: Optional[datetime] = None
     completed_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
     document_filename: Optional[str] = None
+    client_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -27,6 +33,21 @@ class ActionItemUpdate(BaseModel):
     status: Optional[str] = None       # 'pending' | 'completed' | 'cancelled'
     priority: Optional[str] = None     # 'low' | 'medium' | 'high'
     due_date: Optional[date] = None    # explicit null clears the date
+    text: Optional[str] = None
+    assigned_to: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ActionItemCreate(BaseModel):
+    """Schema for manually creating an action item."""
+    text: str
+    client_id: UUID
+    priority: Optional[str] = "medium"
+    due_date: Optional[date] = None
+    assigned_to: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class ActionItemListResponse(BaseModel):

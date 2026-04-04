@@ -7,11 +7,12 @@ no business logic or HTTP concerns.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, Tuple
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import asc, desc, case
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.action_item import ActionItem
@@ -46,7 +47,7 @@ def _verify_client_ownership(
     return client
 
 
-def _to_response(item: ActionItem) -> ActionItemResponse:
+def _to_response(item: ActionItem, client_name: str | None = None) -> ActionItemResponse:
     """Build an ActionItemResponse, eagerly pulling the document filename."""
     return ActionItemResponse(
         id=item.id,
@@ -56,11 +57,17 @@ def _to_response(item: ActionItem) -> ActionItemResponse:
         status=item.status,
         priority=item.priority,
         due_date=item.due_date,
+        assigned_to=item.assigned_to,
+        assigned_to_name=item.assigned_to_name,
+        notes=item.notes,
+        created_by=item.created_by,
+        source=item.source,
         extracted_at=item.extracted_at,
         completed_at=item.completed_at,
         created_at=item.created_at,
         updated_at=item.updated_at,
         document_filename=item.document.filename if item.document else None,
+        client_name=client_name,
     )
 
 
@@ -165,9 +172,123 @@ def update_action_item(
     if "due_date" in updates:
         item.due_date = updates["due_date"]
 
+    if "text" in updates:
+        item.text = updates["text"]
+
+    if "assigned_to" in updates:
+        item.assigned_to = updates["assigned_to"]
+
+    if "assigned_to_name" in updates:
+        item.assigned_to_name = updates["assigned_to_name"]
+
+    if "notes" in updates:
+        item.notes = updates["notes"]
+
     db.commit()
     db.refresh(item)
     return _to_response(item)
+
+
+def create_action_item(
+    db: Session,
+    client_id: UUID,
+    org_id: UUID,
+    user_id: str,
+    data: dict,
+) -> ActionItemResponse:
+    """Create a manual action item (not tied to a document)."""
+    _verify_client_ownership(db, client_id, org_id=org_id)
+
+    item = ActionItem(
+        client_id=client_id,
+        document_id=None,
+        text=data["text"],
+        status="pending",
+        priority=data.get("priority", "medium"),
+        due_date=data.get("due_date"),
+        assigned_to=data.get("assigned_to"),
+        assigned_to_name=data.get("assigned_to_name"),
+        notes=data.get("notes"),
+        created_by=user_id,
+        source="manual",
+        extracted_at=None,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _to_response(item)
+
+
+def get_org_action_items(
+    db: Session,
+    org_id: UUID,
+    user_id: str,
+    is_admin: bool,
+    *,
+    status_filter: Optional[str] = None,
+    priority_filter: Optional[str] = None,
+    assigned_to_filter: Optional[str] = None,
+    client_id_filter: Optional[UUID] = None,
+    due_before: Optional[date] = None,
+    include_overdue: bool = False,
+    sort: str = "due_date",
+    skip: int = 0,
+    limit: int = 50,
+) -> Tuple[list[ActionItemResponse], int]:
+    """Return paginated action items across the org, scoped by assignment access."""
+    from app.services.assignment_service import get_accessible_client_ids
+
+    accessible_ids = get_accessible_client_ids(user_id, org_id, is_admin, db)
+
+    query = (
+        db.query(ActionItem, Client.name.label("client_name"))
+        .join(Client, ActionItem.client_id == Client.id)
+        .filter(Client.org_id == org_id)
+    )
+
+    if accessible_ids is not None:
+        query = query.filter(ActionItem.client_id.in_(accessible_ids))
+
+    if status_filter and status_filter != "all":
+        query = query.filter(ActionItem.status == status_filter)
+    if priority_filter:
+        query = query.filter(ActionItem.priority == priority_filter)
+    if assigned_to_filter:
+        query = query.filter(ActionItem.assigned_to == assigned_to_filter)
+    if client_id_filter:
+        query = query.filter(ActionItem.client_id == client_id_filter)
+    if due_before:
+        query = query.filter(ActionItem.due_date <= due_before)
+    if include_overdue:
+        query = query.filter(
+            ActionItem.due_date < date.today(),
+            ActionItem.status == "pending",
+        )
+
+    total = query.count()
+
+    # Sorting
+    if sort == "priority":
+        priority_order = case(
+            (ActionItem.priority == "high", 1),
+            (ActionItem.priority == "medium", 2),
+            (ActionItem.priority == "low", 3),
+            else_=4,
+        )
+        query = query.order_by(priority_order, ActionItem.created_at.desc())
+    elif sort == "created_at":
+        query = query.order_by(desc(ActionItem.created_at))
+    else:
+        # due_date — nulls last
+        query = query.order_by(
+            asc(ActionItem.due_date).nullslast(),
+            ActionItem.created_at.desc(),
+        )
+
+    rows = query.options(joinedload(ActionItem.document)).offset(skip).limit(limit).all()
+
+    items = [_to_response(item, client_name=cname) for item, cname in rows]
+    return items, total
 
 
 def delete_action_item(

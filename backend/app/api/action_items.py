@@ -2,13 +2,16 @@
 Action items API router.
 
 Endpoints:
+  GET  /action-items                              org-wide listing (filterable)
+  POST /action-items                              create manual action item
   GET  /clients/{client_id}/action-items           list (filterable by status)
   GET  /clients/{client_id}/action-items/pending   shortcut — pending only
-  PATCH /action-items/{item_id}                    update status/priority/due_date
+  PATCH /action-items/{item_id}                    update fields
   DELETE /action-items/{item_id}                   remove item
   POST /documents/{document_id}/reextract-action-items  re-run extraction
 """
 
+from datetime import date
 from typing import Optional
 from uuid import UUID
 
@@ -19,6 +22,7 @@ from app.core.database import get_db
 from app.models.action_item import ActionItem
 from app.models.client import Client
 from app.schemas.action_item import (
+    ActionItemCreate,
     ActionItemListResponse,
     ActionItemResponse,
     ActionItemUpdate,
@@ -28,6 +32,68 @@ from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.document_service import get_document
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Org-wide action items
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/action-items",
+    response_model=ActionItemListResponse,
+    summary="List action items across the org",
+)
+async def list_org_action_items(
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    client_id: Optional[UUID] = None,
+    due_before: Optional[date] = None,
+    include_overdue: bool = False,
+    sort: str = Query(default="due_date", pattern="^(due_date|priority|created_at)$"),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> ActionItemListResponse:
+    items, total = action_item_service.get_org_action_items(
+        db=db,
+        org_id=auth.org_id,
+        user_id=auth.user_id,
+        is_admin=auth.org_role == "admin",
+        status_filter=status,
+        priority_filter=priority,
+        assigned_to_filter=assigned_to,
+        client_id_filter=client_id,
+        due_before=due_before,
+        include_overdue=include_overdue,
+        sort=sort,
+        skip=skip,
+        limit=limit,
+    )
+    return ActionItemListResponse(items=items, total=total, skip=skip, limit=limit)
+
+
+@router.post(
+    "/action-items",
+    response_model=ActionItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a manual action item",
+)
+async def create_action_item(
+    body: ActionItemCreate,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> ActionItemResponse:
+    check_client_access(auth, body.client_id, db)
+    return action_item_service.create_action_item(
+        db=db,
+        client_id=body.client_id,
+        org_id=auth.org_id,
+        user_id=auth.user_id,
+        data=body.model_dump(exclude={"client_id"}, exclude_unset=False),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +158,7 @@ async def list_pending_action_items(
 @router.patch(
     "/action-items/{item_id}",
     response_model=ActionItemResponse,
-    summary="Update an action item (status, priority, due_date)",
+    summary="Update an action item",
 )
 async def update_action_item(
     item_id: UUID,
