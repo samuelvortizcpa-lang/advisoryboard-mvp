@@ -7,10 +7,9 @@ import { useEffect, useState } from "react";
 import type { DashboardSummary, DeadlineItem, RevenueImpact } from "@/lib/api";
 import { createDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
-import RevenueImpactCard from "@/components/dashboard/RevenueImpactCard";
 import ClientCommandCard from "@/components/dashboard/ClientCommandCard";
-import DeadlineTimeline from "@/components/dashboard/DeadlineTimeline";
-import PracticeSnapshot from "@/components/dashboard/PracticeSnapshot";
+import TaskBoard from "@/components/dashboard/TaskBoard";
+import MetricStrip from "@/components/dashboard/MetricStrip";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
 import HelpTooltip from "@/components/ui/HelpTooltip";
@@ -77,9 +76,9 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
   const totalQueries = data.query_distribution.reduce((s, d) => s + d.count, 0);
 
   return (
-    <div>
-      {/* Top bar — no h1 (breadcrumb already says "Overview") */}
-      <div className="mb-6 flex items-center justify-end gap-3">
+    <div className="space-y-4">
+      {/* Top bar */}
+      <div className="flex items-center justify-end gap-3">
         <Link
           href="/dashboard/clients/new"
           className="rounded-lg bg-[#c9944a] px-4 py-2 text-sm font-medium text-white hover:bg-[#b8843e]"
@@ -91,26 +90,25 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
         </div>
       </div>
 
-      {/* Row 1: Client Hub + Deadlines */}
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Row 1: Client Hub + Task Board */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <ClientCommandCard clients={data.recent_clients} />
-        <DeadlineTimeline items={deadlines} />
+        <TaskBoard items={deadlines} />
       </div>
 
-      {/* Row 2: Revenue Impact + Practice Snapshot */}
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-        <RevenueImpactCard data={revenueImpact} />
-        <PracticeSnapshot data={data} />
-      </div>
+      {/* Row 2: Metric Strip */}
+      <MetricStrip
+        savings={revenueImpact?.total_estimated_savings ?? null}
+        aiQueries={data.stats.ai_queries}
+        activeClients={data.stats.clients}
+        completedThisWeek={data.stats.action_items.completed_this_week}
+        tier={data.plan.tier}
+      />
 
       {/* Row 3: Activity trends */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <div className="lg:col-span-3">
-          <AreaChartCard title="My activity" data={chartData} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-        </div>
-        <div className="lg:col-span-2">
-          <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" titleExtra={<HelpTooltip content="Shows how your AI queries are routed: factual lookups, multi-document synthesis, or strategic advisory analysis." />} />
-        </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3fr_2fr]">
+        <AreaChartCard title="My activity" data={chartData} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+        <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" titleExtra={<HelpTooltip content="Shows how your AI queries are routed: factual lookups, multi-document synthesis, or strategic advisory analysis." />} />
       </div>
     </div>
   );

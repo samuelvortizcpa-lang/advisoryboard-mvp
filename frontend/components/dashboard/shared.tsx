@@ -36,13 +36,13 @@ export const TIER_BADGE_COLORS: Record<string, string> = {
 
 export function DashboardSkeleton() {
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-end gap-3">
+    <div className="space-y-4">
+      <div className="flex items-center justify-end gap-3">
         <div className="h-9 w-28 animate-pulse rounded-lg bg-gray-200" />
         <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
       </div>
-      {/* Row 1: Client Hub + Deadlines */}
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Row 1: Client Hub + Task Board */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
           <div className="h-10 w-full rounded-lg bg-gray-100" />
           <div className="mt-3 space-y-3">
@@ -53,37 +53,31 @@ export function DashboardSkeleton() {
         </div>
         <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
           <div className="h-4 w-36 rounded bg-gray-200" />
-          <div className="mt-3 space-y-3">
+          <div className="mt-3 space-y-2">
+            <div className="h-5 w-full rounded bg-gray-100" />
             {[1, 2, 3].map((j) => (
-              <div key={j} className="h-8 rounded bg-gray-50" />
+              <div key={j} className="h-10 rounded bg-gray-50" />
             ))}
           </div>
         </div>
       </div>
-      {/* Row 2: Revenue Impact + Practice Snapshot */}
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-        <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
-          <div className="h-4 w-36 rounded bg-gray-200" />
-          <div className="mt-3 h-8 w-28 rounded bg-gray-200" />
-          <div className="mt-2 h-3 w-44 rounded bg-gray-100" />
-          <div className="mt-4 h-10 rounded bg-gray-50" />
-        </div>
-        <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
-          <div className="h-4 w-32 rounded bg-gray-200" />
-          <div className="mt-4 space-y-4">
-            <div className="h-6 rounded bg-gray-100" />
-            <div className="h-4 rounded bg-gray-50" />
-            <div className="h-4 rounded bg-gray-50" />
+      {/* Row 2: Metric Strip */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="animate-pulse rounded-xl border border-gray-200 bg-white px-4 py-3.5">
+            <div className="h-3 w-20 rounded bg-gray-200" />
+            <div className="mt-2 h-6 w-16 rounded bg-gray-200" />
+            <div className="mt-1 h-2.5 w-12 rounded bg-gray-100" />
           </div>
-        </div>
+        ))}
       </div>
       {/* Row 3: Charts */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 lg:col-span-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3fr_2fr]">
+        <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
           <div className="h-4 w-24 rounded bg-gray-200" />
           <div className="mt-4 h-[240px] rounded bg-gray-50" />
         </div>
-        <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 lg:col-span-2">
+        <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
           <div className="h-4 w-32 rounded bg-gray-200" />
           <div className="mt-4 h-[240px] rounded bg-gray-50" />
         </div>
