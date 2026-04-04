@@ -859,3 +859,116 @@ async def upcoming_deadlines(
         ))
 
     return items
+
+
+# ─── Task board endpoints ────────────────────────────────────────────────────
+
+
+class TaskBoardItem(BaseModel):
+    id: str
+    text: str
+    client_id: str
+    client_name: str
+    due_date: Optional[str] = None
+    overdue_days: Optional[int] = None
+    completed_at: Optional[str] = None
+    status: str  # pending, completed
+
+
+@router.get(
+    "/dashboard/taskboard",
+    response_model=List[TaskBoardItem],
+    summary="All pending action items for the task board (including unscheduled)",
+)
+async def taskboard_items(
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> List[TaskBoardItem]:
+    today_d = date.today()
+
+    accessible_ids = get_accessible_client_ids(
+        auth.user_id, auth.org_id, auth.org_role == "admin", db
+    )
+
+    q = (
+        db.query(ActionItem, Client.name)
+        .join(Client, ActionItem.client_id == Client.id)
+        .filter(
+            Client.org_id == auth.org_id,
+            ActionItem.status == "pending",
+        )
+    )
+    if accessible_ids is not None:
+        q = q.filter(Client.id.in_(accessible_ids))
+
+    rows = (
+        q.order_by(ActionItem.due_date.asc().nullslast(), ActionItem.created_at.desc())
+        .limit(30)
+        .all()
+    )
+
+    items: list[TaskBoardItem] = []
+    for ai, client_name in rows:
+        overdue_d: int | None = None
+        if ai.due_date and ai.due_date < today_d:
+            overdue_d = (today_d - ai.due_date).days
+
+        items.append(TaskBoardItem(
+            id=str(ai.id),
+            text=ai.text or "Untitled",
+            client_id=str(ai.client_id),
+            client_name=client_name or "",
+            due_date=ai.due_date.isoformat() if ai.due_date else None,
+            overdue_days=overdue_d,
+            status="pending",
+        ))
+
+    return items
+
+
+@router.get(
+    "/dashboard/taskboard/completed",
+    response_model=List[TaskBoardItem],
+    summary="Recently completed action items for the task board Done tab",
+)
+async def taskboard_completed(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> List[TaskBoardItem]:
+    accessible_ids = get_accessible_client_ids(
+        auth.user_id, auth.org_id, auth.org_role == "admin", db
+    )
+
+    q = (
+        db.query(ActionItem, Client.name)
+        .join(Client, ActionItem.client_id == Client.id)
+        .filter(
+            Client.org_id == auth.org_id,
+            ActionItem.status == "completed",
+        )
+    )
+    if accessible_ids is not None:
+        q = q.filter(Client.id.in_(accessible_ids))
+
+    rows = (
+        q.order_by(ActionItem.completed_at.desc().nullslast(), ActionItem.updated_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    items: list[TaskBoardItem] = []
+    for ai, client_name in rows:
+        items.append(TaskBoardItem(
+            id=str(ai.id),
+            text=ai.text or "Untitled",
+            client_id=str(ai.client_id),
+            client_name=client_name or "",
+            due_date=ai.due_date.isoformat() if ai.due_date else None,
+            completed_at=ai.completed_at.isoformat() if ai.completed_at else (
+                ai.updated_at.isoformat() if ai.updated_at else None
+            ),
+            status="completed",
+        ))
+
+    return items

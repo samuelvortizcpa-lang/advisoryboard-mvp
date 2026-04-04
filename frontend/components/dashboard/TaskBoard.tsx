@@ -1,87 +1,127 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { DeadlineItem } from "@/lib/api";
+import type { DashboardSummary, TaskBoardItem } from "@/lib/api";
+import { createDashboardApi } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
 
-interface Props {
-  items: DeadlineItem[] | null;
-}
+/* ── Icons ────────────────────────────────────────────────────────────────── */
 
-/* ── ListChecks icon (lucide) ─────────────────────────────────────────────── */
 function ListChecksIcon() {
   return (
     <svg className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 6h11" />
-      <path d="M10 12h11" />
-      <path d="M10 18h11" />
-      <polyline points="3 6 4 7 6 5" />
-      <polyline points="3 12 4 13 6 11" />
-      <polyline points="3 18 4 19 6 17" />
+      <path d="M10 6h11" /><path d="M10 12h11" /><path d="M10 18h11" />
+      <polyline points="3 6 4 7 6 5" /><polyline points="3 12 4 13 6 11" /><polyline points="3 18 4 19 6 17" />
     </svg>
+  );
+}
+
+function ChevronDown({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+function ChevronRight({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function Spinner() {
+  return (
+    <div className="flex items-center justify-center py-8">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-blue-500" />
+    </div>
   );
 }
 
 /* ── Date helpers ─────────────────────────────────────────────────────────── */
 
-function toLocalDate(iso: string): Date {
+function toLocal(iso: string): Date {
   return new Date(iso + "T00:00:00");
 }
 
-function today(): Date {
+function todayDate(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
 function formatDate(iso: string): string {
-  return toLocalDate(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return toLocal(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function relativeDay(iso: string): string {
-  const t = today();
-  const d = toLocalDate(iso);
+  const t = todayDate();
+  const d = toLocal(iso);
   const diff = Math.round((d.getTime() - t.getTime()) / 86400000);
   if (diff === 1) return "Tomorrow";
   if (diff <= 6) return d.toLocaleDateString("en-US", { weekday: "short" });
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/* ── Group items into overdue / today / upcoming ──────────────────────────── */
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/* ── Group pending items ──────────────────────────────────────────────────── */
 
 interface GroupedTasks {
-  overdue: DeadlineItem[];
-  dueToday: DeadlineItem[];
-  upcoming: DeadlineItem[];
+  today: TaskBoardItem[];
+  overdue: TaskBoardItem[];
+  next: TaskBoardItem[];
+  unscheduled: TaskBoardItem[];
 }
 
-function groupTasks(items: DeadlineItem[]): GroupedTasks {
-  const t = today();
-  const overdue: DeadlineItem[] = [];
-  const dueToday: DeadlineItem[] = [];
-  const upcoming: DeadlineItem[] = [];
+function groupPending(items: TaskBoardItem[]): GroupedTasks {
+  const t = todayDate();
+  const weekOut = new Date(t);
+  weekOut.setDate(weekOut.getDate() + 7);
+
+  const today: TaskBoardItem[] = [];
+  const overdue: TaskBoardItem[] = [];
+  const next: TaskBoardItem[] = [];
+  const unscheduled: TaskBoardItem[] = [];
 
   for (const item of items) {
-    const d = toLocalDate(item.due_date);
+    if (!item.due_date) {
+      unscheduled.push(item);
+      continue;
+    }
+    const d = toLocal(item.due_date);
     if (d < t) overdue.push(item);
-    else if (d.getTime() === t.getTime()) dueToday.push(item);
-    else upcoming.push(item);
+    else if (d.getTime() === t.getTime()) today.push(item);
+    else if (d <= weekOut) next.push(item);
+    else next.push(item); // beyond 7 days still goes in "next" since the API limits results
   }
 
-  return { overdue, dueToday, upcoming };
+  return { today, overdue, next, unscheduled };
 }
 
-/* ── Section component ────────────────────────────────────────────────────── */
+/* ── Collapsible section ──────────────────────────────────────────────────── */
+
+type SectionKey = "today" | "overdue" | "next" | "unscheduled";
 
 function TaskSection({
   label,
   count,
-  color,
   bgClass,
   textClass,
   dotClass,
@@ -92,63 +132,78 @@ function TaskSection({
   moreTextClass,
   renderRight,
   emptyText,
+  expanded,
+  onToggle,
 }: {
   label: string;
   count: number;
-  color: string;
   bgClass: string;
   textClass: string;
   dotClass: string;
   badgeClass: string;
-  items: DeadlineItem[];
+  items: TaskBoardItem[];
   maxItems: number;
   moreHref: string;
   moreTextClass: string;
-  renderRight: (item: DeadlineItem) => string;
+  renderRight: (item: TaskBoardItem) => string;
   emptyText?: string;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
-  // If no items and no emptyText, don't render the section at all
   if (items.length === 0 && !emptyText) return null;
 
   return (
     <div>
-      {/* Section header */}
-      <div className={`-mx-5 flex items-center gap-2 px-5 py-1.5 ${bgClass}`}>
+      <button
+        onClick={onToggle}
+        className={`-mx-5 flex w-[calc(100%+40px)] items-center gap-1.5 px-5 py-1.5 text-left transition-colors hover:brightness-95 ${bgClass}`}
+      >
+        {expanded ? (
+          <ChevronDown className={`h-3.5 w-3.5 ${textClass}`} />
+        ) : (
+          <ChevronRight className={`h-3.5 w-3.5 ${textClass}`} />
+        )}
         <span className={`text-[11px] font-medium uppercase tracking-wide ${textClass}`}>
           {label} &middot; {count}
         </span>
-      </div>
+      </button>
 
-      {/* Items or empty state */}
-      {items.length === 0 && emptyText ? (
-        <p className="py-2.5 text-[12px] text-gray-400">{emptyText}</p>
-      ) : (
-        <div>
-          {items.slice(0, maxItems).map((item) => (
-            <Link
-              key={item.id}
-              href={`/dashboard/clients/${item.client_id}`}
-              className="-mx-1 flex items-start gap-2 rounded px-1 py-2 transition-colors hover:bg-gray-50"
-            >
-              <span className={`mt-[7px] inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium text-gray-900">{item.text}</p>
-                <p className="text-[11px] text-gray-400">
-                  {item.client_name} &middot; Due {formatDate(item.due_date)}
-                </p>
-              </div>
-              <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${badgeClass}`}>
-                {renderRight(item)}
-              </span>
-            </Link>
-          ))}
-          {items.length > maxItems && (
-            <Link
-              href={moreHref}
-              className={`block py-1 pl-4 text-[11px] ${moreTextClass} hover:underline`}
-            >
-              +{items.length - maxItems} more
-            </Link>
+      {expanded && (
+        <div className="transition-all duration-200">
+          {items.length === 0 && emptyText ? (
+            <p className="py-2.5 text-[12px] text-gray-400">{emptyText}</p>
+          ) : (
+            <div>
+              {items.slice(0, maxItems).map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/dashboard/clients/${item.client_id}`}
+                  className="-mx-1 flex items-start gap-2 rounded px-1 py-2 transition-colors hover:bg-gray-50"
+                >
+                  <span className={`mt-[7px] inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-gray-900 line-clamp-1">{item.text}</p>
+                    <p className="text-[11px] text-gray-400">
+                      {item.client_name}
+                      {item.due_date ? ` \u00B7 Due ${formatDate(item.due_date)}` : " \u00B7 No due date"}
+                    </p>
+                  </div>
+                  {renderRight(item) && (
+                    <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${badgeClass}`}>
+                      {renderRight(item)}
+                    </span>
+                  )}
+                </Link>
+              ))}
+              {items.length > maxItems && (
+                <Link
+                  href={moreHref}
+                  className={`block py-1 pl-4 text-[11px] ${moreTextClass} hover:underline`}
+                >
+                  +{items.length - maxItems} more
+                </Link>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -156,102 +211,236 @@ function TaskSection({
   );
 }
 
+/* ── Tab types ────────────────────────────────────────────────────────────── */
+
+type Tab = "todo" | "done" | "delegated";
+
+/* ── Props ────────────────────────────────────────────────────────────────── */
+
+interface Props {
+  data: DashboardSummary;
+}
+
 /* ── Main component ───────────────────────────────────────────────────────── */
 
-export default function TaskBoard({ items }: Props) {
-  const loading = items === null;
+export default function TaskBoard({ data }: Props) {
+  const { getToken } = useAuth();
+  const { activeOrg } = useOrg();
+  const [activeTab, setActiveTab] = useState<Tab>("todo");
+
+  // To Do data
+  const [todoItems, setTodoItems] = useState<TaskBoardItem[] | null>(null);
+  // Done data (lazy)
+  const [doneItems, setDoneItems] = useState<TaskBoardItem[] | null>(null);
+  const [doneLoaded, setDoneLoaded] = useState(false);
+
+  // Collapsible state
+  const [expanded, setExpanded] = useState<Record<SectionKey, boolean>>({
+    today: true,
+    overdue: true,
+    next: false,
+    unscheduled: false,
+  });
+
+  const toggle = useCallback((key: SectionKey) => {
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  // Fetch To Do items immediately
+  useEffect(() => {
+    const api = createDashboardApi(getToken, activeOrg?.id);
+    api.taskBoardItems().then(setTodoItems).catch(() => {});
+  }, [getToken, activeOrg]);
+
+  // Lazy-fetch Done items when tab is clicked
+  useEffect(() => {
+    if (activeTab === "done" && !doneLoaded) {
+      const api = createDashboardApi(getToken, activeOrg?.id);
+      api.taskBoardCompleted(10).then((items) => {
+        setDoneItems(items);
+        setDoneLoaded(true);
+      }).catch(() => setDoneLoaded(true));
+    }
+  }, [activeTab, doneLoaded, getToken, activeOrg]);
 
   const grouped = useMemo(() => {
-    if (!items) return null;
-    return groupTasks(items);
-  }, [items]);
+    if (!todoItems) return null;
+    return groupPending(todoItems);
+  }, [todoItems]);
+
+  const hasFirmOrg = data.team_members != null;
+
+  const tabs: Array<{ key: Tab; label: string }> = [
+    { key: "todo", label: "To Do" },
+    { key: "done", label: "Done" },
+    { key: "delegated", label: "Delegated" },
+  ];
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-md">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-3">
+      <div className="flex items-center justify-between px-5 pt-5 pb-2">
         <div className="flex items-center gap-1.5">
           <ListChecksIcon />
           <h3 className="text-sm font-semibold text-gray-900">Tasks & deadlines</h3>
         </div>
-        <Link href="/dashboard/action-items" className="text-xs text-gray-500 hover:text-gray-700">
+        <Link href="/dashboard/actions" className="text-xs text-gray-500 hover:text-gray-700">
           View all &rarr;
         </Link>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-4 border-b border-gray-100 px-5">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`pb-2 text-[12px] font-medium transition-colors ${
+              activeTab === tab.key
+                ? "border-b-2 border-blue-500 text-gray-900"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Body */}
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-5 pb-5">
-        {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="animate-pulse">
-                <div className="h-5 w-full rounded bg-gray-100" />
-                <div className="mt-2 h-10 rounded bg-gray-50" />
-              </div>
-            ))}
-          </div>
-        ) : !grouped || (grouped.overdue.length === 0 && grouped.dueToday.length === 0 && grouped.upcoming.length === 0) ? (
-          <div className="flex flex-col items-center justify-center py-10">
-            <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="mt-1.5 text-sm text-gray-500">All clear, no deadlines</span>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <TaskSection
-              label="OVERDUE"
-              count={grouped.overdue.length}
-              color="red"
-              bgClass="bg-red-50"
-              textClass="text-red-500"
-              dotClass="bg-red-500"
-              badgeClass="bg-red-50 text-red-600"
-              items={grouped.overdue}
-              maxItems={3}
-              moreHref="/dashboard/action-items?filter=overdue"
-              moreTextClass="text-red-400"
-              renderRight={(item) => {
-                const d = item.overdue_days ?? Math.round((today().getTime() - toLocalDate(item.due_date).getTime()) / 86400000);
-                return `${d}d late`;
-              }}
-            />
+      <div className="relative min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-2">
+        {/* ── To Do tab ── */}
+        {activeTab === "todo" && (
+          todoItems === null ? <Spinner /> : !grouped || (grouped.today.length === 0 && grouped.overdue.length === 0 && grouped.next.length === 0 && grouped.unscheduled.length === 0) ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="mt-1.5 text-sm text-gray-500">All clear, no tasks</span>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <TaskSection
+                label="TODAY"
+                count={grouped.today.length}
+                bgClass="bg-blue-50"
+                textClass="text-blue-500"
+                dotClass="bg-blue-500"
+                badgeClass="bg-blue-50 text-blue-600"
+                items={grouped.today}
+                maxItems={5}
+                moreHref="/dashboard/actions?filter=today"
+                moreTextClass="text-blue-400"
+                renderRight={() => "Today"}
+                emptyText="Nothing due today"
+                expanded={expanded.today}
+                onToggle={() => toggle("today")}
+              />
 
-            <TaskSection
-              label="DUE TODAY"
-              count={grouped.dueToday.length}
-              color="amber"
-              bgClass="bg-amber-50"
-              textClass="text-amber-600"
-              dotClass="bg-amber-500"
-              badgeClass="bg-amber-50 text-amber-600"
-              items={grouped.dueToday}
-              maxItems={3}
-              moreHref="/dashboard/action-items?filter=today"
-              moreTextClass="text-amber-500"
-              renderRight={() => "Today"}
-              emptyText="Nothing due today"
-            />
+              <TaskSection
+                label="OVERDUE"
+                count={grouped.overdue.length}
+                bgClass="bg-red-50"
+                textClass="text-red-500"
+                dotClass="bg-red-500"
+                badgeClass="bg-red-50 text-red-600"
+                items={grouped.overdue}
+                maxItems={5}
+                moreHref="/dashboard/actions?filter=overdue"
+                moreTextClass="text-red-400"
+                renderRight={(item) => {
+                  const d = item.overdue_days ?? Math.round((todayDate().getTime() - toLocal(item.due_date!).getTime()) / 86400000);
+                  return `${d}d late`;
+                }}
+                expanded={expanded.overdue}
+                onToggle={() => toggle("overdue")}
+              />
 
-            <TaskSection
-              label="UPCOMING"
-              count={grouped.upcoming.length}
-              color="blue"
-              bgClass="bg-blue-50"
-              textClass="text-blue-500"
-              dotClass="bg-blue-500"
-              badgeClass="bg-blue-50 text-blue-600"
-              items={grouped.upcoming}
-              maxItems={3}
-              moreHref="/dashboard/action-items?filter=upcoming"
-              moreTextClass="text-blue-400"
-              renderRight={(item) => relativeDay(item.due_date)}
-              emptyText="Clear schedule ahead"
-            />
-          </div>
+              <TaskSection
+                label="NEXT"
+                count={grouped.next.length}
+                bgClass="bg-gray-50"
+                textClass="text-gray-600"
+                dotClass="bg-gray-400"
+                badgeClass="bg-gray-50 text-gray-600"
+                items={grouped.next}
+                maxItems={5}
+                moreHref="/dashboard/actions?filter=upcoming"
+                moreTextClass="text-gray-400"
+                renderRight={(item) => item.due_date ? relativeDay(item.due_date) : ""}
+                emptyText="Clear schedule ahead"
+                expanded={expanded.next}
+                onToggle={() => toggle("next")}
+              />
+
+              <TaskSection
+                label="UNSCHEDULED"
+                count={grouped.unscheduled.length}
+                bgClass="bg-gray-50"
+                textClass="text-gray-400"
+                dotClass="bg-gray-300"
+                badgeClass="bg-gray-50 text-gray-400"
+                items={grouped.unscheduled}
+                maxItems={5}
+                moreHref="/dashboard/actions"
+                moreTextClass="text-gray-400"
+                renderRight={() => ""}
+                expanded={expanded.unscheduled}
+                onToggle={() => toggle("unscheduled")}
+              />
+            </div>
+          )
         )}
 
-        {/* Fade gradient at bottom if content overflows */}
+        {/* ── Done tab ── */}
+        {activeTab === "done" && (
+          !doneLoaded ? <Spinner /> : doneItems && doneItems.length > 0 ? (
+            <div>
+              {doneItems.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/dashboard/clients/${item.client_id}`}
+                  className="-mx-1 flex items-start gap-2 rounded px-1 py-2 transition-colors hover:bg-gray-50"
+                >
+                  <span className="mt-[7px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-gray-900 line-clamp-1">{item.text}</p>
+                    <p className="text-[11px] text-gray-400">
+                      {item.client_name}
+                      {item.completed_at ? ` \u00B7 Completed ${relativeTime(item.completed_at)}` : ""}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+              <Link
+                href="/dashboard/actions?filter=completed"
+                className="mt-1 block text-center text-[11px] text-gray-400 hover:text-gray-600 hover:underline"
+              >
+                View all &rarr;
+              </Link>
+            </div>
+          ) : (
+            <p className="py-8 text-center text-[13px] text-gray-400">No completed items yet</p>
+          )
+        )}
+
+        {/* ── Delegated tab ── */}
+        {activeTab === "delegated" && (
+          hasFirmOrg ? (
+            <p className="py-8 text-center text-[13px] text-gray-400">No delegated tasks</p>
+          ) : (
+            <div className="flex flex-col items-center py-8 text-center">
+              <p className="text-[13px] text-gray-400">Delegated tasks appear here when you have team members</p>
+              <Link
+                href="/dashboard/settings/organization"
+                className="mt-1.5 text-[12px] text-blue-500 hover:text-blue-700 hover:underline"
+              >
+                Organization settings &rarr;
+              </Link>
+            </div>
+          )
+        )}
+
+        {/* Fade at bottom */}
         <div className="pointer-events-none sticky bottom-0 -mb-5 h-4 bg-gradient-to-t from-white to-transparent" />
       </div>
     </div>

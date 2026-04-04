@@ -52,11 +52,29 @@ function UsersIcon({ className }: { className?: string }) {
   );
 }
 
-function CheckCircleIcon({ className }: { className?: string }) {
+function CheckIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function AlertTriangleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function LinkIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
     </svg>
   );
 }
@@ -69,35 +87,55 @@ function MetricCard({
   value,
   subtitle,
   indicator,
+  children,
 }: {
   href: string;
   label: string;
-  value: string;
-  subtitle: string;
+  value?: string;
+  subtitle?: string;
   indicator: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <Link
       href={href}
       className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-md"
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
-        <p className="mt-0.5 text-[22px] font-semibold leading-tight text-gray-900">{value}</p>
-        <p className="mt-0.5 text-[11px] text-gray-400">{subtitle}</p>
+        {value != null && (
+          <p className="mt-0.5 text-[22px] font-semibold leading-tight text-gray-900">{value}</p>
+        )}
+        {subtitle && (
+          <p className="mt-0.5 text-[11px] text-gray-400">{subtitle}</p>
+        )}
+        {children}
       </div>
-      <div className="shrink-0">{indicator}</div>
+      <div className="shrink-0 ml-3">{indicator}</div>
     </Link>
   );
 }
 
+/* ── Connection status dot ────────────────────────────────────────────────── */
+
+function ConnectionDot({ status }: { status: "connected" | "disconnected" | "not_configured" }) {
+  const color = status === "connected" ? "bg-green-500" : status === "disconnected" ? "bg-red-500" : "bg-gray-300";
+  return <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${color}`} />;
+}
+
 /* ── Props ────────────────────────────────────────────────────────────────── */
+
+export interface ConnectionStatus {
+  email: boolean;
+  calendar: boolean;
+  zoom: boolean;
+}
 
 interface MetricStripProps {
   savings: number | null;
   aiQueries: { used: number; limit: number };
   activeClients: { count: number; limit: number | null };
-  completedThisWeek: number;
+  connections: ConnectionStatus | null;
   tier: string;
 }
 
@@ -107,7 +145,7 @@ export default function MetricStrip({
   savings,
   aiQueries,
   activeClients,
-  completedThisWeek,
+  connections,
   tier,
 }: MetricStripProps) {
   const savingsStr =
@@ -125,6 +163,25 @@ export default function MetricStrip({
     activeClients.limit != null && (tier === "free" || tier === "starter")
       ? `of ${activeClients.limit}`
       : "managed";
+
+  // Connection status
+  const conn = connections ?? { email: false, calendar: false, zoom: false };
+  const allConnected = conn.email && conn.calendar && conn.zoom;
+  const anyConnected = conn.email || conn.calendar || conn.zoom;
+
+  const connIndicator = allConnected ? (
+    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-50">
+      <CheckIcon className="h-5 w-5 text-green-500" />
+    </div>
+  ) : anyConnected ? (
+    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-50">
+      <AlertTriangleIcon className="h-5 w-5 text-amber-500" />
+    </div>
+  ) : (
+    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50">
+      <LinkIcon className="h-5 w-5 text-gray-400" />
+    </div>
+  );
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -161,16 +218,28 @@ export default function MetricStrip({
       />
 
       <MetricCard
-        href="/dashboard/action-items"
-        label="Completed"
-        value={String(completedThisWeek)}
-        subtitle="this week"
-        indicator={
-          <div className={`flex h-9 w-9 items-center justify-center rounded-full ${completedThisWeek > 0 ? "bg-green-50" : "bg-gray-50"}`}>
-            <CheckCircleIcon className={`h-5 w-5 ${completedThisWeek > 0 ? "text-green-500" : "text-gray-400"}`} />
+        href="/dashboard/settings/integrations"
+        label="Connections"
+        indicator={connIndicator}
+      >
+        <div className="mt-1.5 space-y-1">
+          <div className="flex items-center gap-1.5">
+            <ConnectionDot status={conn.email ? "connected" : "not_configured"} />
+            <span className="text-[12px] text-gray-600">Email</span>
+            <span className="text-[11px] text-gray-400">{conn.email ? "Connected" : "Not set up"}</span>
           </div>
-        }
-      />
+          <div className="flex items-center gap-1.5">
+            <ConnectionDot status={conn.calendar ? "connected" : "not_configured"} />
+            <span className="text-[12px] text-gray-600">Calendar</span>
+            <span className="text-[11px] text-gray-400">{conn.calendar ? "Connected" : "Not set up"}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <ConnectionDot status={conn.zoom ? "connected" : "not_configured"} />
+            <span className="text-[12px] text-gray-600">Zoom</span>
+            <span className="text-[11px] text-gray-400">{conn.zoom ? "Connected" : "Not set up"}</span>
+          </div>
+        </div>
+      </MetricCard>
     </div>
   );
 }

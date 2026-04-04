@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
-import type { DashboardSummary, DeadlineItem, RevenueImpact } from "@/lib/api";
-import { createDashboardApi } from "@/lib/api";
+import type { DashboardSummary, IntegrationConnection, RevenueImpact } from "@/lib/api";
+import { createDashboardApi, createIntegrationsApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import ClientCommandCard from "@/components/dashboard/ClientCommandCard";
 import TaskBoard from "@/components/dashboard/TaskBoard";
 import MetricStrip from "@/components/dashboard/MetricStrip";
+import type { ConnectionStatus } from "@/components/dashboard/MetricStrip";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
 import HelpTooltip from "@/components/ui/HelpTooltip";
@@ -18,6 +19,14 @@ import {
   type TimeRange,
   DIST_COLORS,
 } from "./shared";
+
+function deriveConnections(conns: IntegrationConnection[]): ConnectionStatus {
+  return {
+    email: conns.some((c) => (c.provider === "google" || c.provider === "microsoft") && c.is_active),
+    calendar: conns.some((c) => c.provider === "google" && c.is_active && c.scopes?.includes("calendar")),
+    zoom: conns.some((c) => c.provider === "zoom" && c.is_active),
+  };
+}
 
 interface Props {
   data: DashboardSummary;
@@ -30,13 +39,15 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
   const { getToken } = useAuth();
   const { activeOrg } = useOrg();
   const [revenueImpact, setRevenueImpact] = useState<RevenueImpact | null>(null);
-  const [deadlines, setDeadlines] = useState<DeadlineItem[] | null>(null);
+  const [connections, setConnections] = useState<ConnectionStatus | null>(null);
   const { stats } = data;
 
   useEffect(() => {
-    const api = createDashboardApi(getToken, activeOrg?.id);
-    api.revenueImpact(new Date().getFullYear()).then(setRevenueImpact).catch(() => {});
-    api.upcomingDeadlines().then(setDeadlines).catch(() => {});
+    const dashApi = createDashboardApi(getToken, activeOrg?.id);
+    dashApi.revenueImpact(new Date().getFullYear()).then(setRevenueImpact).catch(() => {});
+
+    const intApi = createIntegrationsApi(getToken, activeOrg?.id);
+    intApi.listConnections().then((conns) => setConnections(deriveConnections(conns))).catch(() => {});
   }, [getToken, activeOrg]);
 
   // Empty state: org member with no assigned clients
@@ -93,7 +104,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
       {/* Row 1: Client Hub + Task Board */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <ClientCommandCard clients={data.recent_clients} />
-        <TaskBoard items={deadlines} />
+        <TaskBoard data={data} />
       </div>
 
       {/* Row 2: Metric Strip */}
@@ -101,7 +112,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
         savings={revenueImpact?.total_estimated_savings ?? null}
         aiQueries={data.stats.ai_queries}
         activeClients={data.stats.clients}
-        completedThisWeek={data.stats.action_items.completed_this_week}
+        connections={connections}
         tier={data.plan.tier}
       />
 

@@ -57,7 +57,7 @@ export default function DeadlineTimeline({ items }: Props) {
     <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-md">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">Upcoming deadlines</h3>
-        <Link href="/dashboard/action-items" className="text-xs text-gray-500 hover:text-gray-700">
+        <Link href="/dashboard/actions" className="text-xs text-gray-500 hover:text-gray-700">
           View all &rarr;
         </Link>
       </div>

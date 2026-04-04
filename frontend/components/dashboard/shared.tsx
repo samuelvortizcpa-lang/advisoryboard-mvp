@@ -140,7 +140,7 @@ export function AttentionCard({ data, feedItems }: { data: DashboardSummary; fee
   return (
     <SectionCard
       title="Needs attention"
-      action={{ label: "View all", href: "/dashboard/action-items" }}
+      action={{ label: "View all", href: "/dashboard/actions" }}
     >
       {isEmpty ? (
         <div className="flex items-center gap-2 py-2">

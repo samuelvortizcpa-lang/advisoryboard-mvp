@@ -1709,6 +1709,17 @@ export interface DeadlineItem {
   priority: "critical" | "warning" | "info";
 }
 
+export interface TaskBoardItem {
+  id: string;
+  text: string;
+  client_id: string;
+  client_name: string;
+  due_date: string | null;
+  overdue_days: number | null;
+  completed_at: string | null;
+  status: "pending" | "completed";
+}
+
 export function createDashboardApi(getToken: GetToken, orgId?: string) {
   const f = boundFetch(getToken, orgId);
   return {
@@ -1716,6 +1727,8 @@ export function createDashboardApi(getToken: GetToken, orgId?: string) {
     priorityFeed: () => f<PriorityFeedItem[]>(`/dashboard/priority-feed`),
     revenueImpact: (year: number) => f<RevenueImpact>(`/dashboard/revenue-impact?year=${year}`),
     upcomingDeadlines: () => f<DeadlineItem[]>(`/dashboard/upcoming-deadlines`),
+    taskBoardItems: () => f<TaskBoardItem[]>(`/dashboard/taskboard`),
+    taskBoardCompleted: (limit = 10) => f<TaskBoardItem[]>(`/dashboard/taskboard/completed?limit=${limit}`),
   };
 }
 
