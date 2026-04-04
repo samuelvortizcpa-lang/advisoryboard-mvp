@@ -44,7 +44,9 @@ export async function loadRules(forceRefresh = false) {
 
   try {
     const authed = await isAuthenticated();
-    if (!authed) return [];
+    if (!authed) {
+      return [];
+    }
 
     const result = await getMonitoringRules();
     const rules = Array.isArray(result) ? result : (result?.rules || []);
@@ -57,7 +59,8 @@ export async function loadRules(forceRefresh = false) {
     });
 
     return active;
-  } catch {
+  } catch (err) {
+    console.error('[Callwen Monitor] loadRules API error:', err);
     // Fallback to cached if API fails
     try {
       const cached = await chrome.storage.session.get(RULES_CACHE_KEY);
@@ -91,7 +94,9 @@ export async function checkPage(tabId, url, domain) {
   // Rate limit: skip if checked this URL recently
   const now = Date.now();
   const lastTime = lastChecked.get(url);
-  if (lastTime && now - lastTime < CHECK_COOLDOWN_MS) return [];
+  if (lastTime && now - lastTime < CHECK_COOLDOWN_MS) {
+    return [];
+  }
   lastChecked.set(url, now);
 
   // Clean old entries
@@ -102,7 +107,9 @@ export async function checkPage(tabId, url, domain) {
   }
 
   const rules = await loadRules();
-  if (!rules.length) return [];
+  if (!rules.length) {
+    return [];
+  }
 
   const matches = [];
 
@@ -174,7 +181,7 @@ export async function checkPage(tabId, url, domain) {
     if (matched) {
       matches.push({
         rule_id: rule.id,
-        rule_name: rule.name || 'Unnamed rule',
+        rule_name: rule.rule_name || rule.name || 'Unnamed rule',
         rule_type: ruleType,
         pattern: rule.pattern,
         client_id: rule.client_id,
@@ -216,7 +223,7 @@ export async function checkEmailSender(emailAddresses) {
     if (matched) {
       matches.push({
         rule_id: rule.id,
-        rule_name: rule.name || 'Unnamed rule',
+        rule_name: rule.rule_name || rule.name || 'Unnamed rule',
         rule_type: ruleType,
         pattern: rule.pattern,
         client_id: rule.client_id,
@@ -248,7 +255,9 @@ export async function showMatchNotification(tabId, url, matches) {
   try {
     const stored = await chrome.storage.session.get(NOTIFIED_KEY);
     const notified = stored[NOTIFIED_KEY] || {};
-    if (notified[notifKey]) return;
+    if (notified[notifKey]) {
+      return;
+    }
 
     // Mark as notified
     notified[notifKey] = Date.now();
@@ -273,7 +282,9 @@ export async function showMatchNotification(tabId, url, matches) {
       rule_name: topMatch.rule_name,
     });
     bannerShown = true;
-  } catch { /* content script not available */ }
+  } catch {
+    // Content script not available — fall through to Chrome notification
+  }
 
   // Chrome notification as backup
   if (!bannerShown) {
@@ -285,7 +296,9 @@ export async function showMatchNotification(tabId, url, matches) {
         message: `This page may be related to ${topMatch.client_name}`,
         priority: 1,
       });
-    } catch { /* notifications API unavailable */ }
+    } catch (err) {
+      console.error('[Callwen Monitor] Chrome notification failed:', err);
+    }
   }
 }
 

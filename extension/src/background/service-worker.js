@@ -10,7 +10,10 @@
  */
 
 import { CONFIG } from '../utils/config.js';
-import { handleAuthToken, getToken, isAuthenticated } from '../services/auth.js';
+import {
+  handleAuthToken, getToken, isAuthenticated,
+  initRefreshTimer, scheduleProactiveRefresh,
+} from '../services/auth.js';
 import { getExtensionConfig } from '../services/api.js';
 import {
   checkPage, checkEmailSender, showMatchNotification,
@@ -18,6 +21,11 @@ import {
 } from '../services/monitoring.js';
 
 const AUTH_CALLBACK_PREFIX = `${CONFIG.APP_URL}/extension-auth-callback`;
+
+// ---------------------------------------------------------------------------
+// Initialize proactive token refresh on service worker startup
+// ---------------------------------------------------------------------------
+initRefreshTimer();
 
 // ---------------------------------------------------------------------------
 // Context menus — register on install
@@ -181,11 +189,15 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   try {
     // Check if user is authenticated
     const authenticated = await isAuthenticated();
-    if (!authenticated) return;
+    if (!authenticated) {
+      return;
+    }
 
     // Check if monitoring is active (enabled + not muted)
     const active = await isMonitoringActive();
-    if (!active) return;
+    if (!active) {
+      return;
+    }
 
     const domain = new URL(tab.url).hostname.toLowerCase();
     const matches = await checkPage(tabId, tab.url, domain);
@@ -193,8 +205,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (matches.length > 0) {
       await showMatchNotification(tabId, tab.url, matches);
     }
-  } catch {
-    // Best-effort — don't disrupt browsing
+  } catch (err) {
+    console.error('[Callwen Monitor] Error checking page:', err);
   }
 });
 
@@ -238,12 +250,10 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content script detected ?token= on /extension-auth-callback
   if (message.type === 'AUTH_TOKEN_FROM_PAGE') {
-    console.log('[Callwen SW] Received token from content script');
     (async () => {
       try {
         await handleAuthToken(message.token);
         await updateBadge();
-        console.log('[Callwen SW] Token stored successfully');
         loadRules(true).catch(() => {});
 
         // Notify sidepanel that auth state changed
@@ -307,8 +317,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'MONITORING_RULES_CHANGED') {
     invalidateRulesCache()
       .then(() => loadRules(true))
-      .then(() => sendResponse({ ok: true }))
-      .catch(() => sendResponse({ ok: false }));
+      .then(() => {
+        sendResponse({ ok: true });
+      })
+      .catch((err) => {
+        console.error('[Callwen SW] Rules cache refresh failed:', err);
+        sendResponse({ ok: false });
+      });
     return true; // async
   }
 
@@ -333,17 +348,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'CAPTURE_VISIBLE_TAB') {
     (async () => {
       try {
-        console.log('[Callwen SW] CAPTURE_VISIBLE_TAB received');
         const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         if (!tabs || tabs.length === 0) {
           chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', error: 'No active tab found.' });
           return;
         }
         const tab = tabs[0];
-        console.log('[Callwen SW] Capturing tab:', tab.id, tab.url);
         const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
         const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-        console.log('[Callwen SW] Screenshot captured, broadcasting result');
         chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', imageData: base64 });
       } catch (err) {
         console.error('[Callwen SW] Screenshot error:', err);

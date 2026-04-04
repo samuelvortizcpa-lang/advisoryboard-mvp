@@ -35,12 +35,9 @@ import {
     if (!token) return false;
 
     tokenSent = true;
-    console.log('[Callwen] Relaying auth token to service worker');
     chrome.runtime.sendMessage(
       { type: 'AUTH_TOKEN_FROM_PAGE', token },
-      (response) => {
-        console.log('[Callwen] Service worker response:', response);
-      }
+      () => { /* ack */ }
     );
     return true;
   }

@@ -60,16 +60,6 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
-function AlertTriangleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-
 function LinkIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -116,13 +106,6 @@ function MetricCard({
   );
 }
 
-/* ── Connection status dot ────────────────────────────────────────────────── */
-
-function ConnectionDot({ status }: { status: "connected" | "disconnected" | "not_configured" }) {
-  const color = status === "connected" ? "bg-green-500" : status === "disconnected" ? "bg-red-500" : "bg-gray-300";
-  return <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${color}`} />;
-}
-
 /* ── Props ────────────────────────────────────────────────────────────────── */
 
 export interface ConnectionStatus {
@@ -167,7 +150,6 @@ export default function MetricStrip({
   // Connection status
   const conn = connections ?? { email: false, calendar: false, zoom: false };
   const allConnected = conn.email && conn.calendar && conn.zoom;
-  const anyConnected = conn.email || conn.calendar || conn.zoom;
 
   const connCount = [conn.email, conn.calendar, conn.zoom].filter(Boolean).length;
 

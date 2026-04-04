@@ -176,17 +176,13 @@ function hasSensitiveData(text) {
  * keeping only the last 4 digits for identification purposes.
  */
 export function sanitizeContent(text) {
-  let masked = false;
-
   // Mask SSN: XXX-XX-XXXX → ***-**-XXXX
   let result = text.replace(/\b(\d{3})-(\d{2})-(\d{4})\b/g, (match, p1, p2, p3) => {
-    masked = true;
     return `***-**-${p3}`;
   });
 
   // Mask EIN: XX-XXXXXXX → **-***XXXX (keep last 4)
   result = result.replace(/\b(\d{2})-(\d{7})\b/g, (match, p1, p2) => {
-    masked = true;
     return `**-***${p2.slice(-4)}`;
   });
 
@@ -200,7 +196,6 @@ export function sanitizeContent(text) {
     // Skip common non-sensitive patterns
     if (match.length === 9 && /^[0-9]{5}[0-9]{4}$/.test(match)) return match; // ZIP+4
 
-    masked = true;
     return `***${match.slice(-4)}`;
   });
 
@@ -209,14 +204,11 @@ export function sanitizeContent(text) {
   result = result.replace(
     /(?:routing|aba|transit)\s*(?:#|number|no\.?)?\s*:?\s*(\d{9})\b/gi,
     (match, digits) => {
-      masked = true;
       return match.replace(digits, `***${digits.slice(-4)}`);
     }
   );
 
-  if (masked) {
-    console.warn('[Callwen] Sensitive data detected and masked in tax software capture.');
-  }
+
 
   return result;
 }

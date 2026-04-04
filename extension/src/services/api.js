@@ -3,10 +3,14 @@
  *
  * All extension API calls go through here so auth headers and error handling
  * are consistent. Every request includes the Clerk JWT as Bearer token.
+ *
+ * On 401, attempts a silent token refresh before giving up. This keeps the
+ * user signed in even when the short-lived Clerk JWT expires between actions.
  */
 
 import { CONFIG } from '../utils/config.js';
 import { getAuthToken, clearAuthToken, setCachedClients } from '../utils/storage.js';
+import { silentRefresh } from './auth.js';
 
 // ---------------------------------------------------------------------------
 // Error codes used by the popup to display contextual messages
@@ -23,9 +27,16 @@ const ERROR_CODES = {
 // Core request function
 // ---------------------------------------------------------------------------
 
-async function request(path, options = {}) {
+async function request(path, options = {}, _retried = false) {
   const token = await getAuthToken();
   if (!token) {
+    // No token at all — try a silent refresh before giving up
+    if (!_retried) {
+      try {
+        await silentRefresh();
+        return request(path, options, true);
+      } catch { /* refresh failed */ }
+    }
     const err = new Error('Not authenticated. Please sign in to Callwen.');
     err.status = 401;
     err.code = ERROR_CODES.AUTH_EXPIRED;
@@ -52,6 +63,23 @@ async function request(path, options = {}) {
   if (response.ok) {
     if (response.status === 204) return null;
     return response.json();
+  }
+
+  // --- 401: attempt silent refresh and retry once ---
+
+  if (response.status === 401 && !_retried) {
+    try {
+      await silentRefresh();
+      return request(path, options, true);
+    } catch {
+      // Refresh failed — fall through to 401 handling
+    }
+    // Refresh failed — fall through to normal 401 handling
+    await clearAuthToken();
+    const err = new Error('Session expired. Please sign in again.');
+    err.status = 401;
+    err.code = ERROR_CODES.AUTH_EXPIRED;
+    throw err;
   }
 
   // --- Error handling by status code ---

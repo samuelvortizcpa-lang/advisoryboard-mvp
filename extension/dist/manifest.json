@@ -1,18 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "Callwen — Capture for Advisory",
-  "version": "1.0.0",
-  "description": "Capture documents, emails, and data from any webpage directly into your Callwen client workspace.",
+  "name": "Callwen — Document Capture for CPAs",
+  "version": "1.0.2",
+  "description": "Capture documents, emails, and financial data from any webpage directly into your Callwen client files. Built for CPAs.",
+  "author": "AdvisoryBoard, Inc.",
+  "homepage_url": "https://callwen.com",
   "permissions": [
     "activeTab",
-    "storage",
+    "tabs",
     "sidePanel",
     "contextMenus",
+    "storage",
     "scripting",
     "notifications"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "https://advisoryboard-mvp-production.up.railway.app/*"
   ],
   "background": {
     "service_worker": "service-worker.js"
