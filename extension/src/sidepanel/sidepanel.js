@@ -1695,7 +1695,7 @@ function renderRules() {
     return `<div class="rule-item" data-rule-id="${rule.id}">
       <div class="rule-type-icon">${icon}</div>
       <div class="rule-info">
-        <div class="rule-name">${escapeHtml(rule.name || 'Unnamed rule')}</div>
+        <div class="rule-name">${escapeHtml(rule.rule_name || rule.name || 'Unnamed rule')}</div>
         <div class="rule-detail">${escapeHtml(pattern)} → ${escapeHtml(clientName)}</div>
       </div>
       <div class="rule-actions">
@@ -1751,7 +1751,7 @@ async function handleToggleRule(ruleId) {
 
 async function handleDeleteRule(ruleId) {
   const rule = monitoringRules.find(r => r.id === ruleId);
-  const ruleName = rule?.name || 'this rule';
+  const ruleName = rule?.rule_name || rule?.name || 'this rule';
 
   const confirmed = await showConfirmDialog(`Delete "${ruleName}"? This cannot be undone.`);
   if (!confirmed) return;
@@ -1870,7 +1870,7 @@ async function handleSaveRule() {
 
   try {
     const newRule = await createMonitoringRule({
-      name,
+      rule_name: name,
       rule_type: ruleType,
       pattern,
       client_id: clientId,

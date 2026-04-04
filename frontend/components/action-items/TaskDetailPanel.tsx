@@ -20,6 +20,7 @@ interface Props {
   item: ActionItem | null; // null = creating new
   isOpen: boolean;
   clientId?: string; // pre-filled for creation from client context
+  defaultDueDate?: string; // pre-fill due_date for creation
   onClose: () => void;
   onSaved: (item: ActionItem) => void;
   onDeleted?: (id: string) => void;
@@ -29,6 +30,7 @@ export default function TaskDetailPanel({
   item,
   isOpen,
   clientId,
+  defaultDueDate,
   onClose,
   onSaved,
   onDeleted,
@@ -94,13 +96,13 @@ export default function TaskDetailPanel({
       setText("");
       setStatus("pending");
       setPriority("");
-      setDueDate("");
+      setDueDate(defaultDueDate ?? "");
       setAssignedTo("");
       setAssignedToName("");
       setNotes("");
       setSelectedClientId(clientId ?? "");
     }
-  }, [item, isOpen, clientId]);
+  }, [item, isOpen, clientId, defaultDueDate]);
 
   // Fetch org members
   useEffect(() => {

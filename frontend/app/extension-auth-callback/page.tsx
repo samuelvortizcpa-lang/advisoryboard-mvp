@@ -30,8 +30,17 @@ export default function ExtensionAuthCallback() {
       return;
     }
 
+    const isRefresh = params.get("refresh") === "true";
+
     if (!isSignedIn) {
-      // Redirect to sign-in, which will send the user back here after auth
+      if (isRefresh) {
+        // Silent refresh from extension — don't redirect to sign-in,
+        // just signal failure so the extension knows the session is gone.
+        setStatus("error");
+        setErrorMsg("Session expired. Please sign in again.");
+        return;
+      }
+      // Interactive sign-in: redirect to sign-in, which sends user back here
       window.location.replace("/sign-in?redirect_url=/extension-auth-callback");
       return;
     }

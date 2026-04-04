@@ -25,5 +25,5 @@ module.exports = {
   resolve: {
     extensions: ['.js'],
   },
-  devtool: 'cheap-module-source-map',
+  devtool: process.env.NODE_ENV === 'development' ? 'cheap-module-source-map' : false,
 };

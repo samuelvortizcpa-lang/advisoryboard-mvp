@@ -2254,6 +2254,34 @@ export function createExtensionApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Notification preferences ─────────────────────────────────────────────────
+
+export interface NotificationPreferences {
+  id: string;
+  user_id: string;
+  org_id: string;
+  task_assigned: boolean;
+  task_completed: boolean;
+  deadline_reminder: boolean;
+  deadline_reminder_days: number;
+  daily_digest: boolean;
+}
+
+export function createNotificationsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    getPreferences() {
+      return f<NotificationPreferences>("/notifications/preferences");
+    },
+    updatePreferences(data: Partial<NotificationPreferences>) {
+      return f<NotificationPreferences>("/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.

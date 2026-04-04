@@ -230,6 +230,7 @@ def get_org_action_items(
     assigned_to_filter: Optional[str] = None,
     client_id_filter: Optional[UUID] = None,
     due_before: Optional[date] = None,
+    due_after: Optional[date] = None,
     include_overdue: bool = False,
     sort: str = "due_date",
     skip: int = 0,
@@ -259,6 +260,8 @@ def get_org_action_items(
         query = query.filter(ActionItem.client_id == client_id_filter)
     if due_before:
         query = query.filter(ActionItem.due_date <= due_before)
+    if due_after:
+        query = query.filter(ActionItem.due_date >= due_after)
     if include_overdue:
         query = query.filter(
             ActionItem.due_date < date.today(),

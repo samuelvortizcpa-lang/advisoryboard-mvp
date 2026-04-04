@@ -27,9 +27,13 @@ from app.schemas.action_item import (
     ActionItemResponse,
     ActionItemUpdate,
 )
+import logging
+
 from app.services import action_item_service
 from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.document_service import get_document
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -50,6 +54,7 @@ async def list_org_action_items(
     assigned_to: Optional[str] = None,
     client_id: Optional[UUID] = None,
     due_before: Optional[date] = None,
+    due_after: Optional[date] = None,
     include_overdue: bool = False,
     sort: str = Query(default="due_date", pattern="^(due_date|priority|created_at)$"),
     skip: int = Query(default=0, ge=0),
@@ -67,6 +72,7 @@ async def list_org_action_items(
         assigned_to_filter=assigned_to,
         client_id_filter=client_id,
         due_before=due_before,
+        due_after=due_after,
         include_overdue=include_overdue,
         sort=sort,
         skip=skip,
@@ -163,6 +169,7 @@ async def list_pending_action_items(
 async def update_action_item(
     item_id: UUID,
     body: ActionItemUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> ActionItemResponse:
@@ -178,13 +185,44 @@ async def update_action_item(
         )
     check_client_access(auth, item.client_id, db)
 
+    # Snapshot pre-update state for notification logic
+    old_assigned_to = item.assigned_to
+    old_status = item.status
+    creator_id = item.created_by
+
     updates = body.model_dump(exclude_unset=True)
-    return action_item_service.update_action_item(
+    updated_item = action_item_service.update_action_item(
         db=db,
         item_id=item_id,
         org_id=auth.org_id,
         updates=updates,
     )
+
+    # --- Notification triggers (fire-and-forget in background) ---
+
+    # Assignment notification: new assignee who isn't the current user
+    new_assigned = updates.get("assigned_to")
+    if new_assigned and new_assigned != old_assigned_to and new_assigned != auth.user_id:
+        background_tasks.add_task(
+            _send_assignment_notification,
+            assigned_to=new_assigned,
+            assigner_id=auth.user_id,
+            item_id=str(item_id),
+            org_id=str(auth.org_id),
+        )
+
+    # Completion notification: notify the creator (if different from completer)
+    if updates.get("status") == "completed" and old_status != "completed":
+        if creator_id and creator_id != auth.user_id:
+            background_tasks.add_task(
+                _send_completion_notification,
+                creator_id=creator_id,
+                completer_id=auth.user_id,
+                item_id=str(item_id),
+                org_id=str(auth.org_id),
+            )
+
+    return updated_item
 
 
 @router.delete(
@@ -263,3 +301,115 @@ async def reextract_action_items(
         _reextract_task, document.id, document.client_id
     )
     return {"message": "Re-extraction started in the background"}
+
+
+# ---------------------------------------------------------------------------
+# Notification background helpers
+# ---------------------------------------------------------------------------
+
+
+def _send_assignment_notification(
+    assigned_to: str,
+    assigner_id: str,
+    item_id: str,
+    org_id: str,
+) -> None:
+    """Look up users and send task-assigned email. Runs as a background task."""
+    from app.core.config import get_settings
+    from app.core.database import SessionLocal
+    from app.models.user import User
+    from app.services import notification_service
+
+    db = SessionLocal()
+    try:
+        recipient = db.query(User).filter(User.clerk_id == assigned_to).first()
+        if not recipient or not recipient.email:
+            return
+
+        # Check preferences
+        prefs = notification_service.get_user_preferences(db, assigned_to, org_id)
+        if prefs and not prefs.task_assigned:
+            return
+
+        sender = db.query(User).filter(User.clerk_id == assigner_id).first()
+        assigner_name = (
+            f"{sender.first_name or ''} {sender.last_name or ''}".strip()
+            if sender else "A teammate"
+        ) or "A teammate"
+
+        item = db.query(ActionItem).filter(ActionItem.id == item_id).first()
+        if not item:
+            return
+
+        client = db.query(Client).filter(Client.id == item.client_id).first()
+        settings = get_settings()
+        task_url = f"{settings.frontend_url}/dashboard/actions"
+
+        to_name = f"{recipient.first_name or ''} {recipient.last_name or ''}".strip() or "there"
+
+        notification_service.send_task_assigned_email(
+            to_email=recipient.email,
+            to_name=to_name,
+            assigner_name=assigner_name,
+            task_text=item.text,
+            client_name=client.name if client else None,
+            due_date=item.due_date,
+            task_url=task_url,
+        )
+    except Exception:
+        logger.exception("Failed to send assignment notification for item %s", item_id)
+    finally:
+        db.close()
+
+
+def _send_completion_notification(
+    creator_id: str,
+    completer_id: str,
+    item_id: str,
+    org_id: str,
+) -> None:
+    """Look up users and send task-completed email. Runs as a background task."""
+    from app.core.config import get_settings
+    from app.core.database import SessionLocal
+    from app.models.user import User
+    from app.services import notification_service
+
+    db = SessionLocal()
+    try:
+        recipient = db.query(User).filter(User.clerk_id == creator_id).first()
+        if not recipient or not recipient.email:
+            return
+
+        # Check preferences
+        prefs = notification_service.get_user_preferences(db, creator_id, org_id)
+        if prefs and not prefs.task_completed:
+            return
+
+        completer = db.query(User).filter(User.clerk_id == completer_id).first()
+        completer_name = (
+            f"{completer.first_name or ''} {completer.last_name or ''}".strip()
+            if completer else "A teammate"
+        ) or "A teammate"
+
+        item = db.query(ActionItem).filter(ActionItem.id == item_id).first()
+        if not item:
+            return
+
+        client = db.query(Client).filter(Client.id == item.client_id).first()
+        settings = get_settings()
+        task_url = f"{settings.frontend_url}/dashboard/actions"
+
+        to_name = f"{recipient.first_name or ''} {recipient.last_name or ''}".strip() or "there"
+
+        notification_service.send_task_completed_email(
+            to_email=recipient.email,
+            to_name=to_name,
+            completer_name=completer_name,
+            task_text=item.text,
+            client_name=client.name if client else None,
+            task_url=task_url,
+        )
+    except Exception:
+        logger.exception("Failed to send completion notification for item %s", item_id)
+    finally:
+        db.close()

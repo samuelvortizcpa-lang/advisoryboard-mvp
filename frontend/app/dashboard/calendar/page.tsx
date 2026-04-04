@@ -2,24 +2,23 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ActionItem,
-  Document,
+  Client,
   createActionItemsApi,
   createClientsApi,
-  createDocumentsApi,
 } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
+import TaskDetailPanel from "@/components/action-items/TaskDetailPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type EnrichedActionItem = ActionItem & { clientName: string };
-type EnrichedDocument = Document & { clientName: string };
 
 interface EnrichedDayEntry {
   actionItems: EnrichedActionItem[];
-  documents: EnrichedDocument[];
 }
 
 type DayMap = Record<string, EnrichedDayEntry>;
@@ -33,19 +32,14 @@ const MONTH_NAMES = [
 
 const DAY_ABBRS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// ─── Date helpers (copied from CalendarView.tsx) ──────────────────────────────
+// ─── Date helpers ─────────────────────────────────────────────────────────────
 
-/**
- * Parse an ISO date/datetime string into a local-timezone Date, avoiding the
- * UTC midnight → previous day shift that `new Date("YYYY-MM-DD")` causes.
- */
 function parseLocalDate(iso: string): Date {
-  const datePart = iso.split("T")[0]; // "YYYY-MM-DD"
+  const datePart = iso.split("T")[0];
   const [y, m, d] = datePart.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
 
-/** Canonical "YYYY-MM-DD" key for a local Date. */
 function toDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -53,7 +47,6 @@ function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Human-readable date for the popover header. */
 function formatDateDisplay(key: string): string {
   const [y, m, d] = key.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", {
@@ -64,12 +57,8 @@ function formatDateDisplay(key: string): string {
   });
 }
 
-/**
- * Returns an array of 35 or 42 entries (whole weeks) where null = filler cell
- * before/after the month's days.
- */
 function buildCalendarCells(year: number, month: number): (Date | null)[] {
-  const firstWeekday = new Date(year, month, 1).getDay(); // 0 = Sun
+  const firstWeekday = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (Date | null)[] = [];
 
@@ -80,13 +69,13 @@ function buildCalendarCells(year: number, month: number): (Date | null)[] {
   return cells;
 }
 
-// ─── Dot-color logic (same as CalendarView.tsx) ───────────────────────────────
+// ─── Dot-color logic ──────────────────────────────────────────────────────────
 
 function actionDotClass(item: ActionItem): string {
   if (item.status === "completed") return "bg-green-500";
   if (item.priority === "high") return "bg-red-500";
   if (item.priority === "medium") return "bg-yellow-400";
-  return "bg-gray-400"; // low or no priority
+  return "bg-gray-400";
 }
 
 function actionPriorityTextClass(item: ActionItem): string {
@@ -100,93 +89,83 @@ function actionPriorityTextClass(item: ActionItem): string {
 
 export default function CalendarPage() {
   const { getToken } = useAuth();
+  const { activeOrg } = useOrg();
 
-  // Snapshot "today" once; stable for the lifetime of the component.
   const [today] = useState(() => new Date());
   const todayKey = toDateKey(today);
 
   // ── Month navigation state ────────────────────────────────────────────────
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // 0-indexed
+  const [month, setMonth] = useState(today.getMonth());
 
   // ── Data state ────────────────────────────────────────────────────────────
   const [dayMap, setDayMap] = useState<DayMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Client filter state ───────────────────────────────────────────────────
+  const [clientFilter, setClientFilter] = useState<string>("");
+  const [clients, setClients] = useState<Client[]>([]);
+
   // ── Popover state ─────────────────────────────────────────────────────────
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // ── Fetch all clients then their action items + documents in parallel ─────
+  // ── TaskDetailPanel state ─────────────────────────────────────────────────
+  const [panelItem, setPanelItem] = useState<ActionItem | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [createDate, setCreateDate] = useState<string | null>(null);
+
+  // ── Fetch clients once ────────────────────────────────────────────────────
   useEffect(() => {
-    let cancelled = false;
+    createClientsApi(getToken, activeOrg?.id)
+      .list(0, 200)
+      .then((r) => setClients(r.items))
+      .catch(() => {});
+  }, [getToken, activeOrg?.id]);
+
+  // ── Fetch action items for the visible month ──────────────────────────────
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    const clientsApi = createClientsApi(getToken);
-    const actionItemsApi = createActionItemsApi(getToken);
-    const documentsApi = createDocumentsApi(getToken);
+    try {
+      const api = createActionItemsApi(getToken, activeOrg?.id);
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const params: Record<string, string> = {
+        due_after: `${year}-${String(month + 1).padStart(2, "0")}-01`,
+        due_before: `${year}-${String(month + 1).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`,
+        limit: "200",
+        sort: "due_date",
+      };
+      if (clientFilter) params.client_id = clientFilter;
 
-    clientsApi
-      .list(0, 200)
-      .then(async (clientsResp) => {
-        const clients = clientsResp.items;
+      const res = await api.listOrg(params);
 
-        // Fetch action items + documents per client; tolerate individual failures
-        const results = await Promise.allSettled(
-          clients.map(async (client) => {
-            const [actResp, docResp] = await Promise.all([
-              actionItemsApi.list(client.id, undefined, 0, 500),
-              documentsApi.list(client.id, 0, 500),
-            ]);
-            return {
-              actionItems: actResp.items.map(
-                (item): EnrichedActionItem => ({ ...item, clientName: client.name })
-              ),
-              documents: docResp.items.map(
-                (doc): EnrichedDocument => ({ ...doc, clientName: client.name })
-              ),
-            };
-          })
-        );
+      // Build client name lookup from local clients list
+      const clientMap = new Map(clients.map((c) => [c.id, c.name]));
 
-        if (cancelled) return;
+      const map: DayMap = {};
+      for (const item of res.items) {
+        if (!item.due_date) continue;
+        const key = toDateKey(parseLocalDate(item.due_date));
+        if (!map[key]) map[key] = { actionItems: [] };
+        map[key].actionItems.push({
+          ...item,
+          clientName: item.client_name ?? clientMap.get(item.client_id) ?? "Unknown",
+        });
+      }
+      setDayMap(map);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load calendar data");
+    } finally {
+      setLoading(false);
+    }
+  }, [getToken, activeOrg?.id, year, month, clientFilter, clients]);
 
-        // Build the day map from all successful fetches
-        const map: DayMap = {};
-
-        for (const result of results) {
-          if (result.status !== "fulfilled") continue;
-          const { actionItems, documents } = result.value;
-
-          for (const item of actionItems) {
-            if (!item.due_date) continue;
-            const key = toDateKey(parseLocalDate(item.due_date));
-            if (!map[key]) map[key] = { actionItems: [], documents: [] };
-            map[key].actionItems.push(item);
-          }
-
-          for (const doc of documents) {
-            const key = toDateKey(parseLocalDate(doc.upload_date));
-            if (!map[key]) map[key] = { actionItems: [], documents: [] };
-            map[key].documents.push(doc);
-          }
-        }
-
-        setDayMap(map);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // ── Close popover on outside click / Escape ───────────────────────────────
   useEffect(() => {
@@ -229,7 +208,7 @@ export default function CalendarPage() {
   // ── This Week: Sun–Sat of the current week ────────────────────────────────
   const weekDays = useMemo(() => {
     const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay()); // back to Sunday
+    startOfWeek.setDate(today.getDate() - today.getDay());
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(startOfWeek);
       d.setDate(startOfWeek.getDate() + i);
@@ -242,17 +221,57 @@ export default function CalendarPage() {
 
   const selectedDayData = selectedKey ? (dayMap[selectedKey] ?? null) : null;
 
+  // ── TaskDetailPanel handlers ──────────────────────────────────────────────
+  function openPanelForItem(item: ActionItem) {
+    setPanelItem(item);
+    setCreateDate(null);
+    setPanelOpen(true);
+  }
+
+  function openPanelForCreate(dateKey: string) {
+    setPanelItem(null);
+    setCreateDate(dateKey);
+    setPanelOpen(true);
+  }
+
+  function handlePanelSaved() {
+    setPanelOpen(false);
+    fetchData();
+  }
+
+  function handlePanelDeleted() {
+    setPanelOpen(false);
+    fetchData();
+  }
+
+  // ── Pill rendering helper ─────────────────────────────────────────────────
+  const MAX_PILLS = 3;
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="px-8 py-8">
 
       {/* ── Page header ────────────────────────────────────────────────────── */}
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            All clients · {MONTH_NAMES[month]} {year}
-          </p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
+            <p className="mt-0.5 text-sm text-gray-500">
+              {clientFilter ? clients.find((c) => c.id === clientFilter)?.name : "All clients"} · {MONTH_NAMES[month]} {year}
+            </p>
+          </div>
+
+          {/* Client filter */}
+          <select
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+            className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            <option value="">All clients</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Month navigation */}
@@ -312,27 +331,24 @@ export default function CalendarPage() {
                 const data = dayMap[key];
                 const isToday = key === todayKey;
 
-                const aDots = (data?.actionItems ?? []).slice(0, 4);
-                const dDots = (data?.documents ?? []).slice(0, Math.max(0, 4 - aDots.length));
-                const totalCount = (data?.actionItems?.length ?? 0) + (data?.documents?.length ?? 0);
-                const overflow = totalCount - aDots.length - dDots.length;
-                const hasItems = totalCount > 0;
+                const aiCount = data?.actionItems?.length ?? 0;
+                const hasOverdue = data?.actionItems?.some(
+                  (i) => i.status === "pending" && i.due_date && parseLocalDate(i.due_date) < today
+                ) ?? false;
 
                 return (
                   <button
                     key={key}
                     onClick={() => {
-                      if (hasItems) {
-                        // Navigate month to the week-day's month if needed
-                        setYear(day.getFullYear());
-                        setMonth(day.getMonth());
+                      setYear(day.getFullYear());
+                      setMonth(day.getMonth());
+                      if (aiCount > 0) {
                         setSelectedKey(key);
                       }
                     }}
-                    disabled={!hasItems}
                     className={[
                       "flex flex-col items-center gap-1.5 border-r border-gray-100 px-2 py-3 last:border-r-0 transition-colors",
-                      hasItems ? "hover:bg-gray-50" : "cursor-default",
+                      "hover:bg-gray-50",
                       isToday ? "bg-blue-50/40" : "",
                     ].join(" ")}
                   >
@@ -356,27 +372,18 @@ export default function CalendarPage() {
                       {day.getDate()}
                     </span>
 
-                    {/* Dot cluster */}
-                    {hasItems ? (
-                      <div className="flex flex-wrap justify-center gap-[3px]">
-                        {aDots.map((item) => (
-                          <span
-                            key={item.id}
-                            className={`h-[5px] w-[5px] rounded-full ${actionDotClass(item)}`}
-                          />
-                        ))}
-                        {dDots.map((doc) => (
-                          <span
-                            key={doc.id}
-                            className="h-[5px] w-[5px] rounded-full bg-blue-500"
-                          />
-                        ))}
-                        {overflow > 0 && (
-                          <span className="text-[9px] font-medium leading-none text-gray-400">
-                            +{overflow}
-                          </span>
-                        )}
-                      </div>
+                    {/* Count badge */}
+                    {aiCount > 0 ? (
+                      <span
+                        className={[
+                          "inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                          hasOverdue
+                            ? "bg-red-100 text-red-700"
+                            : "bg-amber-100 text-amber-700",
+                        ].join(" ")}
+                      >
+                        {aiCount}
+                      </span>
                     ) : (
                       <div className="h-[10px]" />
                     )}
@@ -392,7 +399,7 @@ export default function CalendarPage() {
             <LegendItem dotClass="bg-yellow-400" label="Medium priority" />
             <LegendItem dotClass="bg-gray-400"   label="Low priority" />
             <LegendItem dotClass="bg-green-500"  label="Completed" />
-            <LegendItem dotClass="bg-blue-500"   label="Document" />
+            {/* TODO: add org-wide documents endpoint to populate document events */}
           </div>
 
           {/* ── Monthly calendar grid ─────────────────────────────────────────── */}
@@ -409,12 +416,11 @@ export default function CalendarPage() {
               ))}
             </div>
 
-            {/* Cell grid — 1 px gaps via bg-gray-100 on container */}
+            {/* Cell grid */}
             <div className="grid grid-cols-7 gap-px bg-gray-100">
               {cells.map((cellDate, idx) => {
-                // Filler cell
                 if (!cellDate) {
-                  return <div key={`filler-${idx}`} className="min-h-[80px] bg-gray-50" />;
+                  return <div key={`filler-${idx}`} className="min-h-[100px] bg-gray-50" />;
                 }
 
                 const key = toDateKey(cellDate);
@@ -422,22 +428,16 @@ export default function CalendarPage() {
                 const isToday = key === todayKey;
                 const isSelected = key === selectedKey;
 
-                const MAX_DOTS = 4;
-                const aDots = data?.actionItems ?? [];
-                const dDots = data?.documents ?? [];
-                const total = aDots.length + dDots.length;
-
-                const shownA = aDots.slice(0, Math.min(MAX_DOTS, aDots.length));
-                const slots = MAX_DOTS - shownA.length;
-                const shownD = dDots.slice(0, Math.max(0, slots));
-                const overflow = total - shownA.length - shownD.length;
+                const items = data?.actionItems ?? [];
+                const shownItems = items.slice(0, MAX_PILLS);
+                const overflow = items.length - MAX_PILLS;
 
                 return (
-                  <button
+                  <div
                     key={key}
-                    onClick={() => setSelectedKey(isSelected ? null : key)}
+                    onClick={() => openPanelForCreate(key)}
                     className={[
-                      "flex min-h-[80px] flex-col bg-white p-1.5 text-left transition-colors hover:bg-indigo-50/50",
+                      "flex min-h-[100px] flex-col bg-white p-1.5 text-left transition-colors hover:bg-indigo-50/50 cursor-pointer",
                       isSelected ? "ring-2 ring-inset ring-indigo-400 bg-indigo-50/50" : "",
                     ].join(" ")}
                   >
@@ -451,31 +451,45 @@ export default function CalendarPage() {
                       {cellDate.getDate()}
                     </span>
 
-                    {/* Dot row */}
-                    {total > 0 && (
-                      <div className="flex flex-wrap items-center gap-[3px] px-0.5">
-                        {shownA.map((item) => (
+                    {/* Action item pills */}
+                    <div className="flex flex-col gap-0.5">
+                      {shownItems.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPanelForItem(item);
+                          }}
+                          className="flex items-center gap-1 px-1 py-0.5 rounded text-[11px] cursor-pointer hover:bg-gray-100 truncate text-left"
+                        >
                           <span
-                            key={item.id}
-                            title={`${item.clientName}: ${item.text}`}
-                            className={`block h-[6px] w-[6px] rounded-full ${actionDotClass(item)}`}
+                            className={`h-1.5 w-1.5 rounded-full shrink-0 ${actionDotClass(item)}`}
                           />
-                        ))}
-                        {shownD.map((doc) => (
                           <span
-                            key={doc.id}
-                            title={`${doc.clientName}: ${doc.filename}`}
-                            className="block h-[6px] w-[6px] rounded-full bg-blue-500"
-                          />
-                        ))}
-                        {overflow > 0 && (
-                          <span className="text-[10px] leading-none font-medium text-gray-400">
-                            +{overflow}
+                            className={[
+                              "truncate",
+                              item.status === "completed"
+                                ? "text-gray-400 line-through opacity-60"
+                                : "text-gray-700",
+                            ].join(" ")}
+                          >
+                            {item.text.length > 25 ? item.text.slice(0, 25) + "…" : item.text}
                           </span>
-                        )}
-                      </div>
-                    )}
-                  </button>
+                        </button>
+                      ))}
+                      {overflow > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedKey(isSelected ? null : key);
+                          }}
+                          className="px-1 text-[10px] font-medium text-gray-400 hover:text-gray-600 text-left"
+                        >
+                          +{overflow} more
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -525,7 +539,14 @@ export default function CalendarPage() {
                   </p>
                   <ul className="space-y-2.5">
                     {selectedDayData.actionItems.map((item) => (
-                      <li key={item.id} className="flex items-start gap-2.5">
+                      <li
+                        key={item.id}
+                        className="flex items-start gap-2.5 cursor-pointer hover:bg-gray-50 rounded-md p-1 -m-1"
+                        onClick={() => {
+                          setSelectedKey(null);
+                          openPanelForItem(item);
+                        }}
+                      >
                         <span
                           className={`mt-[5px] h-2 w-2 shrink-0 rounded-full ${actionDotClass(item)}`}
                         />
@@ -541,10 +562,10 @@ export default function CalendarPage() {
                             {item.text}
                           </p>
                           <div className="mt-0.5 flex flex-wrap items-center gap-x-2">
-                            {/* Client name → client actions tab */}
                             <Link
                               href={`/dashboard/clients/${item.client_id}?tab=actions`}
                               className="text-xs font-medium text-blue-600 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               {item.clientName}
                             </Link>
@@ -568,41 +589,8 @@ export default function CalendarPage() {
                 </div>
               )}
 
-              {/* Documents */}
-              {selectedDayData && selectedDayData.documents.length > 0 && (
-                <div className="px-4 py-3">
-                  <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                    Documents Uploaded
-                  </p>
-                  <ul className="space-y-2.5">
-                    {selectedDayData.documents.map((doc) => (
-                      <li key={doc.id} className="flex items-start gap-2.5">
-                        <span className="mt-[5px] h-2 w-2 shrink-0 rounded-full bg-blue-500" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-gray-800">{doc.filename}</p>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2">
-                            {/* Client name → client documents tab */}
-                            <Link
-                              href={`/dashboard/clients/${doc.client_id}?tab=documents`}
-                              className="text-xs font-medium text-blue-600 hover:underline"
-                            >
-                              {doc.clientName}
-                            </Link>
-                            <span className="text-xs text-gray-400">
-                              <span className="font-medium uppercase">{doc.file_type}</span>
-                            </span>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
               {/* Empty state */}
-              {(!selectedDayData ||
-                (selectedDayData.actionItems.length === 0 &&
-                  selectedDayData.documents.length === 0)) && (
+              {(!selectedDayData || selectedDayData.actionItems.length === 0) && (
                 <p className="px-4 py-6 text-center text-sm text-gray-400">
                   No items for this day.
                 </p>
@@ -611,6 +599,16 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+
+      {/* ── TaskDetailPanel ──────────────────────────────────────────────────── */}
+      <TaskDetailPanel
+        item={panelItem}
+        isOpen={panelOpen}
+        defaultDueDate={createDate ?? undefined}
+        onClose={() => setPanelOpen(false)}
+        onSaved={handlePanelSaved}
+        onDeleted={handlePanelDeleted}
+      />
     </div>
   );
 }

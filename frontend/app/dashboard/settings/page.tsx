@@ -2,9 +2,14 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { createCommunicationsApi, createRagApi } from "@/lib/api";
+import {
+  createCommunicationsApi,
+  createNotificationsApi,
+  createRagApi,
+  NotificationPreferences,
+} from "@/lib/api";
 
 const settingsCards = [
   {
@@ -35,6 +40,35 @@ export default function SettingsPage() {
   const [schedulingSaving, setSchedulingSaving] = useState(false);
   const [schedulingResult, setSchedulingResult] = useState<string | null>(null);
   const [schedulingError, setSchedulingError] = useState<string | null>(null);
+
+  // Notification preferences state
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
+  const [notifLoading, setNotifLoading] = useState(true);
+  const [notifSaved, setNotifSaved] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    createNotificationsApi(getToken)
+      .getPreferences()
+      .then((prefs) => { if (!cancelled) { setNotifPrefs(prefs); setNotifLoading(false); } })
+      .catch(() => { if (!cancelled) setNotifLoading(false); });
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  async function updateNotifPref(field: keyof NotificationPreferences, value: boolean | number) {
+    if (!notifPrefs) return;
+    const prev = { ...notifPrefs };
+    setNotifPrefs({ ...notifPrefs, [field]: value });
+    setNotifSaved(null);
+    try {
+      const updated = await createNotificationsApi(getToken).updatePreferences({ [field]: value });
+      setNotifPrefs(updated);
+      setNotifSaved("Saved");
+      setTimeout(() => setNotifSaved(null), 2000);
+    } catch {
+      setNotifPrefs(prev);
+    }
+  }
 
   async function handleBackfill() {
     setBackfillLoading(true);
@@ -169,6 +203,127 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Notification Preferences */}
+      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">
+              Email Notifications
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Control which email notifications you receive for this workspace.
+            </p>
+          </div>
+          {notifSaved && (
+            <span className="text-xs font-medium text-green-600">{notifSaved}</span>
+          )}
+        </div>
+
+        {notifLoading ? (
+          <div className="mt-6 flex items-center gap-2 text-sm text-gray-400">
+            <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 border-t-transparent animate-spin" />
+            Loading preferences…
+          </div>
+        ) : notifPrefs ? (
+          <div className="mt-6 space-y-5">
+            <ToggleRow
+              label="Email me when a task is assigned to me"
+              checked={notifPrefs.task_assigned}
+              onChange={(v) => updateNotifPref("task_assigned", v)}
+            />
+            <ToggleRow
+              label="Email me when my assigned task is completed"
+              checked={notifPrefs.task_completed}
+              onChange={(v) => updateNotifPref("task_completed", v)}
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Deadline reminders</span>
+              <div className="flex items-center gap-3">
+                <select
+                  value={notifPrefs.deadline_reminder_days}
+                  onChange={(e) =>
+                    updateNotifPref("deadline_reminder_days", Number(e.target.value))
+                  }
+                  disabled={!notifPrefs.deadline_reminder}
+                  className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 outline-none focus:border-blue-500 disabled:opacity-50"
+                >
+                  <option value={1}>1 day before</option>
+                  <option value={2}>2 days before</option>
+                  <option value={3}>3 days before</option>
+                </select>
+                <Toggle
+                  checked={notifPrefs.deadline_reminder}
+                  onChange={(v) => updateNotifPref("deadline_reminder", v)}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between opacity-50">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">Daily task digest</span>
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                  Coming soon
+                </span>
+              </div>
+              <Toggle checked={false} onChange={() => {}} disabled />
+            </div>
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-gray-400">
+            Unable to load notification preferences.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Toggle components
+// ---------------------------------------------------------------------------
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed ${
+        checked ? "bg-blue-600" : "bg-gray-200"
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+          checked ? "translate-x-5" : "translate-x-0"
+        }`}
+      />
+    </button>
+  );
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-gray-700">{label}</span>
+      <Toggle checked={checked} onChange={onChange} />
     </div>
   );
 }

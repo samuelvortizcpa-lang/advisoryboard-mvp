@@ -37,6 +37,7 @@ from app.api.audit import router as audit_router
 from app.api.support import router as support_router
 from app.api.communications import router as communications_router
 from app.api.extension import router as extension_router
+from app.api.notifications import router as notifications_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -160,6 +161,10 @@ async def _startup_log() -> None:
     from app.services.auto_sync_service import start_scheduler
     start_scheduler()
 
+    # ── Deadline reminder scheduler ──────────────────────────────────────
+    from app.services.deadline_reminder_service import start_deadline_scheduler
+    start_deadline_scheduler()
+
     # ── Fix stuck documents on startup ──────────────────────────────────
     try:
         from sqlalchemy import text as sa_text
@@ -196,7 +201,9 @@ async def _shutdown() -> None:
     """Clean up background services on shutdown."""
     from app.services.auto_sync_service import stop_scheduler
     from app.services.background_processor import shutdown_executor
+    from app.services.deadline_reminder_service import stop_deadline_scheduler
     stop_scheduler()
+    stop_deadline_scheduler()
     shutdown_executor()
 
 
@@ -239,3 +246,4 @@ app.include_router(audit_router,               prefix="/api", tags=["audit"])
 app.include_router(support_router,             prefix="/api", tags=["support"])
 app.include_router(communications_router,      prefix="/api", tags=["communications"])
 app.include_router(extension_router,           prefix="/api/extension", tags=["extension"])
+app.include_router(notifications_router,       prefix="/api", tags=["notifications"])
