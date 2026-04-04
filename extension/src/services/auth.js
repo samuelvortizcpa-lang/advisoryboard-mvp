@@ -20,7 +20,9 @@ import { getAuthToken, setAuthToken, clearAuthToken, clearAll } from '../utils/s
 // ---------------------------------------------------------------------------
 
 let refreshTimer = null;
-let refreshInProgress = null; // Promise that resolves when a refresh completes
+let isRefreshing = false;
+let refreshFailCount = 0;
+const MAX_REFRESH_RETRIES = 3;
 
 // ---------------------------------------------------------------------------
 // Sign in — opens callwen.com sign-in, waits for callback
@@ -63,6 +65,7 @@ export async function isAuthenticated() {
 export async function handleAuthToken(token) {
   if (token) {
     await setAuthToken(token);
+    refreshFailCount = 0; // successful token → reset retry counter
     scheduleProactiveRefresh(token);
   }
 }
@@ -126,30 +129,51 @@ export function cancelRefreshTimer() {
 
 const SILENT_REFRESH_TIMEOUT_MS = 8_000;
 
-export function silentRefresh() {
-  // Deduplicate: if a refresh is already in progress, return the same promise
-  if (refreshInProgress) {
-    return refreshInProgress;
+export async function silentRefresh() {
+  // Guard: only one refresh at a time
+  if (isRefreshing) {
+    throw new Error('Refresh already in progress');
   }
 
-  refreshInProgress = _doSilentRefresh().finally(() => {
-    refreshInProgress = null;
-  });
+  // Guard: stop retrying after MAX_REFRESH_RETRIES consecutive failures
+  if (refreshFailCount >= MAX_REFRESH_RETRIES) {
+    await clearAuthToken();
+    throw new Error('Max refresh retries exceeded');
+  }
 
-  return refreshInProgress;
+  isRefreshing = true;
+  try {
+    const token = await _doSilentRefresh();
+    refreshFailCount = 0;
+    return token;
+  } catch (err) {
+    refreshFailCount++;
+    if (refreshFailCount >= MAX_REFRESH_RETRIES) {
+      await clearAuthToken();
+    }
+    throw err;
+  } finally {
+    isRefreshing = false;
+  }
 }
 
-async function _doSilentRefresh() {
-  // Listen for the AUTH_TOKEN_FROM_PAGE message that indicates success
+function _doSilentRefresh() {
   return new Promise((resolve, reject) => {
     let tabId = null;
     let settled = false;
+
+    function cleanup() {
+      if (tabId) {
+        chrome.tabs.remove(tabId).catch(() => {});
+        tabId = null;
+      }
+    }
 
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
       chrome.runtime.onMessage.removeListener(listener);
-      if (tabId) chrome.tabs.remove(tabId).catch(() => {});
+      cleanup();
       reject(new Error('Silent refresh timed out'));
     }, SILENT_REFRESH_TIMEOUT_MS);
 
@@ -165,10 +189,8 @@ async function _doSilentRefresh() {
 
       resolve(message.token);
 
-      // Close the background tab
-      setTimeout(() => {
-        if (tabId) chrome.tabs.remove(tabId).catch(() => {});
-      }, 300);
+      // Close the background tab after a short delay so the message channel settles
+      setTimeout(cleanup, 300);
     }
 
     chrome.runtime.onMessage.addListener(listener);
@@ -184,6 +206,7 @@ async function _doSilentRefresh() {
         settled = true;
         clearTimeout(timeout);
         chrome.runtime.onMessage.removeListener(listener);
+        cleanup();
         reject(err);
       }
     });
