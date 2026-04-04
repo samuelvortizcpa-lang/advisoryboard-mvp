@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import hmac
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
-from sqlalchemy import func
+from sqlalchemy import cast, func, Date
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -36,6 +36,14 @@ from app.models.user import User
 from app.models.user_subscription import UserSubscription
 from app.services.auth_context import AuthContext, get_auth, require_admin
 from app.services.subscription_service import TIER_DEFAULTS
+
+# Tier → monthly price (matches overview endpoint MRR calc)
+_TIER_MRR: dict[str, int] = {
+    "free": 0,
+    "starter": 99,
+    "professional": 149,
+    "firm": 349,
+}
 
 router = APIRouter()
 
@@ -484,3 +492,463 @@ async def reset_usage(
 
     user = db.query(User).filter(User.clerk_id == user_id).first()
     return _build_response(sub, user)
+
+
+# ─── MRR History ────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/mrr-history",
+    summary="Daily MRR snapshots for charting",
+)
+async def mrr_history(
+    days: int = Query(default=30, ge=1, le=90),
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """
+    Reconstruct daily MRR from user_subscriptions.
+
+    For each day in the range, determine which subscriptions existed (created_at <= day)
+    and approximate tier changes via updated_at. Returns the right response shape;
+    true daily snapshots can be added later.
+    """
+    today = date.today()
+    start = today - timedelta(days=days - 1)
+
+    # Load all subscriptions once
+    subs = db.query(UserSubscription).all()
+
+    result: list[dict] = []
+    for offset in range(days):
+        day = start + timedelta(days=offset)
+
+        mrr = 0.0
+        user_count = 0
+        paid_count = 0
+
+        for sub in subs:
+            # Skip subscriptions created after this day
+            created = sub.created_at
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if created.date() > day:
+                continue
+
+            user_count += 1
+
+            # If updated_at > day AND updated_at != created_at, the tier may have
+            # changed. We can't know the old tier, so for days before the last
+            # update we assume free. For days >= updated_at we use current tier.
+            updated = sub.updated_at
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+
+            if updated.date() > day and updated.date() != created.date():
+                tier_price = 0
+            else:
+                tier_price = _TIER_MRR.get(sub.tier, 0)
+
+            mrr += tier_price
+            if tier_price > 0:
+                paid_count += 1
+
+        result.append({
+            "date": day.isoformat(),
+            "mrr": mrr,
+            "user_count": user_count,
+            "paid_count": paid_count,
+        })
+
+    return result
+
+
+# ─── User Detail ────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/users/{user_id}/detail",
+    summary="Detailed activity for a single user",
+)
+async def user_detail(
+    user_id: str,
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    user = db.query(User).filter(User.clerk_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    sub = (
+        db.query(UserSubscription)
+        .filter(UserSubscription.user_id == user_id)
+        .first()
+    )
+
+    # --- User info ---
+    user_name = " ".join(p for p in [user.first_name, user.last_name] if p) or None
+
+    last_query = (
+        db.query(func.max(TokenUsage.created_at))
+        .filter(TokenUsage.user_id == user_id)
+        .scalar()
+    )
+    last_upload = (
+        db.query(func.max(Document.upload_date))
+        .filter(Document.uploaded_by == user.id)
+        .scalar()
+    )
+    timestamps = [t for t in [last_query, last_upload] if t is not None]
+    last_active = max(timestamps) if timestamps else None
+
+    user_info = {
+        "user_id": user_id,
+        "email": user.email,
+        "name": user_name,
+        "tier": sub.tier if sub else "free",
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "last_active": last_active.isoformat() if last_active else None,
+    }
+
+    # --- Subscription ---
+    subscription = None
+    if sub:
+        subscription = {
+            "tier": sub.tier,
+            "strategic_queries_used": sub.strategic_queries_used,
+            "strategic_queries_limit": sub.strategic_queries_limit,
+            "billing_period_start": sub.billing_period_start.isoformat() if sub.billing_period_start else None,
+            "billing_period_end": sub.billing_period_end.isoformat() if sub.billing_period_end else None,
+        }
+
+    # --- Clients ---
+    clients_raw = db.query(Client).filter(Client.owner_id == user.id).all()
+    clients_out: list[dict] = []
+    for c in clients_raw:
+        doc_count = (
+            db.query(func.count(Document.id))
+            .filter(Document.client_id == c.id)
+            .scalar()
+        ) or 0
+        last_doc = (
+            db.query(func.max(Document.upload_date))
+            .filter(Document.client_id == c.id)
+            .scalar()
+        )
+        query_count = (
+            db.query(func.count(TokenUsage.id))
+            .filter(TokenUsage.client_id == c.id)
+            .scalar()
+        ) or 0
+        clients_out.append({
+            "id": str(c.id),
+            "name": c.name,
+            "document_count": doc_count,
+            "last_document_upload": last_doc.isoformat() if last_doc else None,
+            "query_count": query_count,
+        })
+
+    # --- Activity timeline (last 50 token_usage entries) ---
+    recent_usage = (
+        db.query(TokenUsage)
+        .filter(TokenUsage.user_id == user_id)
+        .order_by(TokenUsage.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    client_ids = {u.client_id for u in recent_usage if u.client_id}
+    client_map: dict = {}
+    if client_ids:
+        for cid, cname in db.query(Client.id, Client.name).filter(Client.id.in_(client_ids)).all():
+            client_map[cid] = cname
+
+    activity_timeline = [
+        {
+            "timestamp": u.created_at.isoformat(),
+            "endpoint": u.endpoint,
+            "query_type": u.query_type,
+            "model": u.model,
+            "prompt_tokens": u.prompt_tokens,
+            "completion_tokens": u.completion_tokens,
+            "cost": float(u.estimated_cost_usd),
+            "client_name": client_map.get(u.client_id),
+        }
+        for u in recent_usage
+    ]
+
+    # --- Daily activity (last 30 days) ---
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+
+    daily_query_rows = (
+        db.query(
+            cast(TokenUsage.created_at, Date).label("day"),
+            func.count(TokenUsage.id),
+            func.coalesce(func.sum(TokenUsage.estimated_cost_usd), 0),
+        )
+        .filter(
+            TokenUsage.user_id == user_id,
+            TokenUsage.created_at >= thirty_days_ago,
+        )
+        .group_by("day")
+        .all()
+    )
+    daily_doc_rows = (
+        db.query(
+            cast(Document.upload_date, Date).label("day"),
+            func.count(Document.id),
+        )
+        .filter(
+            Document.uploaded_by == user.id,
+            Document.upload_date >= thirty_days_ago,
+        )
+        .group_by("day")
+        .all()
+    )
+    docs_by_day = {row[0]: row[1] for row in daily_doc_rows}
+    daily_activity = [
+        {
+            "date": row[0].isoformat(),
+            "queries": row[1],
+            "documents_uploaded": docs_by_day.get(row[0], 0),
+            "cost": round(float(row[2]), 4),
+        }
+        for row in daily_query_rows
+    ]
+
+    # --- Documents summary ---
+    total_docs = (
+        db.query(func.count(Document.id))
+        .filter(Document.uploaded_by == user.id)
+        .scalar()
+    ) or 0
+    processed_docs = (
+        db.query(func.count(Document.id))
+        .filter(Document.uploaded_by == user.id, Document.processed == True)  # noqa: E712
+        .scalar()
+    ) or 0
+    recent_docs = (
+        db.query(Document)
+        .filter(Document.uploaded_by == user.id)
+        .order_by(Document.upload_date.desc())
+        .limit(5)
+        .all()
+    )
+    documents = {
+        "total": total_docs,
+        "processed": processed_docs,
+        "unprocessed": total_docs - processed_docs,
+        "recent": [
+            {
+                "filename": d.filename,
+                "upload_date": d.upload_date.isoformat() if d.upload_date else None,
+                "file_type": d.file_type,
+                "processed": d.processed,
+            }
+            for d in recent_docs
+        ],
+    }
+
+    return {
+        "user": user_info,
+        "subscription": subscription,
+        "clients": clients_out,
+        "activity_timeline": activity_timeline,
+        "daily_activity": daily_activity,
+        "documents": documents,
+    }
+
+
+# ─── Conversion Funnel ──────────────────────────────────────────────────────
+
+
+@router.get(
+    "/conversion-funnel",
+    summary="Tier distribution and conversion metrics",
+)
+async def conversion_funnel(
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    subs = db.query(UserSubscription).all()
+
+    by_tier: dict[str, int] = {"free": 0, "starter": 0, "professional": 0, "firm": 0}
+    upgrade_deltas: list[float] = []
+
+    for s in subs:
+        by_tier[s.tier] = by_tier.get(s.tier, 0) + 1
+
+        # Estimate upgrade timing: if tier != free and updated_at differs from
+        # created_at by more than a minute, they likely upgraded
+        if s.tier != "free" and s.created_at and s.updated_at:
+            created = s.created_at
+            updated = s.updated_at
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            delta = (updated - created).total_seconds()
+            if delta > 60:
+                upgrade_deltas.append(delta / 86400)
+
+    total_users = len(subs)
+    paid_users = total_users - by_tier.get("free", 0)
+    conversion_rate = round((paid_users / total_users * 100) if total_users > 0 else 0, 1)
+    avg_days_to_upgrade = round(sum(upgrade_deltas) / len(upgrade_deltas), 1) if upgrade_deltas else None
+
+    # Users who recently hit limits
+    recently_hit_limits: list[dict] = []
+    for s in subs:
+        tier_config = TIER_DEFAULTS.get(s.tier, TIER_DEFAULTS["free"])
+        limits_hit: list[str] = []
+
+        # Query limit hit
+        if s.strategic_queries_limit > 0 and s.strategic_queries_used >= s.strategic_queries_limit:
+            limits_hit.append("strategic_queries")
+
+        # Client limit hit
+        max_clients = tier_config.get("max_clients")
+        if max_clients is not None:
+            user_obj = db.query(User).filter(User.clerk_id == s.user_id).first()
+            if user_obj:
+                client_count = (
+                    db.query(func.count(Client.id))
+                    .filter(Client.owner_id == user_obj.id)
+                    .scalar()
+                ) or 0
+                if client_count >= max_clients:
+                    limits_hit.append("clients")
+
+        if limits_hit:
+            user_obj = db.query(User).filter(User.clerk_id == s.user_id).first()
+            user_name = None
+            user_email = None
+            if user_obj:
+                user_name = " ".join(p for p in [user_obj.first_name, user_obj.last_name] if p) or None
+                user_email = user_obj.email
+            recently_hit_limits.append({
+                "user_id": s.user_id,
+                "email": user_email,
+                "name": user_name,
+                "tier": s.tier,
+                "limits_hit": limits_hit,
+            })
+
+    return {
+        "by_tier": by_tier,
+        "total_users": total_users,
+        "paid_users": paid_users,
+        "conversion_rate": conversion_rate,
+        "average_days_to_upgrade": avg_days_to_upgrade,
+        "recently_hit_limits": recently_hit_limits,
+    }
+
+
+# ─── AI Costs ───────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/ai-costs",
+    summary="AI cost analytics",
+)
+async def ai_costs(
+    days: int = Query(default=30, ge=1, le=90),
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # --- Daily costs by model ---
+    daily_rows = (
+        db.query(
+            cast(TokenUsage.created_at, Date).label("day"),
+            TokenUsage.model,
+            func.sum(TokenUsage.estimated_cost_usd),
+            func.count(TokenUsage.id),
+        )
+        .filter(TokenUsage.created_at >= cutoff)
+        .group_by("day", TokenUsage.model)
+        .order_by("day")
+        .all()
+    )
+
+    daily_map: dict[date, dict] = {}
+    for day_val, model, cost, count in daily_rows:
+        if day_val not in daily_map:
+            daily_map[day_val] = {"date": day_val.isoformat(), "total_cost": 0.0, "by_model": {}}
+        daily_map[day_val]["total_cost"] = round(daily_map[day_val]["total_cost"] + float(cost), 6)
+        daily_map[day_val]["by_model"][model] = round(float(cost), 6)
+
+    daily_costs = list(daily_map.values())
+
+    # --- Per-user costs ---
+    user_cost_rows = (
+        db.query(
+            TokenUsage.user_id,
+            func.sum(TokenUsage.estimated_cost_usd),
+            func.count(TokenUsage.id),
+        )
+        .filter(TokenUsage.created_at >= cutoff)
+        .group_by(TokenUsage.user_id)
+        .order_by(func.sum(TokenUsage.estimated_cost_usd).desc())
+        .all()
+    )
+
+    user_ids = [r[0] for r in user_cost_rows]
+    users_map = {u.clerk_id: u for u in db.query(User).filter(User.clerk_id.in_(user_ids)).all()} if user_ids else {}
+    subs_map = {s.user_id: s for s in db.query(UserSubscription).filter(UserSubscription.user_id.in_(user_ids)).all()} if user_ids else {}
+
+    per_user_costs = []
+    for uid, total_cost_val, query_count in user_cost_rows:
+        u = users_map.get(uid)
+        s = subs_map.get(uid)
+        total_c = float(total_cost_val)
+        per_user_costs.append({
+            "user_id": uid,
+            "email": u.email if u else None,
+            "name": (" ".join(p for p in [u.first_name, u.last_name] if p).strip() or None) if u else None,
+            "tier": s.tier if s else "free",
+            "total_cost": round(total_c, 4),
+            "query_count": query_count,
+            "avg_cost_per_query": round(total_c / query_count, 6) if query_count > 0 else 0,
+        })
+
+    # --- Totals ---
+    total_cost = sum(float(r[1]) for r in user_cost_rows)
+    days_elapsed = max(days, 1)
+    projected_monthly = round((total_cost / days_elapsed) * 30, 2)
+
+    # --- Top expensive queries ---
+    top_queries = (
+        db.query(TokenUsage)
+        .filter(TokenUsage.created_at >= cutoff)
+        .order_by(TokenUsage.estimated_cost_usd.desc())
+        .limit(5)
+        .all()
+    )
+
+    top_user_ids = {q.user_id for q in top_queries}
+    top_client_ids = {q.client_id for q in top_queries if q.client_id}
+    top_users = {u.clerk_id: u for u in db.query(User).filter(User.clerk_id.in_(top_user_ids)).all()} if top_user_ids else {}
+    top_clients = {c.id: c.name for c in db.query(Client).filter(Client.id.in_(top_client_ids)).all()} if top_client_ids else {}
+
+    top_expensive_queries = [
+        {
+            "timestamp": q.created_at.isoformat(),
+            "user_email": top_users[q.user_id].email if q.user_id in top_users else None,
+            "client_name": top_clients.get(q.client_id),
+            "model": q.model,
+            "endpoint": q.endpoint,
+            "prompt_tokens": q.prompt_tokens,
+            "completion_tokens": q.completion_tokens,
+            "cost": round(float(q.estimated_cost_usd), 6),
+        }
+        for q in top_queries
+    ]
+
+    return {
+        "daily_costs": daily_costs,
+        "per_user_costs": per_user_costs,
+        "total_cost": round(total_cost, 4),
+        "projected_monthly": projected_monthly,
+        "top_expensive_queries": top_expensive_queries,
+    }
