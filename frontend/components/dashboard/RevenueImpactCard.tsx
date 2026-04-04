@@ -35,7 +35,7 @@ export default function RevenueImpactCard({ data }: Props) {
   const hasImpact = data.total_estimated_savings > 0;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-md">
       {/* Header */}
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-medium text-gray-500">Client savings this year</h3>

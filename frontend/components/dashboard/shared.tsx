@@ -44,15 +44,33 @@ export function DashboardSkeleton() {
           <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
         </div>
       </div>
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="animate-pulse rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="h-3 w-16 rounded bg-gray-200" />
-            <div className="mt-2 h-8 w-12 rounded bg-gray-200" />
-            <div className="mt-2 h-3 w-20 rounded bg-gray-100" />
-          </div>
-        ))}
+      {/* Row 1: Client command bar */}
+      <div className="mb-6 animate-pulse rounded-xl border border-gray-200 bg-white p-5">
+        <div className="flex items-center justify-between">
+          <div className="h-4 w-24 rounded bg-gray-200" />
+          <div className="h-3 w-16 rounded bg-gray-100" />
+        </div>
+        <div className="mt-3 h-10 w-full rounded-lg bg-gray-100" />
+        <div className="mt-3 space-y-3">
+          {[1, 2, 3].map((j) => (
+            <div key={j} className="h-12 rounded bg-gray-50" />
+          ))}
+        </div>
       </div>
+      {/* Row 2: Impact metrics */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.8fr]">
+        <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
+          <div className="h-4 w-36 rounded bg-gray-200" />
+          <div className="mt-3 h-8 w-28 rounded bg-gray-200" />
+          <div className="mt-2 h-3 w-44 rounded bg-gray-100" />
+          <div className="mt-4 h-10 rounded bg-gray-50" />
+        </div>
+        <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 flex flex-col items-center justify-center">
+          <div className="h-[104px] w-[104px] rounded-full bg-gray-100" />
+          <div className="mt-2 h-3 w-28 rounded bg-gray-100" />
+        </div>
+      </div>
+      {/* Row 3: Charts */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 lg:col-span-3">
           <div className="h-4 w-24 rounded bg-gray-200" />
@@ -63,25 +81,14 @@ export function DashboardSkeleton() {
           <div className="mt-4 h-[240px] rounded bg-gray-50" />
         </div>
       </div>
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Row 4: Attention + Usage */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {[1, 2].map((i) => (
           <div key={i} className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
             <div className="h-4 w-28 rounded bg-gray-200" />
             <div className="mt-4 space-y-3">
               {[1, 2, 3].map((j) => (
                 <div key={j} className="h-10 rounded bg-gray-50" />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {[1, 2].map((i) => (
-          <div key={i} className="animate-pulse rounded-xl border border-gray-200 bg-white p-5">
-            <div className="h-4 w-20 rounded bg-gray-200" />
-            <div className="mt-4 space-y-3">
-              {[1, 2].map((j) => (
-                <div key={j} className="h-6 rounded bg-gray-50" />
               ))}
             </div>
           </div>

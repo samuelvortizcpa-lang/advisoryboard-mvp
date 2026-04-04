@@ -32,7 +32,7 @@ export default function CoverageRing({ reviewed, total, href }: CoverageRingProp
   }, []);
 
   const card = (
-    <div className={`group relative flex flex-col items-center justify-center rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all duration-150${href ? " cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""}`}>
+    <div className={`group relative flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200${href ? " cursor-pointer hover:-translate-y-px hover:shadow-md" : " hover:-translate-y-px hover:shadow-md"}`}>
       {href && (
         <svg
           className="absolute right-3 top-3 h-4 w-4 text-gray-300 opacity-0 transition-opacity duration-150 group-hover:opacity-100"

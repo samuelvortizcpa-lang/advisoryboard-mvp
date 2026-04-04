@@ -62,7 +62,7 @@ function getBreadcrumbs(
     return [{ label: "Settings" }];
   }
   // /dashboard (and anything else)
-  return [{ label: "Dashboard" }];
+  return [{ label: "Overview" }];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────

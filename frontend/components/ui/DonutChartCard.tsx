@@ -27,7 +27,7 @@ export default function DonutChartCard({
   titleExtra,
 }: DonutChartCardProps) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-md">
       <h3 className="flex items-center gap-1 text-sm font-semibold text-gray-900">{title}{titleExtra}</h3>
 
       {/* Chart with center label */}

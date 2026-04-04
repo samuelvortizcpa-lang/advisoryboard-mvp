@@ -7,9 +7,9 @@ import { useEffect, useState } from "react";
 import type { DashboardSummary, PriorityFeedItem, RevenueImpact, StrategyOverview } from "@/lib/api";
 import { createDashboardApi, createStrategyDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
-import StatCard from "@/components/ui/StatCard";
 import CoverageRing from "@/components/dashboard/CoverageRing";
 import RevenueImpactCard from "@/components/dashboard/RevenueImpactCard";
+import ClientCommandCard from "@/components/dashboard/ClientCommandCard";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
 import HelpTooltip from "@/components/ui/HelpTooltip";
@@ -18,7 +18,6 @@ import {
   type TimeRange,
   DIST_COLORS,
   AttentionCard,
-  RecentClientsCard,
   UsageCard,
 } from "./shared";
 
@@ -74,10 +73,6 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
       </div>
     );
   }
-  const queryPct =
-    stats.ai_queries.limit > 0
-      ? (stats.ai_queries.used / stats.ai_queries.limit) * 100
-      : 0;
 
   const chartData = data.activity_chart.map((p) => ({ date: p.date, value: p.queries }));
 
@@ -107,41 +102,22 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
         </div>
       </div>
 
-      {/* Row 1: Stat cards */}
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          label="My clients"
-          value={stats.clients.count}
-          context={stats.clients.limit != null ? `of ${stats.clients.limit}` : undefined}
-          contextType="muted"
-          accentColor="border-l-blue-500"
-          href="/dashboard/clients"
-        />
-        <StatCard
-          label="My action items"
-          value={stats.action_items.pending}
-          context={stats.action_items.overdue > 0 ? `${stats.action_items.overdue} overdue` : "All on track"}
-          contextType={stats.action_items.overdue > 0 ? "warning" : "success"}
-          accentColor="border-l-amber-500"
-          href="/dashboard/action-items"
-        />
+      {/* Row 1: Client command bar */}
+      <div className="mb-6">
+        <ClientCommandCard clients={data.recent_clients} />
+      </div>
+
+      {/* Row 2: Impact metrics */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.8fr]">
+        <RevenueImpactCard data={revenueImpact} />
         <CoverageRing
           reviewed={strategyOverview?.clients_reviewed ?? null}
           total={strategyOverview?.total_clients ?? null}
           href="/dashboard/strategy-dashboard"
         />
-        <StatCard
-          label="My AI queries"
-          value={stats.ai_queries.used}
-          context={`of ${stats.ai_queries.limit}`}
-          contextType={queryPct > 80 ? "warning" : "muted"}
-          accentColor="border-l-purple-500"
-          href="/dashboard/usage-analytics"
-          labelExtra={<HelpTooltip content="Total AI questions asked across all clients this billing period." />}
-        />
       </div>
 
-      {/* Row 2: Charts */}
+      {/* Row 3: Activity trends */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <AreaChartCard title="My activity" data={chartData} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
@@ -151,15 +127,9 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
         </div>
       </div>
 
-      {/* Row 3: Content cards */}
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <AttentionCard data={data} feedItems={feedItems} />
-        <RecentClientsCard data={data} />
-      </div>
-
-      {/* Row 4: Utility cards */}
+      {/* Row 4: Attention + Usage */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RevenueImpactCard data={revenueImpact} />
+        <AttentionCard data={data} feedItems={feedItems} />
         <UsageCard data={data} showSeats={false} showUpgrade={false} />
       </div>
     </div>
