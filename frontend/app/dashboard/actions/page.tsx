@@ -4,24 +4,11 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { ActionItem, createActionItemsApi, createClientsApi } from "@/lib/api";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type EnrichedActionItem = ActionItem & {
-  clientName: string;
-  clientTypeColor: string | null;
-};
+import { ActionItem, createActionItemsApi, OrgMember, createOrganizationsApi } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
+import TaskDetailPanel from "@/components/action-items/TaskDetailPanel";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const COLOR_DOT: Record<string, string> = {
-  blue: "bg-blue-500",
-  green: "bg-green-500",
-  purple: "bg-purple-500",
-  red: "bg-red-500",
-  gray: "bg-gray-400",
-};
 
 const PRIORITY_BADGE: Record<string, string> = {
   high: "bg-red-50 text-red-700",
@@ -29,7 +16,7 @@ const PRIORITY_BADGE: Record<string, string> = {
   low: "bg-gray-100 text-gray-600",
 };
 
-function isOverdue(item: EnrichedActionItem): boolean {
+function isOverdue(item: ActionItem): boolean {
   if (!item.due_date || item.status !== "pending") return false;
   return new Date(item.due_date) < new Date(new Date().toDateString());
 }
@@ -59,7 +46,7 @@ function formatDueDate(iso: string | null): { label: string; className: string }
 }
 
 // Sort: ascending due_date (overdue first), null due_dates last
-function sortItems(items: EnrichedActionItem[]): EnrichedActionItem[] {
+function sortItems(items: ActionItem[]): ActionItem[] {
   return [...items].sort((a, b) => {
     if (!a.due_date && !b.due_date) return 0;
     if (!a.due_date) return 1;
@@ -72,8 +59,9 @@ function sortItems(items: EnrichedActionItem[]): EnrichedActionItem[] {
 
 export default function ActionsPage() {
   const { getToken } = useAuth();
+  const { activeOrg } = useOrg();
 
-  const [items, setItems] = useState<EnrichedActionItem[]>([]);
+  const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,46 +72,43 @@ export default function ActionsPage() {
   const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">(
     "all"
   );
+  const [assignedFilter, setAssignedFilter] = useState<string>("all");
 
-  // IDs currently being marked complete
+  // Team members for assigned filter
+  const [members, setMembers] = useState<OrgMember[]>([]);
+
+  // Quick-complete state
   const [completing, setCompleting] = useState<Set<string>>(new Set());
 
+  // Panel state
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelItem, setPanelItem] = useState<ActionItem | null>(null);
+
+  // Fetch org members
+  useEffect(() => {
+    if (!activeOrg?.id) return;
+    createOrganizationsApi(getToken)
+      .listMembers(activeOrg.id)
+      .then(setMembers)
+      .catch(() => {});
+  }, [activeOrg?.id, getToken]);
+
+  // Fetch action items via org-wide endpoint
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    const clientsApi = createClientsApi(getToken);
-    const actionItemsApi = createActionItemsApi(getToken);
+    const api = createActionItemsApi(getToken, activeOrg?.id);
+    const params: Record<string, string> = { limit: "200" };
+    if (statusFilter !== "all") params.status = statusFilter;
+    if (priorityFilter !== "all") params.priority = priorityFilter;
+    if (assignedFilter !== "all") params.assigned_to = assignedFilter;
 
-    clientsApi
-      .list(0, 200)
-      .then(async (clientsResp) => {
-        const clients = clientsResp.items;
-
-        // Fetch all action items per client in parallel; tolerate individual failures
-        const results = await Promise.allSettled(
-          clients.map((client) =>
-            actionItemsApi.list(client.id, undefined, 0, 200).then((resp) =>
-              resp.items.map(
-                (item): EnrichedActionItem => ({
-                  ...item,
-                  clientName: client.name,
-                  clientTypeColor: client.client_type?.color ?? null,
-                })
-              )
-            )
-          )
-        );
-
-        if (cancelled) return;
-
-        const enriched: EnrichedActionItem[] = [];
-        for (const r of results) {
-          if (r.status === "fulfilled") enriched.push(...r.value);
-        }
-
-        setItems(sortItems(enriched));
+    api
+      .listOrg(params)
+      .then((res) => {
+        if (!cancelled) setItems(sortItems(res.items));
       })
       .catch((e: Error) => {
         if (!cancelled) setError(e.message);
@@ -135,18 +120,18 @@ export default function ActionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [getToken]);
+  }, [getToken, activeOrg?.id, statusFilter, priorityFilter, assignedFilter]);
 
-  async function handleComplete(item: EnrichedActionItem) {
+  async function handleToggleComplete(item: ActionItem) {
+    const newStatus = item.status === "completed" ? "pending" : "completed";
     setCompleting((prev) => new Set(prev).add(item.id));
     try {
-      await createActionItemsApi(getToken).update(item.id, { status: "completed" });
-      // Optimistic update: mark completed in local state
+      const updated = await createActionItemsApi(getToken, activeOrg?.id).update(item.id, { status: newStatus });
       setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, status: "completed" } : i))
+        prev.map((i) => (i.id === item.id ? { ...i, ...updated } : i))
       );
     } catch {
-      // Leave item as-is if the PATCH fails
+      // Leave item as-is
     } finally {
       setCompleting((prev) => {
         const next = new Set(prev);
@@ -156,12 +141,33 @@ export default function ActionsPage() {
     }
   }
 
-  // Client-side filter
-  const filtered = items.filter((item) => {
-    if (statusFilter !== "all" && item.status !== statusFilter) return false;
-    if (priorityFilter !== "all" && item.priority !== priorityFilter) return false;
-    return true;
-  });
+  function openPanel(item: ActionItem | null) {
+    setPanelItem(item);
+    setPanelOpen(true);
+  }
+
+  function closePanel() {
+    setPanelOpen(false);
+    setPanelItem(null);
+  }
+
+  function handlePanelSaved(saved: ActionItem) {
+    if (panelItem) {
+      setItems((prev) => prev.map((i) => (i.id === saved.id ? saved : i)));
+    } else {
+      // Created new — re-fetch
+      const api = createActionItemsApi(getToken, activeOrg?.id);
+      const params: Record<string, string> = { limit: "200" };
+      if (statusFilter !== "all") params.status = statusFilter;
+      if (priorityFilter !== "all") params.priority = priorityFilter;
+      if (assignedFilter !== "all") params.assigned_to = assignedFilter;
+      api.listOrg(params).then((res) => setItems(sortItems(res.items))).catch(() => {});
+    }
+  }
+
+  function handlePanelDeleted(id: string) {
+    setItems((prev) => prev.filter((i) => i.id !== id));
+  }
 
   const pendingCount = items.filter((i) => i.status === "pending").length;
   const overdueCount = items.filter((i) => isOverdue(i)).length;
@@ -183,6 +189,12 @@ export default function ActionsPage() {
             </p>
           )}
         </div>
+        <button
+          onClick={() => openPanel(null)}
+          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600"
+        >
+          + New action item
+        </button>
       </div>
 
       {/* ── Filters ──────────────────────────────────────────────────────── */}
@@ -222,6 +234,37 @@ export default function ActionsPage() {
             </button>
           ))}
         </div>
+
+        {/* Assigned to filter */}
+        {members.length > 0 && (
+          <div className="flex overflow-hidden rounded-md border border-gray-200 bg-white">
+            <button
+              onClick={() => setAssignedFilter("all")}
+              className={[
+                "px-3 py-1.5 text-xs font-medium transition-colors",
+                assignedFilter === "all"
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-500 hover:bg-gray-50",
+              ].join(" ")}
+            >
+              All Members
+            </button>
+            {members.map((m) => (
+              <button
+                key={m.user_id}
+                onClick={() => setAssignedFilter(m.user_id)}
+                className={[
+                  "px-3 py-1.5 text-xs font-medium transition-colors",
+                  assignedFilter === m.user_id
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-500 hover:bg-gray-50",
+                ].join(" ")}
+              >
+                {m.user_name || m.user_email || "Member"}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Error ────────────────────────────────────────────────────────── */}
@@ -239,31 +282,29 @@ export default function ActionsPage() {
       )}
 
       {/* ── Empty state ──────────────────────────────────────────────────── */}
-      {!loading && !error && filtered.length === 0 && (
+      {!loading && !error && items.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white py-20 text-center">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
             <CircleCheckIcon />
           </div>
           <p className="text-sm font-medium text-gray-900">
-            {items.length === 0 ? "No action items yet" : "No items match your filters"}
+            No items match your filters
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            {items.length === 0
-              ? "Action items are extracted automatically from uploaded documents"
-              : "Try adjusting your status or priority filters"}
+            Try adjusting your filters or create a new action item
           </p>
         </div>
       )}
 
       {/* ── Table ────────────────────────────────────────────────────────── */}
-      {!loading && !error && filtered.length > 0 && (
+      {!loading && !error && items.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/60">
-                {["Task", "Client", "Priority", "Due Date", "Status", ""].map((h) => (
+                {["", "Task", "Client", "Priority", "Due Date", "Assigned", "Status", ""].map((h, i) => (
                   <th
-                    key={h}
+                    key={`${h}-${i}`}
                     scope="col"
                     className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400"
                   >
@@ -273,13 +314,35 @@ export default function ActionsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map((item) => {
+              {items.map((item) => {
                 const overdue = isOverdue(item);
                 const dueInfo = formatDueDate(item.due_date);
                 const isCompleting = completing.has(item.id);
 
                 return (
-                  <tr key={item.id} className="group transition-colors hover:bg-gray-50">
+                  <tr
+                    key={item.id}
+                    onClick={() => openPanel(item)}
+                    className="group cursor-pointer transition-colors hover:bg-gray-50"
+                  >
+                    {/* Quick-complete circle */}
+                    <td className="w-10 px-4 py-3.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleToggleComplete(item); }}
+                        disabled={isCompleting}
+                        title={item.status === "completed" ? "Mark pending" : "Mark complete"}
+                        className="rounded text-gray-400 transition-colors hover:text-blue-600 disabled:opacity-50"
+                      >
+                        {isCompleting ? (
+                          <span className="block h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+                        ) : item.status === "completed" ? (
+                          <CheckCircleIcon />
+                        ) : (
+                          <CircleIcon />
+                        )}
+                      </button>
+                    </td>
+
                     {/* Task — left-border accent when overdue */}
                     <td
                       className={[
@@ -289,9 +352,9 @@ export default function ActionsPage() {
                     >
                       <p
                         className={[
-                          "text-sm",
+                          "text-sm transition-all duration-200",
                           item.status === "completed"
-                            ? "text-gray-400 line-through"
+                            ? "text-gray-400 line-through opacity-60"
                             : "text-gray-900",
                         ].join(" ")}
                       >
@@ -308,17 +371,10 @@ export default function ActionsPage() {
                     <td className="px-4 py-3.5">
                       <Link
                         href={`/dashboard/clients/${item.client_id}?tab=actions`}
-                        className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-sm text-blue-600 hover:underline"
                       >
-                        {item.clientTypeColor && (
-                          <span
-                            className={[
-                              "inline-block h-2 w-2 shrink-0 rounded-full",
-                              COLOR_DOT[item.clientTypeColor] ?? "bg-gray-300",
-                            ].join(" ")}
-                          />
-                        )}
-                        {item.clientName}
+                        {item.client_name ?? "—"}
                       </Link>
                     </td>
 
@@ -343,6 +399,11 @@ export default function ActionsPage() {
                       {dueInfo.label}
                     </td>
 
+                    {/* Assigned */}
+                    <td className="px-4 py-3.5 text-sm text-gray-600">
+                      {item.assigned_to_name || <span className="text-gray-300">—</span>}
+                    </td>
+
                     {/* Status */}
                     <td className="px-4 py-3.5">
                       <span
@@ -365,7 +426,7 @@ export default function ActionsPage() {
                     <td className="px-4 py-3.5">
                       {item.status === "pending" && (
                         <button
-                          onClick={() => handleComplete(item)}
+                          onClick={(e) => { e.stopPropagation(); handleToggleComplete(item); }}
                           disabled={isCompleting}
                           title="Mark as complete"
                           className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 opacity-0 transition-opacity group-hover:opacity-100 hover:border-green-300 hover:bg-green-50 hover:text-green-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -386,6 +447,15 @@ export default function ActionsPage() {
           </table>
         </div>
       )}
+
+      {/* Detail panel */}
+      <TaskDetailPanel
+        item={panelItem}
+        isOpen={panelOpen}
+        onClose={closePanel}
+        onSaved={handlePanelSaved}
+        onDeleted={handlePanelDeleted}
+      />
     </div>
   );
 }
@@ -402,6 +472,22 @@ function CheckIcon() {
       strokeWidth={2.5}
     >
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  );
+}
+
+function CircleIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  );
+}
+
+function CheckCircleIcon() {
+  return (
+    <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
 }

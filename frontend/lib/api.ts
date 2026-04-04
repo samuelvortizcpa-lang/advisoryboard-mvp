@@ -974,17 +974,23 @@ export function createAlertsApi(getToken: GetToken, orgId?: string) {
 
 export interface ActionItem {
   id: string;
-  document_id: string;
+  document_id: string | null;
   client_id: string;
   text: string;
   status: "pending" | "completed" | "cancelled";
   priority: "low" | "medium" | "high" | null;
   due_date: string | null;
-  extracted_at: string;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  notes: string | null;
+  source: "ai_extracted" | "manual";
+  created_by: string | null;
+  extracted_at: string | null;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
   document_filename: string | null;
+  client_name?: string;
 }
 
 export interface ActionItemListResponse {
@@ -998,6 +1004,20 @@ export interface ActionItemUpdate {
   status?: "pending" | "completed" | "cancelled";
   priority?: "low" | "medium" | "high" | null;
   due_date?: string | null;
+  text?: string;
+  assigned_to?: string | null;
+  assigned_to_name?: string | null;
+  notes?: string | null;
+}
+
+export interface ActionItemCreate {
+  text: string;
+  client_id: string;
+  priority?: string;
+  due_date?: string | null;
+  assigned_to?: string | null;
+  assigned_to_name?: string | null;
+  notes?: string | null;
 }
 
 // ─── Action items API factory ─────────────────────────────────────────────────
@@ -1040,6 +1060,18 @@ export function createActionItemsApi(getToken: GetToken, orgId?: string) {
         `/documents/${documentId}/reextract-action-items`,
         { method: "POST" }
       );
+    },
+
+    listOrg(params?: Record<string, string>) {
+      const qs = params ? `?${new URLSearchParams(params)}` : "";
+      return f<ActionItemListResponse>(`/action-items${qs}`);
+    },
+
+    create(data: ActionItemCreate) {
+      return f<ActionItem>(`/action-items`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
     },
   };
 }

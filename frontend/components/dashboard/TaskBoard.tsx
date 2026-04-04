@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { DashboardSummary, TaskBoardItem } from "@/lib/api";
-import { createDashboardApi } from "@/lib/api";
+import type { ActionItem, DashboardSummary, TaskBoardItem } from "@/lib/api";
+import { createActionItemsApi, createDashboardApi } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
+import TaskDetailPanel from "@/components/action-items/TaskDetailPanel";
 
 /* ── Icons ────────────────────────────────────────────────────────────────── */
 
@@ -134,6 +135,7 @@ function TaskSection({
   emptyText,
   expanded,
   onToggle,
+  onItemClick,
 }: {
   label: string;
   count: number;
@@ -149,6 +151,7 @@ function TaskSection({
   emptyText?: string;
   expanded: boolean;
   onToggle: () => void;
+  onItemClick: (item: TaskBoardItem) => void;
 }) {
   if (items.length === 0 && !emptyText) return null;
 
@@ -175,16 +178,22 @@ function TaskSection({
           ) : (
             <div>
               {items.slice(0, maxItems).map((item) => (
-                <Link
+                <div
                   key={item.id}
-                  href={`/dashboard/clients/${item.client_id}`}
-                  className="-mx-1 flex items-start gap-2 rounded px-1 py-2 transition-colors hover:bg-gray-50"
+                  onClick={() => onItemClick(item)}
+                  className="-mx-1 flex items-start gap-2 rounded px-1 py-2 transition-colors hover:bg-gray-50 cursor-pointer"
                 >
                   <span className={`mt-[7px] inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium text-gray-900 line-clamp-1">{item.text}</p>
                     <p className="text-[11px] text-gray-400">
-                      {item.client_name}
+                      <Link
+                        href={`/dashboard/clients/${item.client_id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="hover:text-blue-500 hover:underline"
+                      >
+                        {item.client_name}
+                      </Link>
                       {item.due_date ? ` \u00B7 Due ${formatDate(item.due_date)}` : " \u00B7 No due date"}
                     </p>
                   </div>
@@ -193,7 +202,7 @@ function TaskSection({
                       {renderRight(item)}
                     </span>
                   )}
-                </Link>
+                </div>
               ))}
               {items.length > maxItems && (
                 <Link
@@ -242,15 +251,23 @@ export default function TaskBoard({ data }: Props) {
     unscheduled: false,
   });
 
+  // Panel state
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelItem, setPanelItem] = useState<ActionItem | null>(null);
+
   const toggle = useCallback((key: SectionKey) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  // Fetch To Do items immediately
-  useEffect(() => {
+  // Fetch To Do items
+  const fetchTodo = useCallback(() => {
     const api = createDashboardApi(getToken, activeOrg?.id);
     api.taskBoardItems().then(setTodoItems).catch(() => {});
   }, [getToken, activeOrg]);
+
+  useEffect(() => {
+    fetchTodo();
+  }, [fetchTodo]);
 
   // Lazy-fetch Done items when tab is clicked
   useEffect(() => {
@@ -275,6 +292,64 @@ export default function TaskBoard({ data }: Props) {
     { key: "done", label: "Done" },
     { key: "delegated", label: "Delegated" },
   ];
+
+  // Convert TaskBoardItem to a partial ActionItem for immediate panel display
+  function boardItemToActionItem(boardItem: TaskBoardItem): ActionItem {
+    return {
+      id: boardItem.id,
+      document_id: null,
+      client_id: boardItem.client_id,
+      text: boardItem.text,
+      status: boardItem.status,
+      priority: null,
+      due_date: boardItem.due_date,
+      assigned_to: null,
+      assigned_to_name: null,
+      notes: null,
+      source: "ai_extracted",
+      created_by: null,
+      extracted_at: null,
+      completed_at: boardItem.completed_at,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      document_filename: null,
+      client_name: boardItem.client_name,
+    };
+  }
+
+  // Open panel immediately with partial data, then backfill full ActionItem
+  function handleItemClick(boardItem: TaskBoardItem) {
+    const partial = boardItemToActionItem(boardItem);
+    setPanelItem(partial);
+    setPanelOpen(true);
+    // Fetch full data in background to populate priority, notes, assigned_to, etc.
+    const api = createActionItemsApi(getToken, activeOrg?.id);
+    api.list(boardItem.client_id, undefined, 0, 200).then((res) => {
+      const full = res.items.find((i) => i.id === boardItem.id);
+      if (full) setPanelItem(full);
+    }).catch(() => { /* keep partial data — panel still works */ });
+  }
+
+  function closePanel() {
+    setPanelOpen(false);
+    setPanelItem(null);
+  }
+
+  function handlePanelSaved() {
+    // Re-fetch todo items to reflect changes
+    fetchTodo();
+    setDoneLoaded(false);
+  }
+
+  function handlePanelDeleted() {
+    fetchTodo();
+    setDoneLoaded(false);
+  }
+
+  function openCreatePanel() {
+    setPanelItem(null);
+    setPanelOpen(true);
+  }
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-px hover:shadow-md">
@@ -316,6 +391,12 @@ export default function TaskBoard({ data }: Props) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span className="mt-1.5 text-sm text-gray-500">All clear, no tasks</span>
+              <button
+                onClick={openCreatePanel}
+                className="mt-2 text-[12px] text-blue-500 hover:text-blue-700 hover:underline"
+              >
+                + Add task
+              </button>
             </div>
           ) : (
             <div className="space-y-1">
@@ -341,6 +422,7 @@ export default function TaskBoard({ data }: Props) {
                   renderRight={() => "Today"}
                   expanded={expanded.today}
                   onToggle={() => toggle("today")}
+                  onItemClick={handleItemClick}
                 />
               )}
 
@@ -361,6 +443,7 @@ export default function TaskBoard({ data }: Props) {
                 }}
                 expanded={expanded.overdue}
                 onToggle={() => toggle("overdue")}
+                onItemClick={handleItemClick}
               />
 
               <TaskSection
@@ -378,6 +461,7 @@ export default function TaskBoard({ data }: Props) {
                 emptyText="Clear schedule ahead"
                 expanded={expanded.next}
                 onToggle={() => toggle("next")}
+                onItemClick={handleItemClick}
               />
 
               <TaskSection
@@ -394,7 +478,16 @@ export default function TaskBoard({ data }: Props) {
                 renderRight={() => ""}
                 expanded={expanded.unscheduled}
                 onToggle={() => toggle("unscheduled")}
+                onItemClick={handleItemClick}
               />
+
+              {/* Add task link */}
+              <button
+                onClick={openCreatePanel}
+                className="mt-2 block w-full py-1.5 text-center text-[11px] text-blue-400 hover:text-blue-600 hover:underline"
+              >
+                + Add task
+              </button>
             </div>
           )
         )}
@@ -404,10 +497,10 @@ export default function TaskBoard({ data }: Props) {
           !doneLoaded ? <Spinner /> : doneItems && doneItems.length > 0 ? (
             <div>
               {doneItems.map((item) => (
-                <Link
+                <div
                   key={item.id}
-                  href={`/dashboard/clients/${item.client_id}`}
-                  className="-mx-1 flex items-start gap-2 rounded px-1 py-2 transition-colors hover:bg-gray-50"
+                  onClick={() => handleItemClick(item)}
+                  className="-mx-1 flex items-start gap-2 rounded px-1 py-2 transition-colors hover:bg-gray-50 cursor-pointer"
                 >
                   <span className="mt-[7px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
                   <div className="min-w-0 flex-1">
@@ -417,7 +510,7 @@ export default function TaskBoard({ data }: Props) {
                       {item.completed_at ? ` \u00B7 Completed ${relativeTime(item.completed_at)}` : ""}
                     </p>
                   </div>
-                </Link>
+                </div>
               ))}
               <Link
                 href="/dashboard/actions?filter=completed"
@@ -451,6 +544,15 @@ export default function TaskBoard({ data }: Props) {
         {/* Fade at bottom */}
         <div className="pointer-events-none sticky bottom-0 -mb-5 h-4 bg-gradient-to-t from-white to-transparent" />
       </div>
+
+      {/* Task detail panel */}
+      <TaskDetailPanel
+        item={panelItem}
+        isOpen={panelOpen}
+        onClose={closePanel}
+        onSaved={handlePanelSaved}
+        onDeleted={handlePanelDeleted}
+      />
     </div>
   );
 }

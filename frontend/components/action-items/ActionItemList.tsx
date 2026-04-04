@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
 import { ActionItem, createActionItemsApi } from "@/lib/api";
+import TaskDetailPanel from "./TaskDetailPanel";
 
 type FilterTab = "pending" | "completed" | "all";
 
@@ -29,6 +30,10 @@ export default function ActionItemList({
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Panel state
+  const [selectedItem, setSelectedItem] = useState<ActionItem | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const api = createActionItemsApi(getToken);
 
@@ -92,7 +97,31 @@ export default function ActionItemList({
 
   function handleTabChange(tab: FilterTab) {
     setFilter(tab);
-    // fetchItems is triggered by the useEffect dependency on `filter`
+  }
+
+  function openPanel(item: ActionItem | null) {
+    setSelectedItem(item);
+    setPanelOpen(true);
+  }
+
+  function closePanel() {
+    setPanelOpen(false);
+    setSelectedItem(null);
+  }
+
+  function handleSaved(saved: ActionItem) {
+    if (selectedItem) {
+      // Editing existing
+      setItems((prev) => prev.map((i) => (i.id === saved.id ? saved : i)));
+    } else {
+      // Created new — refresh list
+      fetchItems(filter);
+    }
+  }
+
+  function handleDeleted(id: string) {
+    setItems((prev) => prev.filter((i) => i.id !== id));
+    setTotal((t) => t - 1);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -109,14 +138,23 @@ export default function ActionItemList({
             </span>
           )}
         </div>
-        <button
-          onClick={() => fetchItems(filter)}
-          disabled={loading}
-          title="Refresh"
-          className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
-        >
-          <RefreshIcon spinning={loading} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => openPanel(null)}
+            title="Add task"
+            className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+          >
+            + Add task
+          </button>
+          <button
+            onClick={() => fetchItems(filter)}
+            disabled={loading}
+            title="Refresh"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+          >
+            <RefreshIcon spinning={loading} />
+          </button>
+        </div>
       </div>
 
       {/* Filter tabs */}
@@ -166,11 +204,22 @@ export default function ActionItemList({
                 isDeleting={deletingId === item.id}
                 onToggleComplete={() => handleToggleComplete(item)}
                 onDelete={() => handleDelete(item)}
+                onClick={() => openPanel(item)}
               />
             ))}
           </ul>
         )}
       </div>
+
+      {/* Detail panel */}
+      <TaskDetailPanel
+        item={selectedItem}
+        isOpen={panelOpen}
+        clientId={clientId}
+        onClose={closePanel}
+        onSaved={handleSaved}
+        onDeleted={handleDeleted}
+      />
     </div>
   );
 }
@@ -183,12 +232,14 @@ function ActionItemRow({
   isDeleting,
   onToggleComplete,
   onDelete,
+  onClick,
 }: {
   item: ActionItem;
   isUpdating: boolean;
   isDeleting: boolean;
   onToggleComplete: () => void;
   onDelete: () => void;
+  onClick: () => void;
 }) {
   const busy = isUpdating || isDeleting;
   const done = item.status === "completed";
@@ -197,7 +248,7 @@ function ActionItemRow({
     <li className={`flex items-start gap-3 px-4 py-3 ${isDeleting ? "opacity-50" : ""}`}>
       {/* Checkbox */}
       <button
-        onClick={onToggleComplete}
+        onClick={(e) => { e.stopPropagation(); onToggleComplete(); }}
         disabled={busy}
         title={done ? "Mark pending" : "Mark complete"}
         className="mt-0.5 shrink-0 rounded text-gray-400 transition-colors hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
@@ -211,11 +262,11 @@ function ActionItemRow({
         )}
       </button>
 
-      {/* Content */}
-      <div className="min-w-0 flex-1">
+      {/* Content — clickable to open panel */}
+      <div className="min-w-0 flex-1 cursor-pointer" onClick={onClick}>
         <p
-          className={`text-sm leading-snug ${
-            done ? "text-gray-400 line-through" : "text-gray-800"
+          className={`text-sm leading-snug transition-all duration-200 ${
+            done ? "text-gray-400 line-through opacity-60" : "text-gray-800"
           }`}
         >
           {item.text}
@@ -244,12 +295,19 @@ function ActionItemRow({
 
           {/* Priority badge */}
           {item.priority && <PriorityBadge priority={item.priority} />}
+
+          {/* Assigned to */}
+          {item.assigned_to_name && (
+            <span className="text-xs text-gray-400">
+              {item.assigned_to_name}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Delete */}
       <button
-        onClick={onDelete}
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
         disabled={busy}
         title="Delete"
         className="shrink-0 rounded-lg p-1 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40"
