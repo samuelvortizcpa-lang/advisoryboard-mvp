@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { createOnboardingApi } from "@/lib/api";
 
+import AddClientStep from "./AddClientStep";
 import WelcomeStep from "./WelcomeStep";
 
 interface Props {
@@ -40,14 +41,13 @@ export default function OnboardingWizard({ onComplete }: Props) {
       case 0:
         return <WelcomeStep onNext={nextStep} />;
       case 1:
-        // AddClientStep — placeholder for next PR
         return (
-          <StepPlaceholder
-            title="Add your first client"
-            onNext={() => {
-              setCreatedClientId(null);
-              setCreatedClientName(null);
-              nextStep();
+          <AddClientStep
+            onNext={nextStep}
+            onSkip={nextStep}
+            onClientCreated={(id, name) => {
+              setCreatedClientId(id);
+              setCreatedClientName(name);
             }}
           />
         );
