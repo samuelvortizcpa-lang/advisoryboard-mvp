@@ -685,6 +685,85 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {/* Cost Comparison Table */}
+        <div className="cost-section" data-reveal>
+          <div className="cost-inner">
+            <p className="overline">The real cost of &ldquo;free&rdquo; tools</p>
+            <h2>Replace your tool stack</h2>
+            <p className="cost-subtitle">CPAs cobble together 4–6 separate tools. Callwen replaces them all.</p>
+
+            <div className="cost-table-wrap">
+              <table className="cost-table">
+                <thead>
+                  <tr>
+                    <th className="cost-th tool-col">Tool</th>
+                    <th className="cost-th price-col">Typical cost</th>
+                    <th className="cost-th callwen-col">
+                      <span className="callwen-badge">Callwen</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { tool: 'Document management (SharePoint / Google Drive)', cost: '$12/user/mo' },
+                    { tool: 'AI search & chat (ChatGPT Team / Copilot)', cost: '$25/user/mo' },
+                    { tool: 'E-signature & consent (DocuSign / PandaDoc)', cost: '$25/user/mo' },
+                    { tool: 'Meeting transcription (Otter / Fireflies)', cost: '$17/user/mo' },
+                    { tool: 'Email sync CRM (Front / HubSpot)', cost: '$29/user/mo' },
+                    { tool: 'Tax research (Checkpoint / CCH)', cost: '$150+/mo' },
+                  ].map((row, i) => (
+                    <tr key={i} className="cost-row">
+                      <td className="cost-td tool-col">{row.tool}</td>
+                      <td className="cost-td price-col">{row.cost}</td>
+                      <td className="cost-td callwen-col">
+                        <svg className="cost-check" viewBox="0 0 20 20" fill="none">
+                          <path d="M5 10l3.5 3.5L15 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="cost-total-row">
+                    <td className="cost-td tool-col cost-total-label">Total without Callwen</td>
+                    <td className="cost-td price-col cost-total-price">$258+<span className="cost-per">/user/mo</span></td>
+                    <td className="cost-td callwen-col">
+                      <span className="cost-callwen-price">From $99<span className="cost-per">/mo</span></span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <a href="#pricing" className="cost-cta">See pricing plans &rarr;</a>
+          </div>
+        </div>
+
+        {/* Business Value / Impact Cards */}
+        <div className="impact-section" data-reveal>
+          <div className="impact-inner">
+            <p className="overline">Built for how CPAs actually work</p>
+            <h2>Measurable impact from day one</h2>
+            <div className="impact-grid">
+              <div className="impact-card">
+                <div className="impact-number">5+</div>
+                <div className="impact-unit">hours saved per week</div>
+                <p className="impact-desc">Stop hunting through folders, inboxes, and portals. Ask a question, get a source-cited answer in seconds.</p>
+              </div>
+              <div className="impact-card">
+                <div className="impact-number">100%</div>
+                <div className="impact-unit">§7216 audit-ready</div>
+                <p className="impact-desc">Every consent is tracked, timestamped, and exportable. No spreadsheets, no missed expirations.</p>
+              </div>
+              <div className="impact-card">
+                <div className="impact-number">1-click</div>
+                <div className="impact-unit">client briefing</div>
+                <p className="impact-desc">Walk into every meeting with a full financial snapshot — documents, emails, and action items unified.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Testimonial Carousel */}
         <div className="testimonials-section" data-reveal>
           <p className="overline">What CPAs are saying</p>
@@ -1121,6 +1200,42 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .comp-cell.callwen .feat { color: var(--white); }
 .comp-cell.callwen .val { color: var(--accent); font-weight: 500; }
 
+/* Cost Comparison */
+.cost-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.cost-inner { max-width: 820px; margin: 0 auto; text-align: center; }
+.cost-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.cost-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; }
+.cost-subtitle { font-size: 0.92rem; color: var(--white-dim); margin-bottom: 3rem; font-weight: 400; }
+.cost-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 2.5rem; }
+.cost-table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); }
+.cost-th { padding: 1.2rem 1.5rem; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); background: rgba(24,28,37,0.9); text-align: left; font-weight: 500; }
+.cost-th.callwen-col { text-align: center; }
+.callwen-badge { display: inline-block; background: var(--accent); color: var(--bg-deep); font-size: 0.65rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; letter-spacing: 0.1em; }
+.cost-row { border-bottom: 1px solid rgba(255,255,255,0.03); }
+.cost-td { padding: 1rem 1.5rem; font-size: 0.85rem; }
+.cost-td.tool-col { color: var(--white-dim); text-align: left; font-weight: 400; }
+.cost-td.price-col { color: var(--white-faint); text-align: left; font-weight: 400; white-space: nowrap; }
+.cost-td.callwen-col { text-align: center; }
+.cost-check { width: 20px; height: 20px; color: var(--accent); display: inline-block; vertical-align: middle; }
+.cost-total-row { background: rgba(201,148,74,0.06); border-top: 1px solid rgba(201,148,74,0.15); }
+.cost-total-label { font-weight: 600; color: var(--white); }
+.cost-total-price { font-weight: 600; color: var(--white); white-space: nowrap; }
+.cost-callwen-price { font-family: var(--serif); font-size: 1.1rem; font-weight: 600; color: var(--accent); }
+.cost-per { font-size: 0.72rem; font-weight: 400; color: var(--white-dim); font-family: var(--sans); }
+.cost-cta { display: inline-block; font-size: 0.88rem; font-weight: 500; color: var(--accent); text-decoration: none; transition: color 0.2s; }
+.cost-cta:hover { color: var(--accent-light); }
+
+/* Impact Cards */
+.impact-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.impact-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
+.impact-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.impact-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
+.impact-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
+.impact-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 3rem 2rem; text-align: center; }
+.impact-number { font-family: var(--serif); font-size: 3rem; font-weight: 600; color: var(--accent); line-height: 1; margin-bottom: 0.4rem; }
+.impact-unit { font-size: 0.82rem; font-weight: 500; color: var(--white); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 1.2rem; }
+.impact-desc { font-size: 0.85rem; color: var(--white-dim); line-height: 1.7; font-weight: 400; max-width: 280px; margin: 0 auto; }
+
 .pricing { padding: 8rem 2rem; }
 .pricing-inner { max-width: 1100px; margin: 0 auto; text-align: center; }
 .pricing .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
@@ -1219,6 +1334,7 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .section-visual-img { max-width: 480px; height: auto; }
   .section-visual-ext { width: 260px; max-width: 80%; height: auto; margin: 0 auto; }
   .comp-grid { grid-template-columns: 1fr; }
+  .impact-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
   .carousel-slide { min-width: 100%; }
   .carousel-arrow { display: none; }
