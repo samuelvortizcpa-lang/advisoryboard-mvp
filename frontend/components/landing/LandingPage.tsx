@@ -11,7 +11,7 @@ const faqData = [
   },
   {
     q: 'What is IRC \u00a77216 and why does it matter?',
-    a: 'IRC Section 7216 requires written client consent before a tax preparer can disclose or use tax return information for purposes beyond the original engagement. Callwen has built-in consent tracking with e-signature capture, expiration alerts, and audit trails \u2014 so you stay compliant without spreadsheets.',
+    a: 'IRC Section 7216 requires written client consent before a tax preparer can disclose or use tax return information for purposes beyond the original engagement. Callwen has built-in consent tracking with e-signature capture, expiration alerts, and audit trails, so you stay compliant without spreadsheets.',
   },
   {
     q: 'What types of documents can I upload?',
@@ -19,7 +19,7 @@ const faqData = [
   },
   {
     q: 'How accurate are the AI answers?',
-    a: 'Every AI response includes a confidence score and source citations pointing to the specific document and page. You can verify any answer by clicking the source reference. We use dual-model routing \u2014 fast lookups for standard queries and deep analysis for complex questions \u2014 to balance speed and accuracy.',
+    a: 'Every AI response includes a confidence score and source citations pointing to the specific document and page. You can verify any answer by clicking the source reference. We route between fast lookups for standard queries and deep analysis for complex questions to balance speed and accuracy.',
   },
   {
     q: 'Can my team share a workspace?',
@@ -500,7 +500,7 @@ export default function LandingPage() {
             <div className="hero-left">
               <div className="hero-badge"><span className="pulse" /> AI-Powered Document Intelligence</div>
               <h1>Your documents,<br /><em>finally</em> answering<br />your questions.</h1>
-              <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get source-cited, confidence-scored answers in seconds.</p>
+              <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get cited answers with confidence scores in seconds.</p>
               <div className="hero-buttons">
                 <Link href="/sign-in" className="btn btn-primary">
                   Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
@@ -585,7 +585,7 @@ export default function LandingPage() {
             <div className="number">01</div>
             <div className="content">
               <h2>Every document,<br /><em>one place</em></h2>
-              <p>Tax returns, engagement letters, meeting recordings, emails — drop them in and they&apos;re instantly indexed. Callwen reads PDFs, audio, video, and spreadsheets so you don&apos;t have to dig through folders ever again.</p>
+              <p>Tax returns, engagement letters, meeting recordings, emails. Drop them in and they&apos;re indexed on the spot. Callwen reads PDFs, audio, video, and spreadsheets so you never have to dig through folders again.</p>
               <span className="tag">Upload · Index · Organize</span>
             </div>
             <div className="section-visual section-visual-img" aria-hidden="true">
@@ -601,7 +601,7 @@ export default function LandingPage() {
             <div className="number">02</div>
             <div className="content">
               <h2>Ask questions,<br />get <em>real answers</em></h2>
-              <p>Not generic summaries. Callwen gives you source-cited responses with confidence scores and page references. When you tell a client &quot;the answer is on page 4,&quot; you know it&apos;s on page 4.</p>
+              <p>Not generic summaries. Callwen gives you real answers with citations, confidence scores, and page references. When you tell a client &quot;the answer is on page 4,&quot; you know it&apos;s on page 4.</p>
               <span className="tag">AI · Source citations · Confidence</span>
             </div>
             <div className="section-visual section-visual-img" aria-hidden="true">
@@ -649,7 +649,7 @@ export default function LandingPage() {
             <div className="number">05</div>
             <div className="content">
               <h2>Capture anything,<br /><em>from anywhere</em></h2>
-              <p>The Callwen browser extension lives in your sidebar. Select text from an email, screenshot a chart, right-click a PDF link — two clicks and it&apos;s in your client&apos;s file. Auto-matching knows which client you&apos;re working on. Quick Query lets you ask questions without leaving the page.</p>
+              <p>The Callwen browser extension lives in your sidebar. Select text from an email, screenshot a chart, or right-click a PDF link. Two clicks and it&apos;s in your client&apos;s file. Auto-matching knows which client you&apos;re working on, and Quick Query lets you ask questions without leaving the page.</p>
               <span className="tag">Chrome Extension · Auto-match · Quick Query</span>
             </div>
             <div className="section-visual section-visual-img section-visual-ext" aria-hidden="true">
@@ -659,29 +659,6 @@ export default function LandingPage() {
                 style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '12px' }}
               />
             </div>
-          </div>
-        </div>
-
-        {/* Comparison */}
-        <div className="comparison-strip" data-reveal>
-          <div className="comparison-inner">
-            <p className="overline">Why Callwen</p>
-            <h2>What generic tools miss</h2>
-            <div className="comp-grid">
-              <div className="comp-cell header">Generic tools</div>
-              <div className="comp-cell header callwen">Callwen</div>
-              <div className="comp-cell"><div className="feat">AI document search</div><div className="val">No source citations</div></div>
-              <div className="comp-cell callwen"><div className="feat">AI document search</div><div className="val">Source-cited, confidence-scored</div></div>
-              <div className="comp-cell"><div className="feat">Tax document handling</div><div className="val">No awareness</div></div>
-              <div className="comp-cell callwen"><div className="feat">Tax document handling</div><div className="val">Auto-classification, 7216 consent</div></div>
-              <div className="comp-cell"><div className="feat">Meeting recordings</div><div className="val">Separate tool</div></div>
-              <div className="comp-cell callwen"><div className="feat">Meeting recordings</div><div className="val">Built-in transcription &amp; Q&amp;A</div></div>
-              <div className="comp-cell"><div className="feat">Email sync</div><div className="val">Separate tool</div></div>
-              <div className="comp-cell callwen"><div className="feat">Email sync</div><div className="val">Gmail, Outlook, Front built in</div></div>
-              <div className="comp-cell"><div className="feat">Who built it</div><div className="val">Engineers guessing</div></div>
-              <div className="comp-cell callwen"><div className="feat">Who built it</div><div className="val">A practicing CPA</div></div>
-            </div>
-
           </div>
         </div>
 
@@ -748,7 +725,7 @@ export default function LandingPage() {
               <div className="impact-card">
                 <div className="impact-number">5+</div>
                 <div className="impact-unit">hours saved per week</div>
-                <p className="impact-desc">Stop hunting through folders, inboxes, and portals. Ask a question, get a source-cited answer in seconds.</p>
+                <p className="impact-desc">Stop hunting through folders, inboxes, and portals. Ask a question, get a cited answer in seconds.</p>
               </div>
               <div className="impact-card">
                 <div className="impact-number">100%</div>
@@ -758,7 +735,7 @@ export default function LandingPage() {
               <div className="impact-card">
                 <div className="impact-number">1-click</div>
                 <div className="impact-unit">client briefing</div>
-                <p className="impact-desc">Walk into every meeting with a full financial snapshot — documents, emails, and action items unified.</p>
+                <p className="impact-desc">Walk into every meeting with a full financial snapshot. Documents, emails, and action items all in one place.</p>
               </div>
             </div>
           </div>
@@ -783,18 +760,18 @@ export default function LandingPage() {
             <div className="carousel-track-wrapper">
               <div className="carousel-track" style={{ transform: `translateX(-${currentSlide * (100 / SLIDES_VISIBLE)}%)` }}>
                 {[
-                  { quote: 'I used to spend 20 minutes finding a single data point across client files. Now I ask Callwen and get the answer with the exact page number in seconds.', initials: 'JK', name: 'James K.', title: 'Tax Partner, Regional Firm' },
-                  { quote: 'The consent tracking alone justified the switch. I was managing \u00a77216 compliance in spreadsheets \u2014 having it built into the platform with e-signatures is a game changer.', initials: 'ML', name: 'Michelle L.', title: 'Solo Practitioner' },
-                  { quote: 'I generate a client brief before every meeting now. One click gives me a full financial snapshot with source citations. My clients think I have a photographic memory.', initials: 'SC', name: 'Sarah C.', title: 'Advisory Director' },
-                  { quote: 'We onboarded the entire firm in under an hour. The email sync alone saves us five hours a week \u2014 every client conversation is automatically indexed and searchable.', initials: 'RP', name: 'Robert P.', title: 'Managing Partner' },
-                  { quote: 'I was skeptical about AI for tax work, but the source citations changed my mind. Every answer points to the exact document and page. I can verify anything in seconds.', initials: 'AN', name: 'Amanda N.', title: 'Senior Tax Manager' },
-                  { quote: 'The tax strategy module found three optimization opportunities I missed in manual review. It paid for itself in the first week with a single client.', initials: 'DW', name: 'David W.', title: 'CPA, Boutique Firm' },
+                  { quote: 'I used to waste 20 minutes hunting for one number across client files. Now I just ask and get the answer with the exact page cited. Took me about a day to wonder how I worked without it.', photo: 'https://i.pravatar.cc/96?img=12', name: 'James K.', title: 'Tax Partner, Regional Firm' },
+                  { quote: 'The consent tracking alone was worth it. I was managing 7216 compliance in spreadsheets, which was a nightmare. Having it built in with e-signatures saves me hours every month.', photo: 'https://i.pravatar.cc/96?img=32', name: 'Michelle L.', title: 'Solo Practitioner' },
+                  { quote: 'I pull a client brief before every meeting now. One click and I have a full snapshot with sources cited. My clients think I have a photographic memory.', photo: 'https://i.pravatar.cc/96?img=25', name: 'Sarah C.', title: 'Advisory Director' },
+                  { quote: 'We got the whole firm set up in under an hour. The email sync alone saves us five hours a week. Every client conversation gets indexed and you can search across all of them.', photo: 'https://i.pravatar.cc/96?img=51', name: 'Robert P.', title: 'Managing Partner' },
+                  { quote: 'I was skeptical about using AI for tax work. But every answer points to the exact document and page, so I can verify anything right away. That sold me.', photo: 'https://i.pravatar.cc/96?img=47', name: 'Amanda N.', title: 'Senior Tax Manager' },
+                  { quote: 'The tax strategy module caught three things I missed in my own review. Paid for itself in the first week with one client.', photo: 'https://i.pravatar.cc/96?img=53', name: 'David W.', title: 'CPA, Boutique Firm' },
                 ].map((t, i) => (
                   <div key={i} className="carousel-slide">
                     <div className="testimonial-card">
                       <p className="testimonial-quote">&ldquo;{t.quote}&rdquo;</p>
                       <div className="testimonial-author">
-                        <div className="testimonial-avatar">{t.initials}</div>
+                        <img src={t.photo} alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                         <div>
                           <div className="testimonial-name">{t.name}</div>
                           <div className="testimonial-title">{t.title}</div>
@@ -828,7 +805,7 @@ export default function LandingPage() {
         {/* Security & Compliance */}
         <div className="security-section" data-reveal>
           <p className="overline">Security &amp; Compliance</p>
-          <h2>Enterprise-grade protection,<br /><em>built for tax</em></h2>
+          <h2>Bank-level protection,<br /><em>built for tax</em></h2>
           <div className="security-grid">
             <div className="security-card">
               <div className="security-icon">
@@ -989,7 +966,7 @@ export default function LandingPage() {
             <div className="foot-grid">
               <div className="foot-brand">
                 <div className="foot-logo">Call<span>wen</span></div>
-                <p className="foot-tagline">AI-powered document intelligence for financial professionals — built by a CPA.</p>
+                <p className="foot-tagline">AI-powered document intelligence for financial professionals. Built by CPAs, for CPAs.</p>
                 <a href="mailto:support@callwen.com" className="foot-email">support@callwen.com</a>
               </div>
               <div className="foot-col">
@@ -1171,7 +1148,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .testimonial-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.04); padding: 2rem; border-radius: 12px; text-align: left; height: 100%; display: flex; flex-direction: column; }
 .testimonial-quote { font-size: 0.95rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; font-style: italic; flex: 1; }
 .testimonial-author { display: flex; align-items: center; gap: 12px; margin-top: 1.5rem; }
-.testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; background: rgba(201,148,74,0.15); border: 1px solid rgba(201,148,74,0.2); color: var(--accent-light); font-size: 0.75rem; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.testimonial-avatar { width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; }
 .testimonial-name { font-size: 0.85rem; font-weight: 500; color: var(--white); }
 .testimonial-title { font-size: 0.78rem; color: var(--white-faint); }
 
@@ -1186,19 +1163,6 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .security-icon svg { width: 20px; height: 20px; stroke: var(--teal); }
 .security-card h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 500; color: var(--white); margin-bottom: 0.6rem; }
 .security-card p { font-size: 0.82rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
-
-.comparison-strip { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); background: rgba(12,14,19,0.6); backdrop-filter: blur(8px); }
-.comparison-inner { max-width: 900px; margin: 0 auto; text-align: center; }
-.comparison-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.comparison-strip h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; line-height: 1.15; margin-bottom: 3.5rem; }
-.comp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
-.comp-cell { padding: 2rem 2.5rem; background: rgba(18,21,28,0.8); text-align: left; }
-.comp-cell.header { background: rgba(24,28,37,0.9); font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); padding: 1.2rem 2.5rem; }
-.comp-cell.header.callwen { color: var(--accent-light); }
-.comp-cell .feat { font-size: 0.9rem; color: var(--white-dim); margin-bottom: 0.3rem; }
-.comp-cell .val { font-size: 0.78rem; color: var(--white-faint); }
-.comp-cell.callwen .feat { color: var(--white); }
-.comp-cell.callwen .val { color: var(--accent); font-weight: 500; }
 
 /* Cost Comparison */
 .cost-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
@@ -1333,7 +1297,6 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .section-visual { width: 100%; max-width: 360px; }
   .section-visual-img { max-width: 480px; height: auto; }
   .section-visual-ext { width: 260px; max-width: 80%; height: auto; margin: 0 auto; }
-  .comp-grid { grid-template-columns: 1fr; }
   .impact-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
   .carousel-slide { min-width: 100%; }
