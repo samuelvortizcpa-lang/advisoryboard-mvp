@@ -1639,6 +1639,37 @@ export interface MemberAssignments {
   assigned_clients: AssignedClientInfo[];
 }
 
+export interface OrgAssignmentRecord {
+  id: string;
+  client_id: string;
+  client_name: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  org_id: string;
+  assigned_by: string;
+  assigned_at: string;
+  role: string;
+}
+
+export interface OrgMemberInfo {
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+export interface OrgClientInfo {
+  id: string;
+  name: string;
+}
+
+export interface OrgAssignmentsResponse {
+  assignments: OrgAssignmentRecord[];
+  members: OrgMemberInfo[];
+  clients: OrgClientInfo[];
+}
+
 export interface MyClientResponse {
   id: string;
   name: string;
@@ -1668,9 +1699,17 @@ export function createClientAssignmentsApi(getToken: GetToken, orgId?: string) {
       });
     },
 
-    /** All assignments across an org, grouped by member (admin only) */
+    /** All assignments across an org with members + clients lists (admin only) */
     listOrgAssignments(orgId: string) {
-      return f<MemberAssignments[]>(`/organizations/${orgId}/assignments`);
+      return f<OrgAssignmentsResponse>(`/organizations/${orgId}/assignments`);
+    },
+
+    /** Bulk-assign members to clients (skips duplicates) */
+    bulkAssign(orgId: string, assignments: { client_id: string; user_id: string }[]) {
+      return f<ClientAssignment[]>(`/organizations/${orgId}/assignments/bulk`, {
+        method: "POST",
+        body: JSON.stringify({ assignments }),
+      });
     },
 
     /** Clients assigned to the current user */

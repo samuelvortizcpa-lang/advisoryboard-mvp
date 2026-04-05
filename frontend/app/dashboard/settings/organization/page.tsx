@@ -10,7 +10,10 @@ import {
   OrgDetail,
   OrgMember,
   SeatInfo,
-  MemberAssignments,
+  OrgAssignmentsResponse,
+  OrgAssignmentRecord,
+  OrgMemberInfo,
+  OrgClientInfo,
 } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import Link from "next/link";
@@ -22,6 +25,12 @@ const ROLE_BADGE: Record<string, string> = {
   member: "bg-blue-100 text-blue-700",
   readonly: "bg-gray-100 text-gray-600",
 };
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return "\u2014";
@@ -71,15 +80,28 @@ export default function OrganizationSettingsPage() {
   // Remove confirmation
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
 
-  // Assignment overview state
-  const [assignmentData, setAssignmentData] = useState<MemberAssignments[]>([]);
+  // Assignment state
+  const [assignmentRecords, setAssignmentRecords] = useState<OrgAssignmentRecord[]>([]);
+  const [allOrgMembers, setAllOrgMembers] = useState<OrgMemberInfo[]>([]);
+  const [allOrgClients, setAllOrgClients] = useState<OrgClientInfo[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignDropdown, setAssignDropdown] = useState<string | null>(null);
+  const [unassignConfirm, setUnassignConfirm] = useState<{ clientId: string; userId: string } | null>(null);
+  const [assignActionLoading, setAssignActionLoading] = useState(false);
 
   // Seat management state
   const [seatInfo, setSeatInfo] = useState<SeatInfo | null>(null);
   const [showManageSeats, setShowManageSeats] = useState(false);
   const [newAddonSeats, setNewAddonSeats] = useState(0);
   const [updatingSeats, setUpdatingSeats] = useState(false);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    if (!assignDropdown && !roleDropdown) return;
+    const handleClick = () => { setAssignDropdown(null); setRoleDropdown(null); };
+    const timer = setTimeout(() => document.addEventListener("click", handleClick), 0);
+    return () => { clearTimeout(timer); document.removeEventListener("click", handleClick); };
+  }, [assignDropdown, roleDropdown]);
 
   const showFeedback = (message: string, type: "success" | "error") => {
     setFeedback({ message, type });
@@ -93,7 +115,9 @@ export default function OrganizationSettingsPage() {
     try {
       const assignApi = createClientAssignmentsApi(getToken, orgId);
       const result = await assignApi.listOrgAssignments(orgId);
-      setAssignmentData(result);
+      setAssignmentRecords(result.assignments);
+      setAllOrgMembers(result.members);
+      setAllOrgClients(result.clients);
     } catch {
       // non-fatal
     } finally {
@@ -691,56 +715,184 @@ export default function OrganizationSettingsPage() {
             <div className="border-b border-gray-100 px-5 py-4">
               <h2 className="text-sm font-semibold text-gray-900">Client Assignments</h2>
               <p className="mt-0.5 text-xs text-gray-500">
-                See which clients are assigned to each team member
+                Assign clients to team members for workload management
               </p>
             </div>
             {assignmentsLoading ? (
               <div className="p-10 text-center">
                 <p className="text-sm text-gray-400 animate-pulse">Loading assignments…</p>
               </div>
-            ) : assignmentData.length === 0 ? (
+            ) : allOrgMembers.length <= 1 ? (
               <div className="p-10 text-center">
                 <p className="text-sm text-gray-500">
-                  No client assignments yet. Assign team members to clients from each client&apos;s detail page.
+                  Add team members to start assigning clients.
                 </p>
+                <button
+                  onClick={() => { setShowInvite(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700"
+                >
+                  Add Member
+                </button>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 text-xs font-medium uppercase tracking-wide text-gray-400">
-                      <th className="px-5 py-3">Member</th>
+                      <th className="px-5 py-3 w-48">Team Member</th>
                       <th className="px-5 py-3">Assigned Clients</th>
+                      <th className="px-5 py-3 w-24">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {assignmentData.map((ma) => (
-                      <tr key={ma.user_id} className="border-b border-gray-50">
-                        <td className="px-5 py-3">
-                          <p className="font-medium text-gray-900">{ma.user_name || ma.user_id}</p>
-                          {ma.user_email && (
-                            <p className="text-xs text-gray-400">{ma.user_email}</p>
-                          )}
-                        </td>
-                        <td className="px-5 py-3">
-                          {ma.assigned_clients.length === 0 ? (
-                            <span className="text-xs text-gray-400">None</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1.5">
-                              {ma.assigned_clients.map((c) => (
-                                <Link
-                                  key={c.client_id}
-                                  href={`/dashboard/clients/${c.client_id}`}
-                                  className="inline-block rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-200 transition-colors"
-                                >
-                                  {c.client_name}
-                                </Link>
-                              ))}
+                    {allOrgMembers.map((mem) => {
+                      const memberAssignments = assignmentRecords.filter((a) => a.user_id === mem.user_id);
+                      const assignedClientIds = new Set(memberAssignments.map((a) => a.client_id));
+                      const unassignedClients = allOrgClients.filter((c) => !assignedClientIds.has(c.id));
+                      const initials = getInitials(mem.name);
+                      const showExpanded = memberAssignments.length > 3;
+
+                      return (
+                        <tr key={mem.user_id} className="border-b border-gray-50 align-top">
+                          {/* Member info */}
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-700">
+                                {initials}
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900 text-sm">{mem.name}</p>
+                                <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize mt-0.5 ${ROLE_BADGE[mem.role] ?? "bg-gray-100 text-gray-600"}`}>
+                                  {mem.role}
+                                </span>
+                              </div>
                             </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+
+                          {/* Assigned clients */}
+                          <td className="px-5 py-3">
+                            {memberAssignments.length === 0 ? (
+                              <p className="text-sm italic text-gray-400">No clients assigned</p>
+                            ) : (
+                              <div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(showExpanded ? memberAssignments.slice(0, 3) : memberAssignments).map((a) => (
+                                    <span
+                                      key={a.client_id}
+                                      className="group/pill inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700"
+                                    >
+                                      {a.client_name}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setUnassignConfirm({ clientId: a.client_id, userId: a.user_id });
+                                        }}
+                                        className="ml-0.5 hidden rounded-full p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600 group-hover/pill:inline-flex"
+                                        title={`Unassign ${a.client_name}`}
+                                      >
+                                        <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <path d="M3 3l6 6M9 3l-6 6" />
+                                        </svg>
+                                      </button>
+                                    </span>
+                                  ))}
+                                  {showExpanded && (
+                                    <span className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5 text-xs text-gray-500">
+                                      +{memberAssignments.length - 3} more
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-1 text-[11px] text-gray-400">
+                                  {memberAssignments.length} {memberAssignments.length === 1 ? "client" : "clients"}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Unassign confirmation */}
+                            {unassignConfirm && unassignConfirm.userId === mem.user_id && (
+                              <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2.5">
+                                <p className="text-xs text-red-800">
+                                  Unassign <span className="font-medium">{assignmentRecords.find((a) => a.client_id === unassignConfirm.clientId && a.user_id === unassignConfirm.userId)?.client_name}</span> from {mem.name}?
+                                </p>
+                                <div className="mt-2 flex gap-2">
+                                  <button
+                                    onClick={async () => {
+                                      if (!selectedOrgId || !unassignConfirm) return;
+                                      setAssignActionLoading(true);
+                                      try {
+                                        const assignApi = createClientAssignmentsApi(getToken, selectedOrgId);
+                                        await assignApi.remove(unassignConfirm.clientId, unassignConfirm.userId);
+                                        setUnassignConfirm(null);
+                                        showFeedback("Client unassigned", "success");
+                                        await loadAssignments(selectedOrgId);
+                                      } catch (err) {
+                                        showFeedback(err instanceof Error ? err.message : "Failed to unassign", "error");
+                                      } finally {
+                                        setAssignActionLoading(false);
+                                      }
+                                    }}
+                                    disabled={assignActionLoading}
+                                    className="rounded-md bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                  >
+                                    {assignActionLoading ? "Removing…" : "Confirm"}
+                                  </button>
+                                  <button
+                                    onClick={() => setUnassignConfirm(null)}
+                                    className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Assign action */}
+                          <td className="px-5 py-3">
+                            <div className="relative">
+                              <button
+                                onClick={() => setAssignDropdown(assignDropdown === mem.user_id ? null : mem.user_id)}
+                                className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              >
+                                Assign
+                              </button>
+                              {assignDropdown === mem.user_id && (
+                                <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-lg border border-gray-200 bg-white py-1 shadow-lg max-h-60 overflow-y-auto">
+                                  {unassignedClients.length === 0 ? (
+                                    <p className="px-3 py-2 text-xs text-gray-400">All clients assigned</p>
+                                  ) : (
+                                    unassignedClients.map((c) => (
+                                      <button
+                                        key={c.id}
+                                        onClick={async () => {
+                                          if (!selectedOrgId) return;
+                                          setAssignActionLoading(true);
+                                          try {
+                                            const assignApi = createClientAssignmentsApi(getToken, selectedOrgId);
+                                            await assignApi.assign(c.id, mem.user_id);
+                                            setAssignDropdown(null);
+                                            showFeedback(`${c.name} assigned to ${mem.name}`, "success");
+                                            await loadAssignments(selectedOrgId);
+                                          } catch (err) {
+                                            showFeedback(err instanceof Error ? err.message : "Failed to assign", "error");
+                                          } finally {
+                                            setAssignActionLoading(false);
+                                          }
+                                        }}
+                                        disabled={assignActionLoading}
+                                        className="flex w-full items-center px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                      >
+                                        {c.name}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
