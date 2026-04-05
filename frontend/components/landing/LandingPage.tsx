@@ -652,27 +652,12 @@ export default function LandingPage() {
               <p>The Callwen browser extension lives in your sidebar. Select text from an email, screenshot a chart, right-click a PDF link — two clicks and it&apos;s in your client&apos;s file. Auto-matching knows which client you&apos;re working on. Quick Query lets you ask questions without leaving the page.</p>
               <span className="tag">Chrome Extension · Auto-match · Quick Query</span>
             </div>
-            <div className="section-visual" aria-hidden="true">
-              <div className="vis-ext">
-                <div className="ext-panel">
-                  <div className="ext-header">
-                    <div className="ext-logo">C</div>
-                    <span className="ext-title">Callwen</span>
-                  </div>
-                  <div className="ext-client">
-                    <div className="ext-dot" />
-                    <span>Apex Corp</span>
-                  </div>
-                  <div className="ext-tabs">
-                    <span>Text</span>
-                    <span>Page</span>
-                    <span className="active">File</span>
-                    <span>Shot</span>
-                  </div>
-                  <div className="ext-preview">f1040s1a.pdf</div>
-                  <div className="ext-btn">Capture</div>
-                </div>
-              </div>
+            <div className="section-visual section-visual-img section-visual-ext" aria-hidden="true">
+              <img
+                src="/images/feature-05-extension.png"
+                alt="Callwen browser extension showing document capture with client auto-matching"
+                style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '12px' }}
+              />
             </div>
           </div>
         </div>
@@ -1082,19 +1067,8 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .section-visual-img { width: 480px; height: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); }
 .section-visual-img::before { display: none; }
 .section-visual-consent { height: auto; max-height: 240px; display: flex; align-items: center; justify-content: center; }
+.section-visual-ext { width: 280px; height: 420px; }
 .vis-team { display: flex; align-items: center; justify-content: center; height: 100%; gap: 12px; }
-.vis-ext { display: flex; align-items: center; justify-content: center; height: 100%; }
-.ext-panel { width: 160px; background: var(--bg-card); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; font-size: 0.65rem; }
-.ext-header { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
-.ext-logo { width: 20px; height: 20px; border-radius: 4px; background: var(--accent); color: var(--bg-deep); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.6rem; }
-.ext-title { font-weight: 600; color: var(--white); font-size: 0.7rem; }
-.ext-client { display: flex; align-items: center; gap: 5px; color: var(--white-dim); margin-bottom: 8px; font-size: 0.62rem; }
-.ext-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
-.ext-tabs { display: flex; gap: 2px; margin-bottom: 8px; }
-.ext-tabs span { padding: 3px 6px; border-radius: 3px; font-size: 0.55rem; color: var(--white-dim); background: rgba(255,255,255,0.03); }
-.ext-tabs span.active { background: var(--accent-glow); color: var(--accent); font-weight: 600; }
-.ext-preview { padding: 6px 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 4px; color: var(--white-dim); font-size: 0.58rem; margin-bottom: 8px; }
-.ext-btn { text-align: center; padding: 5px; border-radius: 5px; background: var(--accent); color: var(--bg-deep); font-weight: 600; font-size: 0.6rem; }
 .team-avatar { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 500; border: 2px solid rgba(18,21,28,0.8); }
 .team-avatar:nth-child(1) { background: rgba(201,148,74,0.2); color: var(--accent-light); margin-right: -8px; z-index: 3; }
 .team-avatar:nth-child(2) { background: rgba(91,184,175,0.2); color: var(--teal); margin-right: -8px; z-index: 2; }
@@ -1243,6 +1217,7 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .section .number { font-size: 4rem; align-self: flex-start; }
   .section-visual { width: 100%; max-width: 360px; }
   .section-visual-img { max-width: 480px; height: auto; }
+  .section-visual-ext { width: 260px; max-width: 80%; height: auto; margin: 0 auto; }
   .comp-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
   .carousel-slide { min-width: 100%; }
