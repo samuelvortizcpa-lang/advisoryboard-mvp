@@ -496,26 +496,49 @@ export default function LandingPage() {
 
         {/* Hero */}
         <section className="splash">
-          <video
-            className="hero-video"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            aria-hidden="true"
-          >
-            <source src="/hero-video.mp4" type="video/mp4" />
-          </video>
-          <div className="hero-video-overlay" />
-          <div className="hero-badge"><span className="pulse" /> AI-Powered Document Intelligence</div>
-          <h1>Your documents,<br /><em>finally</em> answering<br />your questions.</h1>
-          <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get source-cited, confidence-scored answers in seconds.</p>
-          <div className="hero-buttons">
-            <Link href="/sign-in" className="btn btn-primary">
-              Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
-            </Link>
-            <a href="#features" className="btn btn-ghost">See how it works</a>
+          <div className="hero-split">
+            <div className="hero-left">
+              <div className="hero-badge"><span className="pulse" /> AI-Powered Document Intelligence</div>
+              <h1>Your documents,<br /><em>finally</em> answering<br />your questions.</h1>
+              <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get source-cited, confidence-scored answers in seconds.</p>
+              <div className="hero-buttons">
+                <Link href="/sign-in" className="btn btn-primary">
+                  Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+                </Link>
+                <a href="#features" className="btn btn-ghost">See how it works</a>
+              </div>
+            </div>
+            <div className="hero-right">
+              <div className="hero-player">
+                <video
+                  className="hero-video"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="auto"
+                  ref={(el) => {
+                    if (el) el.dataset.ref = 'hero-video';
+                  }}
+                  onClick={(e) => {
+                    const v = e.currentTarget;
+                    if (v.muted) { v.muted = false; } else { v.muted = true; }
+                  }}
+                >
+                  <source src="/hero-video.mp4" type="video/mp4" />
+                </video>
+                <button
+                  className="hero-play-btn"
+                  aria-label="Toggle sound"
+                  onClick={(e) => {
+                    const v = (e.currentTarget.parentElement as HTMLElement).querySelector('video');
+                    if (v) { v.muted = !v.muted; }
+                  }}
+                >
+                  <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="23" stroke="currentColor" strokeWidth="1.5" opacity="0.6"/><path d="M19 16l12 8-12 8z" fill="currentColor"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
           <div className="rule" />
           <div className="scroll-hint">Explore</div>
@@ -1007,17 +1030,23 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .mobile-menu a:hover { color: var(--white); }
 .mobile-menu-cta { background: var(--accent) !important; color: var(--bg-deep) !important; font-weight: 500 !important; text-align: center; margin: 1rem; border-radius: 6px; border-bottom: none !important; }
 
-.splash { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; padding: 0 2rem; overflow: hidden; }
-.hero-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
-.hero-video-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(12,14,19,0.45); z-index: 1; }
-.splash .hero-badge, .splash h1, .splash .subtitle, .splash .hero-buttons, .splash .rule, .splash .scroll-hint { position: relative; z-index: 2; }
+.splash { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; padding: 0 2rem; }
+.hero-split { display: flex; align-items: center; gap: 4rem; max-width: 1200px; width: 100%; }
+.hero-left { flex: 1; text-align: left; }
+.hero-right { flex: 1; display: flex; justify-content: center; opacity: 0; animation: fadeUp 0.8s 0.9s forwards; }
+.hero-player { position: relative; width: 100%; border-radius: 14px; overflow: hidden; border: 1px solid rgba(201,148,74,0.15); box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 40px rgba(201,148,74,0.06); transform: perspective(800px) rotateY(-2deg); transition: transform 0.4s ease; cursor: pointer; }
+.hero-player:hover { transform: perspective(800px) rotateY(0deg) scale(1.01); }
+.hero-video { display: block; width: 100%; height: auto; }
+.hero-play-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(12,14,19,0.5); border: none; border-radius: 50%; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; color: rgba(240,237,230,0.85); cursor: pointer; transition: all 0.3s ease; backdrop-filter: blur(8px); }
+.hero-play-btn:hover { background: rgba(201,148,74,0.3); color: var(--white); transform: translate(-50%, -50%) scale(1.1); }
+.hero-play-btn svg { width: 48px; height: 48px; }
 .hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 18px; border-radius: 99px; font-size: 0.78rem; font-weight: 500; background: var(--accent-glow); color: var(--accent-light); border: 1px solid rgba(201,148,74,0.18); margin-bottom: 2.5rem; opacity: 0; animation: fadeUp 0.8s 0.3s forwards; backdrop-filter: blur(8px); }
 .hero-badge .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulseAnim 2s ease infinite; }
 @keyframes pulseAnim { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.6)} }
-.splash h1 { font-family: var(--serif); font-size: clamp(3rem,8vw,6.5rem); font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 0.8s 0.45s forwards; }
+.splash h1 { font-family: var(--serif); font-size: clamp(2.5rem,5vw,4.5rem); font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 0.8s 0.45s forwards; }
 .splash h1 em { font-style: italic; color: var(--accent-light); }
-.splash .subtitle { font-size: clamp(1rem,2vw,1.2rem); font-weight: 300; color: var(--white-dim); max-width: 520px; line-height: 1.7; margin: 0 auto; opacity: 0; animation: fadeUp 0.8s 0.6s forwards; }
-.hero-buttons { display: flex; gap: 12px; justify-content: center; margin-top: 2.5rem; opacity: 0; animation: fadeUp 0.8s 0.75s forwards; }
+.splash .subtitle { font-size: clamp(1rem,2vw,1.2rem); font-weight: 300; color: var(--white-dim); max-width: 520px; line-height: 1.7; margin: 0; opacity: 0; animation: fadeUp 0.8s 0.6s forwards; }
+.hero-buttons { display: flex; gap: 12px; justify-content: flex-start; margin-top: 2.5rem; opacity: 0; animation: fadeUp 0.8s 0.75s forwards; }
 .btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 8px; font-family: var(--sans); font-size: 0.9rem; font-weight: 500; border: none; cursor: pointer; text-decoration: none; transition: all 0.25s ease; }
 .btn-primary { background: var(--accent); color: var(--bg-deep); }
 .btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); box-shadow: 0 8px 40px rgba(201,148,74,0.25); }
@@ -1254,7 +1283,11 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
 }
 @media (max-width:767px) {
   #three-canvas { display: none; }
-  .hero-video, .hero-video-overlay { display: none; }
+  .hero-split { flex-direction: column; gap: 2.5rem; text-align: center; }
+  .hero-left { text-align: center; }
+  .hero-buttons { justify-content: center; }
+  .hero-player { transform: none; max-width: 480px; }
+  .hero-player:hover { transform: none; }
 }
 @media (max-width:600px) {
   .price-grid { grid-template-columns: 1fr; }
