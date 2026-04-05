@@ -57,6 +57,33 @@ class MemberAssignments(BaseModel):
     assigned_clients: List[AssignedClientInfo]
 
 
+class OrgMemberInfo(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    role: str
+
+
+class OrgClientInfo(BaseModel):
+    id: str
+    name: str
+
+
+class OrgAssignmentsResponse(BaseModel):
+    assignments: List[AssignmentResponse]
+    members: List[OrgMemberInfo]
+    clients: List[OrgClientInfo]
+
+
+class BulkAssignmentItem(BaseModel):
+    client_id: str
+    user_id: str
+
+
+class BulkAssignmentRequest(BaseModel):
+    assignments: List[BulkAssignmentItem]
+
+
 class MyClientResponse(BaseModel):
     id: str
     name: str
@@ -236,14 +263,14 @@ async def delete_assignment(
 
 @router.get(
     "/organizations/{org_id}/assignments",
-    response_model=List[MemberAssignments],
-    summary="All client assignments across the org, grouped by member",
+    response_model=OrgAssignmentsResponse,
+    summary="All client assignments across the org with member and client lists",
 )
 async def list_org_assignments(
     org_id: UUID,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
-) -> List[MemberAssignments]:
+) -> OrgAssignmentsResponse:
     if auth.org_id != org_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -251,37 +278,180 @@ async def list_org_assignments(
         )
     require_admin(auth)
 
-    rows = (
+    # 1. All assignments with client names
+    assignment_rows = (
         db.query(ClientAssignment, Client.name)
         .join(Client, ClientAssignment.client_id == Client.id)
         .filter(ClientAssignment.org_id == org_id)
-        .order_by(ClientAssignment.user_id, Client.name)
+        .order_by(ClientAssignment.assigned_at)
         .all()
     )
 
-    # Group by member
-    grouped: dict[str, list[AssignedClientInfo]] = {}
-    for assignment, client_name in rows:
-        grouped.setdefault(assignment.user_id, []).append(
-            AssignedClientInfo(
+    # Build user_ids set for batch lookup
+    user_ids = {a.user_id for a, _ in assignment_rows}
+
+    # Batch-load user info
+    user_map: dict[str, tuple[str, str]] = {}
+    if user_ids:
+        users = db.query(User).filter(User.clerk_id.in_(user_ids)).all()
+        for u in users:
+            parts = [u.first_name, u.last_name]
+            name = " ".join(p for p in parts if p) or u.clerk_id
+            user_map[u.clerk_id] = (name, u.email or "")
+
+    assignments = []
+    for assignment, client_name in assignment_rows:
+        uname, uemail = user_map.get(assignment.user_id, (assignment.user_id, ""))
+        assignments.append(
+            AssignmentResponse(
+                id=str(assignment.id),
                 client_id=str(assignment.client_id),
                 client_name=client_name or "",
+                user_id=assignment.user_id,
+                user_name=uname,
+                user_email=uemail,
+                org_id=str(assignment.org_id),
+                assigned_by=assignment.assigned_by,
+                assigned_at=assignment.assigned_at.isoformat(),
+                role=assignment.role,
             )
         )
 
-    result: list[MemberAssignments] = []
-    for uid, clients in grouped.items():
-        name, email = _user_info(db, uid)
-        result.append(
-            MemberAssignments(
-                user_id=uid,
-                user_name=name,
-                user_email=email,
-                assigned_clients=clients,
+    # 2. All active org members
+    member_rows = (
+        db.query(OrganizationMember, User)
+        .outerjoin(User, User.clerk_id == OrganizationMember.user_id)
+        .filter(
+            OrganizationMember.org_id == org_id,
+            OrganizationMember.is_active == True,  # noqa: E712
+        )
+        .order_by(OrganizationMember.joined_at)
+        .all()
+    )
+    members = []
+    for mem, usr in member_rows:
+        name = mem.user_id
+        email = ""
+        if usr:
+            parts = [usr.first_name, usr.last_name]
+            name = " ".join(p for p in parts if p) or mem.user_id
+            email = usr.email or ""
+        members.append(
+            OrgMemberInfo(
+                user_id=mem.user_id,
+                name=name,
+                email=email,
+                role=mem.role,
             )
         )
 
-    return result
+    # 3. All org clients
+    client_rows = (
+        db.query(Client.id, Client.name)
+        .filter(Client.org_id == org_id)
+        .order_by(Client.name)
+        .all()
+    )
+    clients = [
+        OrgClientInfo(id=str(cid), name=cname or "")
+        for cid, cname in client_rows
+    ]
+
+    return OrgAssignmentsResponse(
+        assignments=assignments,
+        members=members,
+        clients=clients,
+    )
+
+
+@router.post(
+    "/organizations/{org_id}/assignments/bulk",
+    response_model=List[AssignmentResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Bulk-assign members to clients (skips duplicates)",
+)
+async def bulk_create_assignments(
+    org_id: UUID,
+    body: BulkAssignmentRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> List[AssignmentResponse]:
+    if auth.org_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+    require_admin(auth)
+
+    if not body.assignments:
+        return []
+
+    # Collect unique client_ids and user_ids for validation
+    client_ids = {UUID(a.client_id) for a in body.assignments}
+    user_ids = {a.user_id for a in body.assignments}
+
+    # Validate all clients belong to this org
+    valid_clients = (
+        db.query(Client.id, Client.name)
+        .filter(Client.id.in_(client_ids), Client.org_id == org_id)
+        .all()
+    )
+    valid_client_map = {cid: cname for cid, cname in valid_clients}
+    invalid_clients = client_ids - set(valid_client_map.keys())
+    if invalid_clients:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Clients not found in org: {[str(c) for c in invalid_clients]}",
+        )
+
+    # Validate all users are active org members
+    valid_members = (
+        db.query(OrganizationMember.user_id)
+        .filter(
+            OrganizationMember.org_id == org_id,
+            OrganizationMember.user_id.in_(user_ids),
+            OrganizationMember.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
+    valid_user_ids = {r[0] for r in valid_members}
+    invalid_users = user_ids - valid_user_ids
+    if invalid_users:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Users not active org members: {list(invalid_users)}",
+        )
+
+    # Find existing assignments to skip duplicates
+    existing = (
+        db.query(ClientAssignment.client_id, ClientAssignment.user_id)
+        .filter(ClientAssignment.org_id == org_id)
+        .all()
+    )
+    existing_set = {(row.client_id, row.user_id) for row in existing}
+
+    created = []
+    for item in body.assignments:
+        cid = UUID(item.client_id)
+        if (cid, item.user_id) in existing_set:
+            continue  # skip duplicate
+
+        assignment = ClientAssignment(
+            client_id=cid,
+            user_id=item.user_id,
+            org_id=org_id,
+            assigned_by=auth.user_id,
+        )
+        db.add(assignment)
+        created.append((assignment, valid_client_map.get(cid, "")))
+        existing_set.add((cid, item.user_id))  # prevent duplicates within batch
+
+    if created:
+        db.commit()
+        for assignment, _ in created:
+            db.refresh(assignment)
+
+    return [_assignment_to_response(a, db, cname) for a, cname in created]
 
 
 @router.get(

@@ -81,13 +81,24 @@ class ClientAccessMember(BaseModel):
         from_attributes = True
 
 
+class AssignedMember(BaseModel):
+    user_id: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    role: str = "assigned"
+
+
+class ClientWithAssignments(ClientResponse):
+    assigned_members: list[AssignedMember] = []
+
+
 class ClientDetailResponse(ClientResponse):
     """Extended response for the single-client detail endpoint."""
     members: list[ClientAccessMember] = []
 
 
 class ClientListResponse(BaseModel):
-    items: list[ClientResponse]
+    items: list[ClientWithAssignments]
     total: int
     skip: int
     limit: int

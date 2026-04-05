@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import Optional
 from uuid import UUID
 
@@ -5,12 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.client_assignment import ClientAssignment
+from app.models.user import User
 from app.schemas.client import (
+    AssignedMember,
     ClientCreate,
     ClientDetailResponse,
     ClientListResponse,
     ClientResponse,
     ClientUpdate,
+    ClientWithAssignments,
 )
 from app.services import client_service
 from app.services.audit_service import log_action
@@ -18,6 +23,53 @@ from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.subscription_service import check_client_limit
 
 router = APIRouter()
+
+
+def _enrich_clients_with_assignments(
+    clients: list, org_id: UUID, db: Session
+) -> list[ClientWithAssignments]:
+    """Batch-fetch assignments for all clients and attach assigned_members."""
+    if not clients:
+        return []
+
+    client_ids = [c.id for c in clients]
+
+    # Single query: all assignments for these clients in this org
+    rows = (
+        db.query(ClientAssignment, User)
+        .outerjoin(User, User.clerk_id == ClientAssignment.user_id)
+        .filter(
+            ClientAssignment.org_id == org_id,
+            ClientAssignment.client_id.in_(client_ids),
+        )
+        .all()
+    )
+
+    # Group by client_id
+    by_client: dict[UUID, list[AssignedMember]] = defaultdict(list)
+    for assignment, user in rows:
+        name = None
+        email = None
+        if user:
+            parts = [user.first_name, user.last_name]
+            name = " ".join(p for p in parts if p) or None
+            email = user.email
+        by_client[assignment.client_id].append(
+            AssignedMember(
+                user_id=assignment.user_id,
+                user_name=name,
+                user_email=email,
+                role=assignment.role,
+            )
+        )
+
+    # Build enriched response objects
+    result = []
+    for c in clients:
+        data = ClientResponse.model_validate(c).model_dump()
+        data["assigned_members"] = by_client.get(c.id, [])
+        result.append(ClientWithAssignments(**data))
+    return result
 
 
 @router.get("/clients", response_model=ClientListResponse)
@@ -37,7 +89,8 @@ async def list_clients(
         limit=limit,
         assigned_to_me=assigned_to_me or False,
     )
-    return ClientListResponse(items=clients, total=total, skip=skip, limit=limit)
+    enriched = _enrich_clients_with_assignments(clients, auth.org_id, db)
+    return ClientListResponse(items=enriched, total=total, skip=skip, limit=limit)
 
 
 @router.post("/clients", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
