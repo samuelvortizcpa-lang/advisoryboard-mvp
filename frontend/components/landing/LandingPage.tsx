@@ -588,18 +588,12 @@ export default function LandingPage() {
               <p>Tax returns, engagement letters, meeting recordings, emails — drop them in and they&apos;re instantly indexed. Callwen reads PDFs, audio, video, and spreadsheets so you don&apos;t have to dig through folders ever again.</p>
               <span className="tag">Upload · Index · Organize</span>
             </div>
-            <div className="section-visual" aria-hidden="true">
-              <div className="vis-docs">
-                <div className="doc-stack">
-                  <div className="doc-page"><div className="lines"><span /><span /><span /><span /><span /></div></div>
-                  <div className="doc-page"><div className="lines"><span /><span /><span /><span /><span /></div></div>
-                  <div className="doc-page"><div className="lines"><span /><span /><span /><span /><span /></div></div>
-                </div>
-                <div className="doc-arrow">{'\u2192'}</div>
-                <div className="doc-result">
-                  <svg viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </div>
-              </div>
+            <div className="section-visual section-visual-img" aria-hidden="true">
+              <img
+                src="/images/feature-01-documents.png"
+                alt="Callwen client management interface showing organized client list with document counts and engagement types"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top left', borderRadius: '12px' }}
+              />
             </div>
           </div>
 
@@ -610,14 +604,12 @@ export default function LandingPage() {
               <p>Not generic summaries. Callwen gives you source-cited responses with confidence scores and page references. When you tell a client &quot;the answer is on page 4,&quot; you know it&apos;s on page 4.</p>
               <span className="tag">AI · Source citations · Confidence</span>
             </div>
-            <div className="section-visual" aria-hidden="true">
-              <div className="vis-chat">
-                <div className="chat-bubble user">What was the Johnsons&apos; AGI for 2024?</div>
-                <div className="chat-bubble ai">
-                  Based on Form 1040, line 11, the AGI was <strong>$187,432</strong> — up 12% from 2023.
-                  <div className="chat-conf">• 94% confidence · Page 1</div>
-                </div>
-              </div>
+            <div className="section-visual section-visual-img" aria-hidden="true">
+              <img
+                src="/images/feature-02-ai-chat.png"
+                alt="AI-powered Q&A showing a tax compensation breakdown with source citations"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', borderRadius: '12px' }}
+              />
             </div>
           </div>
 
@@ -628,16 +620,12 @@ export default function LandingPage() {
               <p>Tax documents are auto-detected. Consent forms with mandatory IRS language are generated in one click. E-signatures, expiration tracking, and smart alerts.</p>
               <span className="tag">IRC {'\u00a7'}7216 · Auto-detection · E-sign</span>
             </div>
-            <div className="section-visual" aria-hidden="true">
-              <div className="vis-shield">
-                <div className="shield-icon">
-                  <svg viewBox="0 0 80 90">
-                    <path d="M40 5 L75 20 L75 50 C75 70 40 85 40 85 C40 85 5 70 5 50 L5 20 Z"/>
-                    <path d="M28 45 L36 53 L54 35" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <div className="shield-badge">{'\u00a7'}7216 Compliant</div>
-                </div>
-              </div>
+            <div className="section-visual section-visual-img section-visual-consent" aria-hidden="true">
+              <img
+                src="/images/feature-03-consent.png"
+                alt="IRC §7216 consent tracking showing obtained status with expiration date"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', borderRadius: '12px' }}
+              />
             </div>
           </div>
 
@@ -1091,31 +1079,9 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 
 .section-visual { flex-shrink: 0; width: 340px; height: 230px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.04); background: rgba(18,21,28,0.7); backdrop-filter: blur(12px); position: relative; overflow: hidden; }
 .section-visual::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(201,148,74,0.04) 0%, transparent 60%); }
-.vis-docs { display: flex; align-items: center; justify-content: center; height: 100%; padding: 30px; }
-.doc-stack { position: relative; width: 120px; height: 150px; }
-.doc-page { position: absolute; width: 100px; height: 130px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06); }
-.doc-page:nth-child(1) { background: var(--bg-card); top: 0; left: 0; transform: rotate(-6deg); }
-.doc-page:nth-child(2) { background: var(--bg-surface); top: 4px; left: 8px; transform: rotate(-2deg); }
-.doc-page:nth-child(3) { background: rgba(30,34,46,0.9); top: 8px; left: 16px; transform: rotate(2deg); border-color: rgba(201,148,74,0.2); }
-.doc-page .lines { padding: 12px; }
-.doc-page .lines span { display: block; height: 3px; border-radius: 1px; margin-bottom: 6px; opacity: 0.15; }
-.doc-page .lines span:nth-child(1) { width: 60%; background: var(--accent); opacity: 0.3; }
-.doc-page .lines span:nth-child(2) { width: 80%; background: var(--white); }
-.doc-page .lines span:nth-child(3) { width: 45%; background: var(--white); }
-.doc-page .lines span:nth-child(4) { width: 70%; background: var(--white); }
-.doc-page .lines span:nth-child(5) { width: 55%; background: var(--white); }
-.doc-arrow { position: absolute; right: -40px; top: 50%; transform: translateY(-50%); color: var(--accent); opacity: 0.5; font-size: 1.2rem; }
-.doc-result { position: absolute; right: -90px; top: 50%; transform: translateY(-50%); width: 70px; height: 70px; border-radius: 50%; background: var(--accent-glow); border: 1px solid rgba(201,148,74,0.2); display: flex; align-items: center; justify-content: center; }
-.doc-result svg { width: 24px; height: 24px; stroke: var(--accent); fill: none; stroke-width: 1.5; }
-.vis-chat { display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 24px; gap: 10px; }
-.chat-bubble { padding: 10px 14px; border-radius: 10px; font-size: 0.72rem; line-height: 1.5; max-width: 85%; }
-.chat-bubble.user { align-self: flex-end; background: var(--accent); color: var(--bg-deep); border-bottom-right-radius: 3px; font-weight: 500; }
-.chat-bubble.ai { align-self: flex-start; background: var(--bg-card); color: var(--white); border-bottom-left-radius: 3px; }
-.chat-conf { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 0.62rem; padding: 2px 6px; border-radius: 3px; background: var(--teal-dim); color: var(--teal); }
-.vis-shield { display: flex; align-items: center; justify-content: center; height: 100%; }
-.shield-icon { width: 80px; height: 90px; position: relative; }
-.shield-icon svg { width: 100%; height: 100%; stroke: var(--teal); fill: none; stroke-width: 1; opacity: 0.6; }
-.shield-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--teal); white-space: nowrap; opacity: 0.7; }
+.section-visual-img { width: 480px; height: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); }
+.section-visual-img::before { display: none; }
+.section-visual-consent { height: auto; max-height: 240px; display: flex; align-items: center; justify-content: center; }
 .vis-team { display: flex; align-items: center; justify-content: center; height: 100%; gap: 12px; }
 .vis-ext { display: flex; align-items: center; justify-content: center; height: 100%; }
 .ext-panel { width: 160px; background: var(--bg-card); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; font-size: 0.65rem; }
@@ -1276,6 +1242,7 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .section { flex-direction: column !important; text-align: left !important; gap: 2rem; min-height: auto; padding: 5rem 1.5rem; }
   .section .number { font-size: 4rem; align-self: flex-start; }
   .section-visual { width: 100%; max-width: 360px; }
+  .section-visual-img { max-width: 480px; height: auto; }
   .comp-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
   .carousel-slide { min-width: 100%; }
