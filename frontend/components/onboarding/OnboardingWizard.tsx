@@ -7,6 +7,7 @@ import { createOnboardingApi } from "@/lib/api";
 
 import AddClientStep from "./AddClientStep";
 import AskAIStep from "./AskAIStep";
+import FinishStep from "./FinishStep";
 import UploadDocStep from "./UploadDocStep";
 import WelcomeStep from "./WelcomeStep";
 
@@ -34,6 +35,15 @@ export default function OnboardingWizard({ onComplete }: Props) {
       await createOnboardingApi(getToken).complete();
     } catch {
       // non-fatal — still dismiss the wizard
+    }
+    onComplete();
+  }
+
+  async function handleFinish() {
+    try {
+      await createOnboardingApi(getToken).complete();
+    } catch {
+      // non-fatal
     }
     onComplete();
   }
@@ -74,26 +84,12 @@ export default function OnboardingWizard({ onComplete }: Props) {
           />
         );
       case 4:
-        // FinishStep — placeholder for next PR
         return (
-          <div className="text-center">
-            <p className="text-2xl font-semibold text-gray-900">
-              You&apos;re all set!
-            </p>
-            <button
-              onClick={async () => {
-                try {
-                  await createOnboardingApi(getToken).complete();
-                } catch {
-                  // non-fatal
-                }
-                onComplete();
-              }}
-              className="mt-6 rounded-lg bg-gray-900 px-8 py-3 text-sm font-medium text-white transition hover:bg-gray-800"
-            >
-              Go to dashboard
-            </button>
-          </div>
+          <FinishStep
+            onComplete={handleFinish}
+            clientId={createdClientId}
+            clientName={createdClientName}
+          />
         );
       default:
         return null;
@@ -113,7 +109,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
         </span>
 
         {/* Step indicator */}
-        <div className="hidden sm:flex items-center gap-0">
+        <div className="hidden items-center gap-0 sm:flex">
           {STEP_LABELS.map((label, i) => (
             <div key={label} className="flex items-center">
               {i > 0 && (
@@ -124,16 +120,12 @@ export default function OnboardingWizard({ onComplete }: Props) {
                 />
               )}
               <div className="flex flex-col items-center gap-1">
-                <div
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium transition-colors ${
-                    i < currentStep
-                      ? "bg-green-500 text-white"
-                      : i === currentStep
-                        ? "bg-gray-900 text-white"
-                        : "border-2 border-gray-300 text-gray-400"
-                  }`}
-                >
-                  {i < currentStep ? (
+                {i < currentStep ? (
+                  <button
+                    onClick={() => setCurrentStep(i)}
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-white transition-colors hover:bg-green-600"
+                    title={`Go back to ${label}`}
+                  >
                     <svg
                       className="h-3 w-3"
                       viewBox="0 0 12 12"
@@ -143,10 +135,18 @@ export default function OnboardingWizard({ onComplete }: Props) {
                     >
                       <path d="M2 6l3 3 5-5" />
                     </svg>
-                  ) : (
-                    i + 1
-                  )}
-                </div>
+                  </button>
+                ) : (
+                  <div
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium transition-colors ${
+                      i === currentStep
+                        ? "bg-gray-900 text-white"
+                        : "border-2 border-gray-300 text-gray-400"
+                    }`}
+                  >
+                    {i + 1}
+                  </div>
+                )}
                 <span
                   className={`text-[10px] ${
                     i <= currentStep
@@ -167,7 +167,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
           disabled={skipping}
           className="text-sm text-gray-400 transition-colors hover:text-gray-600 disabled:opacity-50"
         >
-          {skipping ? "Skipping…" : "Skip setup"}
+          {skipping ? "Skipping\u2026" : "Skip setup"}
         </button>
       </div>
 

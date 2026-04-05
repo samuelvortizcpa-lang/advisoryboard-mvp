@@ -8,6 +8,7 @@ import { useOrg } from "@/contexts/OrgContext";
 import { type TimeRange, RANGE_DAYS, DashboardSkeleton } from "@/components/dashboard/shared";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
 import MemberDashboard from "@/components/dashboard/MemberDashboard";
+import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 
 export default function DashboardPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -15,6 +16,7 @@ export default function DashboardPage() {
   const { activeOrg, isAdmin, isPersonalOrg, isLoading: orgLoading } = useOrg();
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
@@ -25,6 +27,9 @@ export default function DashboardPage() {
         const api = createDashboardApi(getToken, activeOrg?.id);
         const result = await api.summary(RANGE_DAYS[range]);
         setData(result);
+        if (result.has_completed_onboarding === false) {
+          setShowOnboarding(true);
+        }
         return true;
       } catch (err) {
         console.error("Dashboard fetch failed:", err);
@@ -60,6 +65,14 @@ export default function DashboardPage() {
 
   if (!data) {
     return <DashboardSkeleton />;
+  }
+
+  if (showOnboarding) {
+    return (
+      <OnboardingWizard
+        onComplete={() => setShowOnboarding(false)}
+      />
+    );
   }
 
   // Solo practitioners (personal org) and org admins see admin dashboard;
