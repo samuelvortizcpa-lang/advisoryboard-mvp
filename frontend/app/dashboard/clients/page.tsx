@@ -43,7 +43,7 @@ export default function ClientsPage() {
   // Org context
   const { activeOrg } = useOrg();
   const firmOrg = activeOrg?.org_type === "firm" ? activeOrg : null;
-  const hasOrg = !!activeOrg && activeOrg.org_type !== "personal";
+  const hasOrg = !!activeOrg;
 
   // Access state
   const [accessMap, setAccessMap] = useState<Record<string, ClientAccessSummary>>({});
