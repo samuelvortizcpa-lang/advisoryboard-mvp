@@ -164,6 +164,7 @@ class DashboardSummary(BaseModel):
     recent_clients: List[RecentClient]
     team_members: Optional[List[TeamMember]] = None
     plan: PlanInfo
+    has_completed_onboarding: bool = True
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -528,6 +529,7 @@ def _build_dashboard_summary(
         recent_clients=recent_clients,
         team_members=team_members,
         plan=plan,
+        has_completed_onboarding=sub.has_completed_onboarding,
     )
 
 

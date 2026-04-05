@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -82,6 +82,11 @@ class UserSubscription(Base):
     )
     payment_status: Mapped[Optional[str]] = mapped_column(
         String(50), nullable=True
+    )
+
+    # Onboarding
+    has_completed_onboarding: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     def __repr__(self) -> str:
