@@ -471,8 +471,8 @@ export default function LandingPage() {
             <div className="nav-links">
               <a href="#features">Features</a>
               <a href="#pricing">Pricing</a>
-              {/* TODO: Update href to Chrome Web Store URL after publishing */}
-              <a href="#features">Extension</a>
+              <a href="#extension">Extension</a>
+              <Link href="/sign-in">Log in</Link>
               <Link href="/sign-in" className="nav-cta">Get started</Link>
             </div>
             <button
@@ -487,8 +487,8 @@ export default function LandingPage() {
             <div className="mobile-menu">
               <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
-              {/* TODO: Update href to Chrome Web Store URL after publishing */}
-              <a href="#features" onClick={() => setMenuOpen(false)}>Extension</a>
+              <a href="#extension" onClick={() => setMenuOpen(false)}>Extension</a>
+              <Link href="/sign-in" onClick={() => setMenuOpen(false)}>Log in</Link>
               <Link href="/sign-in" className="mobile-menu-cta" onClick={() => setMenuOpen(false)}>Get started</Link>
             </div>
           )}
@@ -657,7 +657,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="section left" data-reveal>
+          <div className="section left" data-reveal id="extension">
             <div className="number">05</div>
             <div className="content">
               <h2>Capture anything,<br /><em>from anywhere</em></h2>
@@ -923,6 +923,7 @@ export default function LandingPage() {
         <div className="finale">
           <p className="overline" data-reveal>Ready?</p>
           <h2 data-reveal>Stop searching.<br />Start <em>advising.</em></h2>
+          <div className="finale-rule" data-reveal />
           <p data-reveal>Free tier includes 5 clients and unlimited documents. No credit card required. Set up in under two minutes.</p>
           <Link href="/sign-in" className="cta-btn" data-reveal>
             Get started for free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
@@ -997,7 +998,7 @@ const landingCSS = `
   --bg-deep: #0c0e13;--bg-mid: #12151c;--bg-surface: #181c25;--bg-card: #1e222e;
   --accent: #c9944a;--accent-light: #e8b06a;--accent-glow: rgba(201,148,74,0.08);
   --teal: #5bb8af;--teal-dim: rgba(91,184,175,0.15);
-  --white: #f0ede6;--white-dim: #8a8680;--white-faint: #4a4744;
+  --white: #f0ede6;--white-dim: #b0aba4;--white-faint: #6a6662;
   --serif: 'Cormorant Garamond', Georgia, serif;
   --sans: 'Outfit', -apple-system, sans-serif;
 }
@@ -1045,7 +1046,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 @keyframes pulseAnim { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.6)} }
 .splash h1 { font-family: var(--serif); font-size: clamp(2.5rem,5vw,4.5rem); font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 0.8s 0.45s forwards; }
 .splash h1 em { font-style: italic; color: var(--accent-light); }
-.splash .subtitle { font-size: clamp(1rem,2vw,1.2rem); font-weight: 300; color: var(--white-dim); max-width: 520px; line-height: 1.7; margin: 0; opacity: 0; animation: fadeUp 0.8s 0.6s forwards; }
+.splash .subtitle { font-size: clamp(1rem,2vw,1.2rem); font-weight: 400; color: var(--white-dim); max-width: 520px; line-height: 1.7; margin: 0; opacity: 0; animation: fadeUp 0.8s 0.6s forwards; }
 .hero-buttons { display: flex; gap: 12px; justify-content: flex-start; margin-top: 2.5rem; opacity: 0; animation: fadeUp 0.8s 0.75s forwards; }
 .btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 8px; font-family: var(--sans); font-size: 0.9rem; font-weight: 500; border: none; cursor: pointer; text-decoration: none; transition: all 0.25s ease; }
 .btn-primary { background: var(--accent); color: var(--bg-deep); }
@@ -1063,8 +1064,8 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .firm-strip { padding: 4rem 2rem; text-align: center; }
 .firm-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
 .firm-logos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2.5rem; }
-.firm-logo-mark { display: inline-flex; align-items: center; gap: 8px; color: var(--white-dim); opacity: 0.45; transition: opacity 0.25s; cursor: default; }
-.firm-logo-mark:hover { opacity: 0.75; }
+.firm-logo-mark { display: inline-flex; align-items: center; gap: 8px; color: var(--white-dim); opacity: 0.55; transition: opacity 0.25s; cursor: default; }
+.firm-logo-mark:hover { opacity: 0.8; }
 .firm-logo-mark svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.6; }
 .firm-logo-mark .caps { font-family: var(--sans); text-transform: uppercase; font-size: 0.8rem; }
 .firm-logo-mark .caps.tight { font-weight: 500; letter-spacing: 0.05em; }
@@ -1085,7 +1086,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .section .content { max-width: 560px; }
 .section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3.2rem); font-weight: 400; margin-bottom: 1.5rem; line-height: 1.1; }
 .section h2 em { font-style: italic; color: var(--accent-light); }
-.section p { font-size: clamp(0.95rem,1.5vw,1.1rem); line-height: 1.8; color: var(--white-dim); font-weight: 300; }
+.section p { font-size: clamp(0.95rem,1.5vw,1.1rem); line-height: 1.8; color: var(--white-dim); font-weight: 400; }
 .section .tag { display: inline-block; margin-top: 1.5rem; font-size: 0.68rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--teal); border: 1px solid var(--teal-dim); padding: 0.5em 1.2em; border-radius: 3px; }
 
 .section-visual { flex-shrink: 0; width: 340px; height: 230px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.04); background: rgba(18,21,28,0.7); backdrop-filter: blur(12px); position: relative; overflow: hidden; }
@@ -1149,7 +1150,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .carousel-dot.active { background: var(--accent); border-color: var(--accent); }
 .carousel-dot:hover { border-color: var(--accent); }
 .testimonial-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.04); padding: 2rem; border-radius: 12px; text-align: left; height: 100%; display: flex; flex-direction: column; }
-.testimonial-quote { font-size: 0.95rem; line-height: 1.7; color: var(--white-dim); font-weight: 300; font-style: italic; flex: 1; }
+.testimonial-quote { font-size: 0.95rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; font-style: italic; flex: 1; }
 .testimonial-author { display: flex; align-items: center; gap: 12px; margin-top: 1.5rem; }
 .testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; background: rgba(201,148,74,0.15); border: 1px solid rgba(201,148,74,0.2); color: var(--accent-light); font-size: 0.75rem; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .testimonial-name { font-size: 0.85rem; font-weight: 500; color: var(--white); }
@@ -1165,7 +1166,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .security-icon { width: 40px; height: 40px; border-radius: 8px; background: var(--teal-dim); display: flex; align-items: center; justify-content: center; margin-bottom: 1.2rem; }
 .security-icon svg { width: 20px; height: 20px; stroke: var(--teal); }
 .security-card h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 500; color: var(--white); margin-bottom: 0.6rem; }
-.security-card p { font-size: 0.82rem; line-height: 1.7; color: var(--white-dim); font-weight: 300; }
+.security-card p { font-size: 0.82rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
 
 .comparison-strip { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.03); background: rgba(12,14,19,0.6); backdrop-filter: blur(8px); }
 .comparison-inner { max-width: 900px; margin: 0 auto; text-align: center; }
@@ -1202,7 +1203,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .p-billed { font-size: 0.72rem; color: var(--teal); margin-bottom: 0.3rem; font-weight: 400; }
 .p-desc { font-size: 0.82rem; color: var(--white-dim); margin-bottom: 1.8rem; line-height: 1.5; }
 .p-list { list-style: none; margin-bottom: 2rem; flex: 1; }
-.p-list li { font-size: 0.82rem; color: var(--white-dim); padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.03); position: relative; padding-left: 1.2rem; }
+.p-list li { font-size: 0.82rem; color: #ccc7bf; padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.03); position: relative; padding-left: 1.2rem; }
 .p-list li::before { content: '·'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
 .p-btn { display: block; text-align: center; padding: 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 500; text-decoration: none; transition: all 0.25s; }
 .p-btn-primary { background: var(--accent); color: var(--bg-deep); }
@@ -1211,7 +1212,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .p-btn-ghost:hover { background: rgba(255,255,255,0.08); }
 
 /* FAQ */
-.faq-section { padding: 6rem 2rem; text-align: center; }
+.faq-section { padding: 6rem 2rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.04); }
 .faq-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .faq-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
 .faq-list { max-width: 700px; margin: 0 auto; text-align: left; }
@@ -1219,24 +1220,25 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .faq-q { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 1.5rem 0; cursor: pointer; background: none; border: none; font-family: var(--sans); font-size: 1rem; font-weight: 400; color: var(--white); transition: color 0.25s; text-align: left; }
 .faq-q:hover { color: var(--accent-light); }
 .faq-icon { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; margin-left: 1rem; transition: transform 0.3s; }
-.faq-a { padding: 0 0 1.5rem; font-size: 0.9rem; line-height: 1.8; color: var(--white-dim); font-weight: 300; }
+.faq-a { padding: 0 0 1.5rem; font-size: 0.9rem; line-height: 1.8; color: var(--white-dim); font-weight: 400; }
 
 .finale { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem; }
 .finale .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
-.finale h2 { font-family: var(--serif); font-size: clamp(2.5rem,6vw,4.5rem); font-weight: 400; line-height: 1.1; margin-bottom: 1.5rem; }
+.finale h2 { font-family: var(--serif); font-size: clamp(2.5rem,6vw,4.5rem); font-weight: 400; line-height: 1.1; margin-bottom: 1.5rem; color: var(--white); }
+.finale-rule { width: 50px; height: 1px; background: var(--accent); margin: 0 auto 1.5rem; opacity: 0.6; }
 .finale h2 em { font-style: italic; color: var(--accent-light); }
-.finale p { max-width: 480px; margin: 0 auto; font-size: 1.05rem; line-height: 1.7; color: var(--white-dim); font-weight: 300; }
+.finale p { max-width: 480px; margin: 0 auto; font-size: 1.05rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
 .finale .cta-btn { display: inline-flex; align-items: center; gap: 10px; margin-top: 2.5rem; padding: 16px 36px; font-family: var(--sans); font-size: 0.9rem; font-weight: 500; color: var(--bg-deep); background: var(--accent); border: none; border-radius: 8px; cursor: pointer; text-decoration: none; transition: all 0.3s ease; }
 .finale .cta-btn:hover { background: var(--accent-light); transform: translateY(-2px); box-shadow: 0 12px 48px rgba(201,148,74,0.25); }
 .finale .cta-btn svg { width: 16px; height: 16px; }
-.finale .trust { margin-top: 1.5rem; font-size: 0.78rem; color: var(--white-faint); }
+.finale .trust { margin-top: 1.5rem; font-size: 0.78rem; color: var(--white-dim); }
 .finale .trust span { color: var(--accent); }
 
 /* Cookie consent banner */
 .cookie-banner { position: fixed; bottom: 0; left: 0; right: 0; z-index: 200; background: rgba(18,21,28,0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid rgba(255,255,255,0.06); padding: 1rem 2rem; animation: slideUp 0.4s ease; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
 .cookie-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 2rem; }
-.cookie-text { flex: 1; font-size: 0.82rem; color: var(--white-dim); font-weight: 300; line-height: 1.6; }
+.cookie-text { flex: 1; font-size: 0.82rem; color: var(--white-dim); font-weight: 400; line-height: 1.6; }
 .cookie-link { color: var(--accent); text-decoration: none; }
 .cookie-link:hover { text-decoration: underline; }
 .cookie-buttons { display: flex; gap: 8px; flex-shrink: 0; }
@@ -1252,11 +1254,11 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
 .foot-brand { }
 .foot-logo { font-family: var(--serif); font-size: 1.5rem; font-weight: 600; color: var(--white); margin-bottom: 1rem; }
 .foot-logo span { color: var(--accent); }
-.foot-tagline { font-size: 0.82rem; color: var(--white-faint); max-width: 250px; line-height: 1.6; margin-bottom: 1rem; }
+.foot-tagline { font-size: 0.82rem; color: var(--white-dim); max-width: 250px; line-height: 1.6; margin-bottom: 1rem; }
 .foot-email { font-size: 0.8rem; color: var(--white-faint); text-decoration: none; transition: color 0.2s; }
 .foot-email:hover { color: var(--white-dim); }
 .foot-col { display: flex; flex-direction: column; gap: 0.6rem; }
-.foot-col h4 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--white-dim); margin-bottom: 0.4rem; font-weight: 500; }
+.foot-col h4 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--white); margin-bottom: 0.4rem; font-weight: 500; }
 .foot-col a { font-size: 0.82rem; color: var(--white-faint); text-decoration: none; transition: color 0.2s; }
 .foot-col a:hover { color: var(--white-dim); }
 .foot-soon { font-size: 0.82rem; color: var(--white-faint); opacity: 0.4; cursor: default; }
