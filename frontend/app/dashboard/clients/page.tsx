@@ -43,6 +43,7 @@ export default function ClientsPage() {
   // Org context
   const { activeOrg } = useOrg();
   const firmOrg = activeOrg?.org_type === "firm" ? activeOrg : null;
+  const hasOrg = !!activeOrg && activeOrg.org_type !== "personal";
 
   // Access state
   const [accessMap, setAccessMap] = useState<Record<string, ClientAccessSummary>>({});
@@ -236,7 +237,7 @@ export default function ClientsPage() {
                   "Name",
                   "Type",
                   "Industry",
-                  ...(firmOrg ? ["Assigned To"] : []),
+                  ...(hasOrg ? ["Assigned To"] : []),
                   "Documents",
                   "Last Activity",
                   "",
@@ -309,7 +310,7 @@ export default function ClientsPage() {
                   </td>
 
                   {/* Assigned To */}
-                  {firmOrg && (
+                  {hasOrg && (
                     <td className="px-4 py-3.5">
                       <AssignedAvatars members={client.assigned_members} />
                     </td>
