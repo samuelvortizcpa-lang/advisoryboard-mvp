@@ -496,6 +496,18 @@ export default function LandingPage() {
 
         {/* Hero */}
         <section className="splash">
+          <video
+            className="hero-video"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+          >
+            <source src="/hero-video.mp4" type="video/mp4" />
+          </video>
+          <div className="hero-video-overlay" />
           <div className="hero-badge"><span className="pulse" /> AI-Powered Document Intelligence</div>
           <h1>Your documents,<br /><em>finally</em> answering<br />your questions.</h1>
           <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get source-cited, confidence-scored answers in seconds.</p>
@@ -995,7 +1007,10 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .mobile-menu a:hover { color: var(--white); }
 .mobile-menu-cta { background: var(--accent) !important; color: var(--bg-deep) !important; font-weight: 500 !important; text-align: center; margin: 1rem; border-radius: 6px; border-bottom: none !important; }
 
-.splash { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; padding: 0 2rem; }
+.splash { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; padding: 0 2rem; overflow: hidden; }
+.hero-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.hero-video-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(12,14,19,0.45); z-index: 1; }
+.splash .hero-badge, .splash h1, .splash .subtitle, .splash .hero-buttons, .splash .rule, .splash .scroll-hint { position: relative; z-index: 2; }
 .hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 18px; border-radius: 99px; font-size: 0.78rem; font-weight: 500; background: var(--accent-glow); color: var(--accent-light); border: 1px solid rgba(201,148,74,0.18); margin-bottom: 2.5rem; opacity: 0; animation: fadeUp 0.8s 0.3s forwards; backdrop-filter: blur(8px); }
 .hero-badge .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulseAnim 2s ease infinite; }
 @keyframes pulseAnim { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.6)} }
@@ -1239,6 +1254,7 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
 }
 @media (max-width:767px) {
   #three-canvas { display: none; }
+  .hero-video, .hero-video-overlay { display: none; }
 }
 @media (max-width:600px) {
   .price-grid { grid-template-columns: 1fr; }
