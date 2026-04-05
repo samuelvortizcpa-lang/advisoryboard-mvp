@@ -1760,6 +1760,7 @@ export interface DashboardSummary {
     seats_used: number | null;
     seats_total: number | null;
   };
+  has_completed_onboarding: boolean;
 }
 
 export interface PriorityFeedItem {
@@ -2324,6 +2325,24 @@ export function createNotificationsApi(getToken: GetToken, orgId?: string) {
       return f<NotificationPreferences>("/notifications/preferences", {
         method: "PATCH",
         body: JSON.stringify(data),
+      });
+    },
+  };
+}
+
+// ─── Onboarding ──────────────────────────────────────────────────────────────
+
+export interface OnboardingStatus {
+  has_completed_onboarding: boolean;
+}
+
+export function createOnboardingApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    complete() {
+      return f<OnboardingStatus>("/users/onboarding", {
+        method: "PATCH",
+        body: JSON.stringify({ completed: true }),
       });
     },
   };
