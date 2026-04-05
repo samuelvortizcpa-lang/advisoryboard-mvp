@@ -6,6 +6,8 @@ import { useState } from "react";
 import { createOnboardingApi } from "@/lib/api";
 
 import AddClientStep from "./AddClientStep";
+import AskAIStep from "./AskAIStep";
+import UploadDocStep from "./UploadDocStep";
 import WelcomeStep from "./WelcomeStep";
 
 interface Props {
@@ -52,19 +54,25 @@ export default function OnboardingWizard({ onComplete }: Props) {
           />
         );
       case 2:
-        // UploadDocStep — placeholder for next PR
         return (
-          <StepPlaceholder
-            title={`Upload a document${createdClientName ? ` for ${createdClientName}` : ""}`}
-            onNext={() => {
-              setUploadedDocumentId(null);
-              nextStep();
-            }}
+          <UploadDocStep
+            onNext={nextStep}
+            onSkip={nextStep}
+            clientId={createdClientId}
+            clientName={createdClientName}
+            onDocUploaded={(id) => setUploadedDocumentId(id)}
           />
         );
       case 3:
-        // AskAIStep — placeholder for next PR
-        return <StepPlaceholder title="Ask AI a question" onNext={nextStep} />;
+        return (
+          <AskAIStep
+            onNext={nextStep}
+            onSkip={nextStep}
+            clientId={createdClientId}
+            clientName={createdClientName}
+            documentId={uploadedDocumentId}
+          />
+        );
       case 4:
         // FinishStep — placeholder for next PR
         return (
@@ -167,28 +175,6 @@ export default function OnboardingWizard({ onComplete }: Props) {
       <div className="flex flex-1 items-center justify-center px-6">
         {renderStep()}
       </div>
-    </div>
-  );
-}
-
-/** Temporary placeholder for steps not yet implemented. */
-function StepPlaceholder({
-  title,
-  onNext,
-}: {
-  title: string;
-  onNext: () => void;
-}) {
-  return (
-    <div className="text-center">
-      <p className="text-xl font-semibold text-gray-900">{title}</p>
-      <p className="mt-2 text-sm text-gray-400">Coming soon</p>
-      <button
-        onClick={onNext}
-        className="mt-6 rounded-lg bg-gray-900 px-8 py-3 text-sm font-medium text-white transition hover:bg-gray-800"
-      >
-        Continue &rarr;
-      </button>
     </div>
   );
 }
