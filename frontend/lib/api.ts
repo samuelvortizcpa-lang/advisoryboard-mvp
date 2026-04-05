@@ -28,6 +28,13 @@ export interface ClientTypeCreateData {
 
 export type ClientTypeUpdateData = Partial<ClientTypeCreateData>;
 
+export interface AssignedMember {
+  user_id: string;
+  user_name: string | null;
+  user_email: string | null;
+  role: string;
+}
+
 export interface Client {
   id: string;
   owner_id: string;
@@ -47,6 +54,7 @@ export interface Client {
   document_count: number;
   created_at: string;
   updated_at: string;
+  assigned_members?: AssignedMember[];
 }
 
 export interface ClientListResponse {

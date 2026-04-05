@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
+  AssignedMember,
   Client,
   ClientAccessSummary,
   ClientListResponse,
@@ -231,7 +232,15 @@ export default function ClientsPage() {
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/60">
-                {["Name", "Type", "Industry", "Documents", "Last Activity", ""].map((h) => (
+                {[
+                  "Name",
+                  "Type",
+                  "Industry",
+                  ...(firmOrg ? ["Assigned To"] : []),
+                  "Documents",
+                  "Last Activity",
+                  "",
+                ].map((h) => (
                   <th
                     key={h}
                     scope="col"
@@ -298,6 +307,13 @@ export default function ClientsPage() {
                       <span className="text-gray-300">—</span>
                     )}
                   </td>
+
+                  {/* Assigned To */}
+                  {firmOrg && (
+                    <td className="px-4 py-3.5">
+                      <AssignedAvatars members={client.assigned_members} />
+                    </td>
+                  )}
 
                   {/* Documents */}
                   <td className="px-4 py-3.5 text-sm text-gray-600">
@@ -368,6 +384,47 @@ export default function ClientsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Assignment avatars ──────────────────────────────────────────────────────
+
+function getInitials(name: string | null): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function AssignedAvatars({ members }: { members?: AssignedMember[] }) {
+  if (!members || members.length === 0) {
+    return <span className="text-xs text-gray-300">—</span>;
+  }
+
+  const show = members.slice(0, 2);
+  const overflow = members.length - 2;
+
+  return (
+    <div className="flex items-center">
+      {show.map((m, i) => (
+        <div
+          key={m.user_id}
+          title={m.user_name || m.user_email || m.user_id}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-[10px] font-medium text-blue-700 ring-2 ring-white"
+          style={i > 0 ? { marginLeft: -6 } : undefined}
+        >
+          {getInitials(m.user_name)}
+        </div>
+      ))}
+      {overflow > 0 && (
+        <div
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-[10px] font-medium text-gray-500 ring-2 ring-white"
+          style={{ marginLeft: -6 }}
+        >
+          +{overflow}
         </div>
       )}
     </div>
