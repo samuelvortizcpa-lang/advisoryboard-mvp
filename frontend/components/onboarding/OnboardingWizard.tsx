@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { createOnboardingApi } from "@/lib/api";
 
@@ -25,8 +25,30 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [uploadedDocumentId, setUploadedDocumentId] = useState<string | null>(null);
   const [skipping, setSkipping] = useState(false);
 
+  // Animation state
+  const [mounted, setMounted] = useState(false);
+  const [stepVisible, setStepVisible] = useState(true);
+  const [slideDirection, setSlideDirection] = useState<"in" | "out">("in");
+
+  // Entrance fade
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(t);
+  }, []);
+
+  function goToStep(target: number) {
+    setSlideDirection("out");
+    setStepVisible(false);
+    setTimeout(() => {
+      setCurrentStep(target);
+      setSlideDirection("in");
+      // Trigger reflow before fading in
+      requestAnimationFrame(() => setStepVisible(true));
+    }, 200);
+  }
+
   function nextStep() {
-    setCurrentStep((s) => Math.min(s + 1, STEP_LABELS.length - 1));
+    goToStep(Math.min(currentStep + 1, STEP_LABELS.length - 1));
   }
 
   async function handleSkip() {
@@ -34,7 +56,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
     try {
       await createOnboardingApi(getToken).complete();
     } catch {
-      // non-fatal — still dismiss the wizard
+      // non-fatal
     }
     onComplete();
   }
@@ -96,8 +118,19 @@ export default function OnboardingWizard({ onComplete }: Props) {
     }
   }
 
+  // Transition classes for step content
+  const stepClasses = stepVisible
+    ? "opacity-100 translate-x-0"
+    : slideDirection === "out"
+      ? "opacity-0 -translate-x-5"
+      : "opacity-0 translate-x-5";
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+    <div
+      className={`fixed inset-0 z-50 flex flex-col bg-white transition-opacity duration-400 ${
+        mounted ? "opacity-100" : "opacity-0"
+      }`}
+    >
       {/* Top bar */}
       <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
         {/* Logo */}
@@ -114,7 +147,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
             <div key={label} className="flex items-center">
               {i > 0 && (
                 <div
-                  className={`h-px w-8 ${
+                  className={`h-px w-8 transition-colors duration-300 ${
                     i <= currentStep ? "bg-gray-900" : "bg-gray-200"
                   }`}
                 />
@@ -122,7 +155,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
               <div className="flex flex-col items-center gap-1">
                 {i < currentStep ? (
                   <button
-                    onClick={() => setCurrentStep(i)}
+                    onClick={() => goToStep(i)}
                     className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-white transition-colors hover:bg-green-600"
                     title={`Go back to ${label}`}
                   >
@@ -173,7 +206,12 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
       {/* Content area */}
       <div className="flex flex-1 items-center justify-center px-6">
-        {renderStep()}
+        <div
+          className={`w-full transition-all duration-300 ease-out ${stepClasses}`}
+          style={{ display: "flex", justifyContent: "center" }}
+        >
+          {renderStep()}
+        </div>
       </div>
     </div>
   );

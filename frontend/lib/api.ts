@@ -1761,6 +1761,7 @@ export interface DashboardSummary {
     seats_total: number | null;
   };
   has_completed_onboarding: boolean;
+  dismissed_tooltips: string[];
 }
 
 export interface PriorityFeedItem {
@@ -2343,6 +2344,20 @@ export function createOnboardingApi(getToken: GetToken, orgId?: string) {
       return f<OnboardingStatus>("/users/onboarding", {
         method: "PATCH",
         body: JSON.stringify({ completed: true }),
+      });
+    },
+  };
+}
+
+// ─── Tooltips ────────────────────────────────────────────────────────────────
+
+export function createTooltipsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    dismiss(tooltipId: string) {
+      return f<{ dismissed_tooltips: string[] }>("/users/tooltips", {
+        method: "PATCH",
+        body: JSON.stringify({ tooltip_id: tooltipId, action: "dismiss" }),
       });
     },
   };

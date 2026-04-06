@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -87,6 +87,11 @@ class UserSubscription(Base):
     # Onboarding
     has_completed_onboarding: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+    # Dismissed contextual tooltip IDs
+    dismissed_tooltips: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
     )
 
     def __repr__(self) -> str:

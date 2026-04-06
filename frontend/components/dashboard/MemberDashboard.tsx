@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DashboardSummary, IntegrationConnection, RevenueImpact } from "@/lib/api";
 import { createDashboardApi, createIntegrationsApi } from "@/lib/api";
@@ -14,6 +14,7 @@ import type { ConnectionStatus } from "@/components/dashboard/MetricStrip";
 import AreaChartCard from "@/components/ui/AreaChartCard";
 import DonutChartCard from "@/components/ui/DonutChartCard";
 import HelpTooltip from "@/components/ui/HelpTooltip";
+import ContextualTooltip from "@/components/ui/ContextualTooltip";
 
 import {
   type TimeRange,
@@ -40,7 +41,13 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
   const { activeOrg } = useOrg();
   const [revenueImpact, setRevenueImpact] = useState<RevenueImpact | null>(null);
   const [connections, setConnections] = useState<ConnectionStatus | null>(null);
+  const [dismissedTooltips, setDismissedTooltips] = useState<string[]>(data.dismissed_tooltips ?? []);
+  const clientCardRef = useRef<HTMLDivElement>(null);
   const { stats } = data;
+
+  const handleTooltipDismiss = useCallback((id: string) => {
+    setDismissedTooltips((prev) => prev.includes(id) ? prev : [...prev, id]);
+  }, []);
 
   useEffect(() => {
     const dashApi = createDashboardApi(getToken, activeOrg?.id);
@@ -100,7 +107,7 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
 
       {/* Row 1: Client Hub + Task Board */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-5" ref={clientCardRef}>
           <ClientCommandCard clients={data.recent_clients} />
         </div>
         <div className="lg:col-span-7">
@@ -122,6 +129,17 @@ export default function MemberDashboard({ data, initials, timeRange, onTimeRange
         <AreaChartCard title="My activity" data={chartData} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
         <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" titleExtra={<HelpTooltip content="Shows how your AI queries are routed: factual lookups, multi-document synthesis, or strategic advisory analysis." />} />
       </div>
+
+      {/* Contextual tooltip for client search */}
+      <ContextualTooltip
+        tooltipId="dashboard_command_bar"
+        targetRef={clientCardRef}
+        title="Quick client search"
+        description="Start typing to find any client instantly. Press Enter to jump to the first match."
+        position="bottom"
+        dismissedTooltips={dismissedTooltips}
+        onDismiss={handleTooltipDismiss}
+      />
     </div>
   );
 }

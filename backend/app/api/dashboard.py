@@ -165,6 +165,7 @@ class DashboardSummary(BaseModel):
     team_members: Optional[List[TeamMember]] = None
     plan: PlanInfo
     has_completed_onboarding: bool = True
+    dismissed_tooltips: List[str] = []
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -530,6 +531,7 @@ def _build_dashboard_summary(
         team_members=team_members,
         plan=plan,
         has_completed_onboarding=sub.has_completed_onboarding,
+        dismissed_tooltips=sub.dismissed_tooltips or [],
     )
 
 
