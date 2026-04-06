@@ -544,37 +544,67 @@ export default function LandingPage() {
           <div className="scroll-hint">Explore</div>
         </section>
 
-        {/* Firm logo trust strip */}
-        <div className="firm-strip" data-reveal>
-          <p className="overline">Trusted by forward-thinking firms</p>
-          <div className="firm-logos">
-            <span className="firm-logo-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 20L7 4l5 12L17 4l5 16"/></svg>
-              <span className="caps tight">Meridian</span>
+        {/* Trust badges */}
+        <div className="trust-badges-section" data-reveal>
+          <p className="trust-badges-label">Built on standards CPAs trust</p>
+          <div className="trust-badges-row">
+            <span className="trust-badge">
+              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="8" width="30" height="24" rx="3" stroke="#c9944a" strokeWidth="1.2" fill="none" />
+                <line x1="4" y1="14" x2="34" y2="14" stroke="#c9944a" strokeWidth="0.8" fill="none" />
+                <text x="19" y="12" textAnchor="middle" fontFamily="'Cormorant Garamond', Georgia, serif" fontSize="7" fontWeight="600" fill="#c9944a">AICPA</text>
+                <path d="M14 22l3 3 7-7" stroke="#c9944a" strokeWidth="1.5" fill="none" />
+              </svg>
+              <span className="trust-badge-label">AICPA Standards Aligned</span>
             </span>
-            <span className="firm-logo-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2l7 10-7 10-7-10z"/></svg>
-              <span className="serif-italic">Caldwell</span>
+            <span className="trust-badge">
+              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 3L33 10V19C33 27.5 26.5 33.5 19 36C11.5 33.5 5 27.5 5 19V10L19 3Z" stroke="#c9944a" strokeWidth="1.2" fill="rgba(201,148,74,0.06)" />
+                <text x="19" y="17" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="6" fontWeight="500" fill="#c9944a">SOC 2</text>
+                <text x="19" y="24" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="5" fontWeight="400" fill="#8a8680">TYPE II</text>
+              </svg>
+              <span className="trust-badge-label">SOC 2 Compliant Infrastructure</span>
             </span>
-            <span className="firm-logo-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 3l10 18H2z"/></svg>
-              <span className="caps wide">Summit</span>
+            <span className="trust-badge">
+              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="5" width="20" height="28" rx="2" stroke="#c9944a" strokeWidth="1.2" fill="none" />
+                <text x="19" y="10" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="4.5" fontWeight="500" fill="#c9944a">§7216</text>
+                <line x1="14" y1="14" x2="24" y2="14" stroke="#c9944a" strokeWidth="0.8" opacity="0.5" fill="none" />
+                <line x1="14" y1="18" x2="24" y2="18" stroke="#c9944a" strokeWidth="0.8" opacity="0.5" fill="none" />
+                <line x1="14" y1="22" x2="21" y2="22" stroke="#c9944a" strokeWidth="0.8" opacity="0.5" fill="none" />
+                <path d="M22 25l2.5 2.5 5-5" stroke="#c9944a" strokeWidth="1.3" fill="none" />
+              </svg>
+              <span className="trust-badge-label">IRC §7216 Consent Built-In</span>
             </span>
-            <span className="firm-logo-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-              <span className="sans-clean">Parker Lane</span>
+            <span className="trust-badge">
+              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="8" y="16" width="22" height="17" rx="3" stroke="#c9944a" strokeWidth="1.2" fill="rgba(201,148,74,0.06)" />
+                <path d="M14 16V11C14 7.5 16.2 5 19 5C21.8 5 24 7.5 24 11V16" stroke="#c9944a" strokeWidth="1.2" fill="none" />
+                <circle cx="19" cy="24" r="2.5" fill="#c9944a" fillOpacity="0.7" />
+                <line x1="19" y1="26.5" x2="19" y2="29" stroke="#c9944a" strokeWidth="1.2" fill="none" />
+              </svg>
+              <span className="trust-badge-label">AES-256 Encryption</span>
             </span>
-            <span className="firm-logo-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20zM12 6v6l4 2"/></svg>
-              <span className="caps medium">Bridgeport</span>
+            <span className="trust-badge">
+              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="19" cy="19" r="14" stroke="#c9944a" strokeWidth="1.2" fill="none" />
+                <ellipse cx="19" cy="19" rx="7" ry="14" stroke="#c9944a" strokeWidth="0.8" fill="none" />
+                <line x1="5" y1="12" x2="33" y2="12" stroke="#c9944a" strokeWidth="0.6" opacity="0.4" fill="none" />
+                <line x1="5" y1="19" x2="33" y2="19" stroke="#c9944a" strokeWidth="0.6" opacity="0.4" fill="none" />
+                <line x1="5" y1="26" x2="33" y2="26" stroke="#c9944a" strokeWidth="0.6" opacity="0.4" fill="none" />
+                <circle cx="15" cy="16" r="3.5" stroke="#c9944a" strokeWidth="1" fill="rgba(201,148,74,0.1)" />
+                <text x="15" y="18" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="5" fontWeight="500" fill="#c9944a">US</text>
+              </svg>
+              <span className="trust-badge-label">US-Only Data Centers</span>
             </span>
-            <span className="firm-logo-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9"/><path d="M8 9c0 0 2-3 4-3s4 3 4 3v6c0 0-2 3-4 3s-4-3-4-3z"/></svg>
-              <span className="serif-italic">Westfield</span>
-            </span>
-            <span className="firm-logo-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z"/></svg>
-              <span className="caps condensed">North Star</span>
+            <span className="trust-badge">
+              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="19" cy="19" r="13" stroke="#c9944a" strokeWidth="1.2" fill="none" />
+                <path d="M19 10V19L25 22" stroke="#c9944a" strokeWidth="1.2" fill="none" />
+                <line x1="10" y1="10" x2="28" y2="28" stroke="#c9944a" strokeWidth="1.2" opacity="0.6" fill="none" />
+                <text x="19" y="36" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="4" fontWeight="400" fill="#8a8680">0 retention</text>
+              </svg>
+              <span className="trust-badge-label">Zero AI Data Retention</span>
             </span>
           </div>
         </div>
@@ -1089,20 +1119,14 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 @keyframes scrollPulse { 0%,100%{opacity:0.2;transform:scaleY(0.5)} 50%{opacity:0.8;transform:scaleY(1)} }
 @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
 
-/* Firm logo trust strip */
-.firm-strip { padding: 4rem 2rem; text-align: center; }
-.firm-strip .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
-.firm-logos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2.5rem; }
-.firm-logo-mark { display: inline-flex; align-items: center; gap: 8px; color: var(--white-dim); opacity: 0.55; transition: opacity 0.25s; cursor: default; }
-.firm-logo-mark:hover { opacity: 0.8; }
-.firm-logo-mark svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.6; }
-.firm-logo-mark .caps { font-family: var(--sans); text-transform: uppercase; font-size: 0.8rem; }
-.firm-logo-mark .caps.tight { font-weight: 500; letter-spacing: 0.05em; }
-.firm-logo-mark .caps.wide { font-weight: 400; letter-spacing: 0.2em; }
-.firm-logo-mark .caps.medium { font-weight: 500; letter-spacing: 0.1em; }
-.firm-logo-mark .caps.condensed { font-weight: 500; letter-spacing: 0.02em; }
-.firm-logo-mark .serif-italic { font-family: var(--serif); font-style: italic; font-size: 0.95rem; font-weight: 400; }
-.firm-logo-mark .sans-clean { font-family: var(--sans); font-size: 0.8rem; font-weight: 400; letter-spacing: 0.04em; }
+/* Trust badges */
+.trust-badges-section { padding: 48px 2rem 56px; text-align: center; border-top: 1px solid rgba(201,148,74,0.06); border-bottom: 1px solid rgba(201,148,74,0.06); background: rgba(12,14,19,0.5); }
+.trust-badges-label { font-family: var(--sans); font-size: 0.68rem; font-weight: 500; letter-spacing: 0.25em; text-transform: uppercase; color: #c9944a; margin-bottom: 36px; }
+.trust-badges-row { display: flex; justify-content: center; align-items: flex-start; gap: 48px; flex-wrap: wrap; max-width: 960px; margin: 0 auto; }
+.trust-badge { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.7; transition: opacity 0.3s ease; cursor: default; }
+.trust-badge:hover { opacity: 1; }
+.trust-badge svg { width: 38px; height: 38px; }
+.trust-badge-label { font-family: var(--sans); font-size: 0.65rem; font-weight: 400; color: #8a8680; letter-spacing: 0.04em; line-height: 1.35; max-width: 110px; text-align: center; }
 
 
 [data-reveal] { opacity: 0; transform: translateY(30px); transition: opacity 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1); }
@@ -1315,7 +1339,9 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
 @media (max-width:600px) {
   .price-grid { grid-template-columns: 1fr; }
   .hero-buttons { flex-direction: column; align-items: center; }
-  .firm-logos { gap: 1.5rem; }
+  .trust-badges-row { gap: 32px 24px; max-width: 320px; }
+  .trust-badge svg { width: 32px; height: 32px; }
+  .trust-badge-label { font-size: 0.6rem; max-width: 90px; }
   .security-grid { grid-template-columns: 1fr; }
   .cookie-inner { flex-direction: column; gap: 1rem; }
   .cookie-buttons { justify-content: flex-end; }
