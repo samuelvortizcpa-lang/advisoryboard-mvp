@@ -103,50 +103,85 @@ export const clerkAppearance = {
       fontFamily: "'Cormorant Garamond', Georgia, serif",
       fontSize: "1.6rem",
       fontWeight: "600",
-      color: t.white,
+      color: "#f0ede6",
     },
     headerSubtitle: {
-      color: t.dim,
+      color: "#b8b3ab",
       fontWeight: "300",
     },
     socialButtonsBlockButton: {
       backgroundColor: "rgba(255,255,255,0.08)",
       border: "1px solid rgba(255,255,255,0.15)",
-      color: t.white,
+      color: "#f0ede6",
       fontWeight: "400",
       "&:hover": {
         backgroundColor: "rgba(255,255,255,0.12)",
         borderColor: "rgba(201,148,74,0.3)",
       },
     },
+    socialButtonsBlockButtonText: {
+      color: "#f0ede6",
+    },
     formFieldInput: {
       backgroundColor: "#1a1918",
       border: "1px solid rgba(255,255,255,0.08)",
-      color: t.white,
+      color: "#f0ede6",
       "&:focus": {
         borderColor: t.accent,
         boxShadow: "0 0 0 2px rgba(201,148,74,0.15)",
       },
+      "&::placeholder": {
+        color: "#7a756e",
+      },
     },
+    formFieldLabel: { color: "#b8b3ab", fontWeight: "400" },
     formButtonPrimary: {
       backgroundColor: t.accent,
       color: t.bgDeep,
       fontWeight: "500",
       "&:hover": { backgroundColor: t.accentLight },
     },
+    formFieldInputShowPasswordButton: {
+      color: "#9a958e",
+    },
+    formFieldErrorText: {
+      color: "#ef4444",
+    },
+    formResendCodeLink: {
+      color: t.accent,
+    },
+    // OTP / verification code inputs
+    otpCodeFieldInput: {
+      color: "#f0ede6",
+      borderColor: "rgba(201,148,74,0.3)",
+    },
+    otpCodeField: {
+      color: "#f0ede6",
+    },
+    footerActionText: {
+      color: "#9a958e",
+    },
     footerActionLink: {
       color: t.accent,
       fontWeight: "400",
       "&:hover": { color: t.accentLight },
     },
-    dividerLine: { backgroundColor: "rgba(255,255,255,0.06)" },
-    dividerText: { color: t.faint },
-    formFieldLabel: { color: t.dim, fontWeight: "400" },
+    footerPagesLink: {
+      color: "#6a6560",
+    },
+    dividerLine: { backgroundColor: "rgba(255,255,255,0.1)" },
+    dividerText: { color: "#7a756e" },
+    identityPreviewText: {
+      color: "#b8b3ab",
+    },
     identityPreviewEditButton: { color: t.accent },
     alert: {
       backgroundColor: "rgba(201,148,74,0.08)",
       border: "1px solid rgba(201,148,74,0.2)",
       color: t.accentLight,
+    },
+    alertText: {
+      color: "#f0ede6",
     },
   },
 };
@@ -381,7 +416,7 @@ export default function AuthLayout({
                 fontFamily: t.sans,
                 fontSize: "1.05rem",
                 fontWeight: 300,
-                color: "#b8b3ab",
+                color: "#d0cdc7",
                 maxWidth: 400,
                 lineHeight: 1.6,
                 ...anim("0.3s"),
@@ -526,7 +561,7 @@ export default function AuthLayout({
               fontFamily: t.sans,
               fontSize: "0.95rem",
               fontWeight: 300,
-              color: "#b8b3ab",
+              color: "#d0cdc7",
               lineHeight: 1.6,
               marginTop: 10,
             }}
