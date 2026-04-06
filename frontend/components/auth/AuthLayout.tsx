@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Cormorant_Garamond, Outfit } from "next/font/google";
 
@@ -35,205 +34,37 @@ const t = {
   sans: "var(--font-sans), 'Outfit', sans-serif",
 } as const;
 
-// ─── Feature cards data ─────────────────────────────────────────────────────
+// ─── Feature pills data ─────────────────────────────────────────────────────
 
 const features = [
   {
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
         <polyline points="17 8 12 3 7 8" />
         <line x1="12" y1="3" x2="12" y2="15" />
       </svg>
     ),
     title: "Upload anything",
-    desc: "Tax returns, recordings, client docs",
   },
   {
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
     title: "Ask questions",
-    desc: "Natural language, instant answers",
   },
   {
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       </svg>
     ),
     title: "Stay compliant",
-    desc: "\u00A77216 tracking, audit-ready",
   },
 ];
 
-// ─── Stats data ─────────────────────────────────────────────────────────────
-
-const stats = [
-  { value: 50, suffix: "+", label: "CPA firms" },
-  { value: 10, suffix: "K+", label: "Documents" },
-  { value: 98, suffix: "%", label: "Accuracy" },
-];
-
-// ─── Count-up hook ──────────────────────────────────────────────────────────
-
-function useCountUp(target: number, duration = 2000, delay = 1200) {
-  const [count, setCount] = useState(0);
-  const hasRun = useRef(false);
-
-  useEffect(() => {
-    if (hasRun.current) return;
-    hasRun.current = true;
-
-    const timeout = setTimeout(() => {
-      const start = performance.now();
-      const animate = (now: number) => {
-        const elapsed = now - start;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        setCount(Math.round(target * eased));
-        if (progress < 1) requestAnimationFrame(animate);
-      };
-      requestAnimationFrame(animate);
-    }, delay);
-
-    return () => clearTimeout(timeout);
-  }, [target, duration, delay]);
-
-  return count;
-}
-
-// ─── Counter stats bar ──────────────────────────────────────────────────────
-
-function StatsBar({ compact }: { compact?: boolean }) {
-  const count0 = useCountUp(stats[0].value);
-  const count1 = useCountUp(stats[1].value);
-  const count2 = useCountUp(stats[2].value);
-  const counts = [count0, count1, count2];
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: compact ? 20 : 40 }}>
-      {stats.map((stat, i) => (
-        <div key={stat.label} style={{ display: "flex", alignItems: "center", gap: compact ? 20 : 40 }}>
-          {i > 0 && (
-            <div
-              style={{
-                width: 1,
-                height: 24,
-                background: "rgba(201,148,74,0.2)",
-                flexShrink: 0,
-              }}
-            />
-          )}
-          <div style={{ textAlign: "center" }}>
-            <div
-              style={{
-                fontFamily: t.serif,
-                fontSize: compact ? "1.2rem" : "1.5rem",
-                fontWeight: 700,
-                color: t.white,
-                lineHeight: 1,
-              }}
-            >
-              {counts[i]}
-              <span style={{ color: t.accent }}>{stat.suffix}</span>
-            </div>
-            <div
-              style={{
-                fontFamily: t.sans,
-                fontSize: "0.65rem",
-                fontWeight: 300,
-                color: t.faint,
-                textTransform: "uppercase",
-                letterSpacing: "0.15em",
-                marginTop: 4,
-              }}
-            >
-              {stat.label}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Feature card ───────────────────────────────────────────────────────────
-
-function FeatureCard({
-  icon,
-  title,
-  desc,
-  delay,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  delay?: string;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const animStyle = delay
-    ? { opacity: 0 as number, animation: `fadeUp 0.7s ease ${delay} forwards` }
-    : {};
-
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        background: hovered ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.03)",
-        border: `1px solid ${hovered ? "rgba(201,148,74,0.25)" : "rgba(201,148,74,0.12)"}`,
-        borderRadius: 12,
-        padding: "16px 20px",
-        transition: "all 0.3s ease",
-        ...animStyle,
-      }}
-    >
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 10,
-          background: "rgba(201,148,74,0.08)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </div>
-      <div>
-        <div
-          style={{
-            fontFamily: t.sans,
-            fontSize: "0.95rem",
-            fontWeight: 600,
-            color: t.white,
-            marginBottom: 2,
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            fontFamily: t.sans,
-            fontSize: "0.82rem",
-            fontWeight: 300,
-            color: "#8a8680",
-          }}
-        >
-          {desc}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Animation helper ───────────────────────────────────────────────────────
 
@@ -279,12 +110,12 @@ export const clerkAppearance = {
       fontWeight: "300",
     },
     socialButtonsBlockButton: {
-      backgroundColor: "#1a1918",
-      border: "1px solid rgba(255,255,255,0.08)",
+      backgroundColor: "rgba(255,255,255,0.08)",
+      border: "1px solid rgba(255,255,255,0.15)",
       color: t.white,
       fontWeight: "400",
       "&:hover": {
-        backgroundColor: "#222120",
+        backgroundColor: "rgba(255,255,255,0.12)",
         borderColor: "rgba(201,148,74,0.3)",
       },
     },
@@ -518,6 +349,7 @@ export default function AuthLayout({
                 letterSpacing: "0.25em",
                 textTransform: "uppercase",
                 color: t.accent,
+                opacity: 0.7,
                 marginTop: "2.5rem",
                 marginBottom: "0.75rem",
                 ...anim("0.1s"),
@@ -530,7 +362,7 @@ export default function AuthLayout({
             <h1
               style={{
                 fontFamily: t.serif,
-                fontSize: "clamp(2.5rem, 4vw, 3.5rem)",
+                fontSize: "clamp(2.8rem, 5vw, 4rem)",
                 fontWeight: 400,
                 color: t.white,
                 lineHeight: 1.15,
@@ -549,7 +381,7 @@ export default function AuthLayout({
                 fontFamily: t.sans,
                 fontSize: "1.05rem",
                 fontWeight: 300,
-                color: t.dim,
+                color: "#b8b3ab",
                 maxWidth: 400,
                 lineHeight: 1.6,
                 ...anim("0.3s"),
@@ -559,28 +391,15 @@ export default function AuthLayout({
               questions. Get source-cited answers in seconds.
             </p>
 
-            {/* Feature cards — hidden on mobile */}
-            <div className="hidden md:flex" style={{ flexDirection: "column", gap: 12, marginTop: "2.5rem" }}>
-              {features.map((f, i) => (
-                <FeatureCard
-                  key={f.title}
-                  icon={f.icon}
-                  title={f.title}
-                  desc={f.desc}
-                  delay={`${0.4 + i * 0.1}s`}
-                />
-              ))}
-            </div>
-
             {/* Product preview — real dashboard screenshot */}
             <div
-              className="hidden lg:block"
+              className="hidden md:block"
               style={{
                 marginTop: '2rem',
                 maxWidth: '420px',
                 opacity: 0,
                 animation: 'fadeUp 0.7s ease forwards',
-                animationDelay: '0.65s',
+                animationDelay: '0.4s',
               }}
             >
               <div
@@ -625,35 +444,46 @@ export default function AuthLayout({
               </div>
             </div>
 
-            {/* Gold rule */}
+            {/* Feature pills */}
             <div
               style={{
-                width: 60,
-                height: 1,
-                background: "rgba(201,148,74,0.3)",
-                marginTop: "2.5rem",
-                ...anim("0.7s"),
-              }}
-            />
-
-            {/* Counter stats — hidden on small mobile */}
-            <div className="hidden sm:block" style={{ marginTop: "2.5rem", ...anim("0.7s") }}>
-              <StatsBar />
-            </div>
-
-            {/* Tagline */}
-            <p
-              style={{
-                fontFamily: t.serif,
-                fontSize: "0.85rem",
-                fontStyle: "italic",
-                color: "rgba(201,148,74,0.5)",
-                marginTop: "1.5rem",
-                ...anim("0.8s"),
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 12,
+                justifyContent: 'center',
+                marginTop: '1.5rem',
+                ...anim("0.55s"),
               }}
             >
-              Built by a CPA, for CPAs.
-            </p>
+              {features.map((f) => (
+                <div
+                  key={f.title}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 14px',
+                    borderRadius: 99,
+                    border: '1px solid rgba(201,148,74,0.15)',
+                    background: 'rgba(201,148,74,0.05)',
+                  }}
+                >
+                  <span style={{ display: 'flex', width: 12, height: 12 }}>
+                    {f.icon}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: t.sans,
+                      fontSize: '0.8rem',
+                      color: t.accent,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {f.title}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -696,7 +526,7 @@ export default function AuthLayout({
               fontFamily: t.sans,
               fontSize: "0.95rem",
               fontWeight: 300,
-              color: t.dim,
+              color: "#b8b3ab",
               lineHeight: 1.6,
               marginTop: 10,
             }}
@@ -707,10 +537,14 @@ export default function AuthLayout({
 
         {/* ── Right auth panel ───────────────────────────────────────────── */}
         <div
-          className="flex-1 flex items-center justify-center"
+          className="flex-1"
           style={{
             background: t.bgRight,
             minHeight: "100vh",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
             padding: "3rem 1.5rem",
           }}
         >
