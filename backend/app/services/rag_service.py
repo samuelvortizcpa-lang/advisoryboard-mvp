@@ -85,6 +85,11 @@ IRS Form 1040 line reference:
 - Never say information is "not provided" if related financial data exists in the context — instead provide what IS available and note any caveats.
 - Always include the exact dollar amount and line number.
 
+Prior conversation awareness:
+- You have access to summaries of prior conversations about this client.
+- When the user references past discussions ("what did we talk about", "last time", "previously"), use the session history context to answer.
+- When making recommendations, note if they build on or contradict prior decisions.
+
 Context:
 {context}
 """
@@ -938,7 +943,7 @@ async def answer_question(
             f"{db_client.custom_instructions}"
         )
 
-    # Assemble supplementary context (action items, comms, strategies)
+    # Assemble supplementary context (action items, comms, strategies, session history)
     try:
         ai_ctx = await assemble_context(
             db,
@@ -946,11 +951,12 @@ async def answer_question(
             user_id=user_id or "",
             purpose=ContextPurpose.CHAT,
             options={"rag_chunks": []},  # RAG chunks already in system prompt
+            current_query=question,
         )
         # Format only the non-RAG sections
         supplementary = format_context_for_prompt(ai_ctx, ContextPurpose.CHAT)
         # Strip the client profile section — already covered by client_type prompt
-        # Keep action items, communications, and strategy status
+        # Keep action items, communications, strategy status, and session history
         _sup_parts = []
         for block in supplementary.split("\n\n"):
             if block.startswith("=== CLIENT PROFILE"):
@@ -1288,7 +1294,7 @@ async def answer_question_stream(
     if db_client and db_client.custom_instructions:
         system_prompt += f"\n\nAdditional instructions for this specific client:\n{db_client.custom_instructions}"
 
-    # Assemble supplementary context (action items, comms, strategies)
+    # Assemble supplementary context (action items, comms, strategies, session history)
     try:
         ai_ctx = await assemble_context(
             db,
@@ -1296,6 +1302,7 @@ async def answer_question_stream(
             user_id=user_id or "",
             purpose=ContextPurpose.CHAT,
             options={"rag_chunks": []},
+            current_query=question,
         )
         supplementary = format_context_for_prompt(ai_ctx, ContextPurpose.CHAT)
         _sup_parts = []

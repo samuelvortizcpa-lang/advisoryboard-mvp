@@ -98,6 +98,7 @@ class ClientContext:
     journal_entries: list[dict[str, Any]] | None = None  # TODO: Feature 3
     strategy_status: dict[str, Any] | None = None
     engagement_calendar: list[dict[str, Any]] | None = None  # TODO: Feature 4
+    session_history: list[dict[str, Any]] = field(default_factory=list)
     rag_chunks: list[dict[str, Any]] | None = None
 
 
@@ -112,6 +113,8 @@ async def assemble_context(
     user_id: str,
     purpose: ContextPurpose = ContextPurpose.GENERAL,
     options: dict[str, Any] | None = None,
+    *,
+    current_query: str | None = None,
 ) -> ClientContext:
     """
     Build a :class:`ClientContext` for the given client and purpose.
@@ -122,6 +125,9 @@ async def assemble_context(
     - ``{"rag_chunks": [...]}`` — pre-fetched RAG chunks (list of dicts with
       ``chunk_text``, ``document_filename``, etc.).  When provided the
       assembler skips its own vector search.
+
+    *current_query* — when provided (typically for CHAT), enables semantic
+    search over prior session summaries to surface relevant past conversations.
     """
     options = options or {}
     current_year = datetime.now().year
@@ -227,6 +233,14 @@ async def assemble_context(
         ContextPurpose.BRIEF,
     ):
         ctx.engagement_calendar = _fetch_engagement_calendar(db, client_id)
+
+    # Populate session history (prior advisory conversations)
+    try:
+        ctx.session_history = await _gather_session_history(
+            client_id, user_id, purpose, current_query, db,
+        )
+    except Exception:
+        logger.warning("Session history gathering failed; continuing without it", exc_info=True)
 
     # 3. Trim to budget -------------------------------------------------------
     budget = TOKEN_BUDGETS.get(purpose, TOKEN_BUDGETS[ContextPurpose.GENERAL])
@@ -665,6 +679,180 @@ def _fetch_engagement_calendar(
 
 
 # ---------------------------------------------------------------------------
+# Session history (prior advisory conversations)
+# ---------------------------------------------------------------------------
+
+
+# Token budgets per purpose for the session history section
+_SESSION_TOKEN_BUDGETS: dict[ContextPurpose, int] = {
+    ContextPurpose.CHAT: 1500,
+    ContextPurpose.BRIEF: 2000,
+    ContextPurpose.EMAIL_DRAFT: 500,
+    ContextPurpose.STRATEGY_SUGGEST: 800,
+    ContextPurpose.QUARTERLY_ESTIMATE: 800,
+    ContextPurpose.GENERAL: 800,
+}
+
+
+def _format_session_entry(session: Any) -> str:
+    """Format a single session dict into a context string."""
+    # Handle both dict and ORM object
+    if hasattr(session, "started_at"):
+        date = session.started_at.strftime("%Y-%m-%d") if session.started_at else "Unknown"
+        summary = session.summary or "(no summary)"
+        topics = session.key_topics or []
+        decisions = session.key_decisions or []
+    else:
+        date = session.get("started_at", "Unknown")
+        if hasattr(date, "strftime"):
+            date = date.strftime("%Y-%m-%d")
+        summary = session.get("summary") or "(no summary)"
+        topics = session.get("key_topics") or []
+        decisions = session.get("key_decisions") or []
+
+    parts = [f"Session ({date}): {summary}"]
+    if topics:
+        parts.append(f"  Topics: {', '.join(str(t) for t in topics)}")
+    if decisions:
+        parts.append(f"  Decisions: {'; '.join(str(d) for d in decisions)}")
+    return "\n".join(parts)
+
+
+async def _gather_session_history(
+    client_id: UUID,
+    user_id: str,
+    purpose: ContextPurpose,
+    current_query: str | None,
+    db: Session,
+) -> list[dict[str, Any]]:
+    """Gather prior session context based on purpose and query.
+
+    Combines recent sessions with semantically relevant ones (if a query
+    is provided), deduplicates, and trims to the purpose-specific budget.
+    """
+    from app.services.session_memory_service import (
+        get_recent_sessions,
+        search_sessions,
+    )
+
+    budget = _SESSION_TOKEN_BUDGETS.get(purpose, 800)
+    results: list[dict[str, Any]] = []
+    seen_ids: set[UUID] = set()
+
+    if purpose == ContextPurpose.CHAT:
+        recent = get_recent_sessions(client_id, user_id, db, limit=2)
+        for s in recent:
+            seen_ids.add(s.id)
+            results.append({
+                "id": str(s.id),
+                "started_at": s.started_at,
+                "summary": s.summary,
+                "key_topics": s.key_topics,
+                "key_decisions": s.key_decisions,
+                "formatted": _format_session_entry(s),
+            })
+        # Semantic search for relevant sessions
+        if current_query:
+            semantic = await search_sessions(
+                client_id, user_id, current_query, db, limit=3,
+            )
+            for s in semantic:
+                sid = UUID(str(s["id"])) if not isinstance(s["id"], UUID) else s["id"]
+                if sid not in seen_ids:
+                    seen_ids.add(sid)
+                    results.append({
+                        "id": str(sid),
+                        "started_at": s["started_at"],
+                        "summary": s["summary"],
+                        "key_topics": s["key_topics"],
+                        "key_decisions": s["key_decisions"],
+                        "formatted": _format_session_entry(s),
+                    })
+
+    elif purpose == ContextPurpose.BRIEF:
+        recent = get_recent_sessions(client_id, user_id, db, limit=5)
+        for s in recent:
+            results.append({
+                "id": str(s.id),
+                "started_at": s.started_at,
+                "summary": s.summary,
+                "key_topics": s.key_topics,
+                "key_decisions": s.key_decisions,
+                "formatted": _format_session_entry(s),
+            })
+
+    elif purpose == ContextPurpose.EMAIL_DRAFT:
+        recent = get_recent_sessions(client_id, user_id, db, limit=1)
+        for s in recent:
+            seen_ids.add(s.id)
+            results.append({
+                "id": str(s.id),
+                "started_at": s.started_at,
+                "summary": s.summary,
+                "key_topics": s.key_topics,
+                "key_decisions": s.key_decisions,
+                "formatted": _format_session_entry(s),
+            })
+        if current_query:
+            semantic = await search_sessions(
+                client_id, user_id, current_query, db, limit=2,
+            )
+            for s in semantic:
+                sid = UUID(str(s["id"])) if not isinstance(s["id"], UUID) else s["id"]
+                if sid not in seen_ids:
+                    seen_ids.add(sid)
+                    results.append({
+                        "id": str(sid),
+                        "started_at": s["started_at"],
+                        "summary": s["summary"],
+                        "key_topics": s["key_topics"],
+                        "key_decisions": s["key_decisions"],
+                        "formatted": _format_session_entry(s),
+                    })
+
+    elif purpose == ContextPurpose.STRATEGY_SUGGEST:
+        # Prioritize sessions with decisions
+        recent = get_recent_sessions(client_id, user_id, db, limit=5)
+        # Sort: sessions with decisions first
+        with_decisions = [s for s in recent if s.key_decisions]
+        without_decisions = [s for s in recent if not s.key_decisions]
+        for s in (with_decisions + without_decisions)[:3]:
+            results.append({
+                "id": str(s.id),
+                "started_at": s.started_at,
+                "summary": s.summary,
+                "key_topics": s.key_topics,
+                "key_decisions": s.key_decisions,
+                "formatted": _format_session_entry(s),
+            })
+
+    else:
+        # GENERAL / QUARTERLY_ESTIMATE
+        recent = get_recent_sessions(client_id, user_id, db, limit=2)
+        for s in recent:
+            results.append({
+                "id": str(s.id),
+                "started_at": s.started_at,
+                "summary": s.summary,
+                "key_topics": s.key_topics,
+                "key_decisions": s.key_decisions,
+                "formatted": _format_session_entry(s),
+            })
+
+    # Trim to token budget
+    trimmed: list[dict[str, Any]] = []
+    total_tokens = 0
+    for entry in results:
+        entry_tokens = _estimate_tokens(entry["formatted"])
+        if total_tokens + entry_tokens > budget:
+            break
+        trimmed.append(entry)
+        total_tokens += entry_tokens
+
+    return trimmed
+
+
+# ---------------------------------------------------------------------------
 # Token estimation & budget trimming
 # ---------------------------------------------------------------------------
 
@@ -682,11 +870,12 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
     Priority order (highest to lowest):
     1. client_profile — never trimmed
     2. rag_chunks — only present for CHAT, high value
-    3. financial_metrics
-    4. action_items
-    5. strategy_status
-    6. communication_history
-    7. documents_summary
+    3. session_history — prior conversations
+    4. financial_metrics
+    5. action_items
+    6. strategy_status
+    7. communication_history
+    8. documents_summary
     """
     import json
 
@@ -696,6 +885,8 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
         ]
         if ctx.rag_chunks:
             parts.append(json.dumps(ctx.rag_chunks, default=str))
+        if ctx.session_history:
+            parts.append(json.dumps(ctx.session_history, default=str))
         if ctx.financial_metrics:
             parts.append(json.dumps(ctx.financial_metrics, default=str))
         if ctx.action_items:
@@ -721,6 +912,7 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
         "strategy_status",
         "action_items",
         "financial_metrics",
+        "session_history",
         "rag_chunks",
     ]
 
@@ -884,6 +1076,13 @@ def format_context_for_prompt(
                 comm_lines.append(f"  {body[:200]}...")
             comm_lines.append("")
         sections.append("\n".join(comm_lines))
+
+    # --- Session history (prior advisory interactions) -----------------------
+    if ctx.session_history:
+        session_lines = ["=== PRIOR ADVISORY INTERACTIONS ==="]
+        for entry in ctx.session_history:
+            session_lines.append(entry.get("formatted", ""))
+        sections.append("\n".join(session_lines))
 
     # --- Strategy status ----------------------------------------------------
     if ctx.strategy_status and ctx.strategy_status.get("years"):
