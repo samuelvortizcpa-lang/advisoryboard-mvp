@@ -111,8 +111,12 @@ async def assemble_context(
     """
     Build a :class:`ClientContext` for the given client and purpose.
 
-    *options* is a purpose-specific dict.  For ``CHAT`` it should contain
-    ``{"query": "..."}``.
+    *options* is a purpose-specific dict.  For ``CHAT`` it may contain:
+
+    - ``{"query": "..."}`` — the assembler will run vector search internally.
+    - ``{"rag_chunks": [...]}`` — pre-fetched RAG chunks (list of dicts with
+      ``chunk_text``, ``document_filename``, etc.).  When provided the
+      assembler skips its own vector search.
     """
     options = options or {}
     current_year = datetime.now().year
@@ -124,9 +128,13 @@ async def assemble_context(
 
     # 2. Fetch data sources based on purpose ----------------------------------
     if purpose == ContextPurpose.CHAT:
-        query = options.get("query", "")
-        if query:
-            ctx.rag_chunks = await _fetch_rag_chunks(db, client_id, query)
+        # Prefer pre-fetched RAG chunks from the caller (rag_service)
+        if "rag_chunks" in options:
+            ctx.rag_chunks = options["rag_chunks"]
+        else:
+            query = options.get("query", "")
+            if query:
+                ctx.rag_chunks = await _fetch_rag_chunks(db, client_id, query)
         ctx.action_items = _fetch_action_items(db, client_id, limit=10)
         ctx.communication_history = _fetch_communications(db, client_id, limit=5)
         ctx.strategy_status = _fetch_strategy_status(db, client_id, [current_year])

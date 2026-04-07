@@ -40,6 +40,11 @@ from app.models.document_chunk import DocumentChunk
 from app.models.document_page_image import DocumentPageImage
 from app.services import storage_service
 from app.services.chunking import chunk_text, get_chunk_params
+from app.services.context_assembler import (
+    ContextPurpose,
+    assemble_context,
+    format_context_for_prompt,
+)
 from app.services.query_router import classify_query, route_completion, route_completion_stream
 from app.services.tax_terms import expand_query as expand_financial_terms
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
@@ -843,6 +848,35 @@ async def answer_question(
             f"{db_client.custom_instructions}"
         )
 
+    # Assemble supplementary context (action items, comms, strategies)
+    try:
+        ai_ctx = await assemble_context(
+            db,
+            client_id=client_id,
+            user_id=user_id or "",
+            purpose=ContextPurpose.CHAT,
+            options={"rag_chunks": []},  # RAG chunks already in system prompt
+        )
+        # Format only the non-RAG sections
+        supplementary = format_context_for_prompt(ai_ctx, ContextPurpose.CHAT)
+        # Strip the client profile section — already covered by client_type prompt
+        # Keep action items, communications, and strategy status
+        _sup_parts = []
+        for block in supplementary.split("\n\n"):
+            if block.startswith("=== CLIENT PROFILE"):
+                continue
+            if block.startswith("=== RELEVANT DOCUMENT"):
+                continue
+            if block.strip():
+                _sup_parts.append(block)
+        if _sup_parts:
+            system_prompt += (
+                "\n\nSupplementary client context (use only if relevant to the question):\n"
+                + "\n\n".join(_sup_parts)
+            )
+    except Exception:
+        logger.warning("Context assembler failed; continuing without supplementary context", exc_info=True)
+
     # Even with low-scoring chunks, prefer providing available data over declining
     if best_score < 50:
         system_prompt += (
@@ -1166,6 +1200,30 @@ async def answer_question_stream(
 
     if db_client and db_client.custom_instructions:
         system_prompt += f"\n\nAdditional instructions for this specific client:\n{db_client.custom_instructions}"
+
+    # Assemble supplementary context (action items, comms, strategies)
+    try:
+        ai_ctx = await assemble_context(
+            db,
+            client_id=client_id,
+            user_id=user_id or "",
+            purpose=ContextPurpose.CHAT,
+            options={"rag_chunks": []},
+        )
+        supplementary = format_context_for_prompt(ai_ctx, ContextPurpose.CHAT)
+        _sup_parts = []
+        for block in supplementary.split("\n\n"):
+            if block.startswith("=== CLIENT PROFILE") or block.startswith("=== RELEVANT DOCUMENT"):
+                continue
+            if block.strip():
+                _sup_parts.append(block)
+        if _sup_parts:
+            system_prompt += (
+                "\n\nSupplementary client context (use only if relevant to the question):\n"
+                + "\n\n".join(_sup_parts)
+            )
+    except Exception:
+        logger.warning("Context assembler failed; continuing without supplementary context", exc_info=True)
 
     if best_score < 50:
         system_prompt += (
