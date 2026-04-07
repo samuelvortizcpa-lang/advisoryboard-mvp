@@ -68,6 +68,10 @@ async def send_communication(
         template_id=body.template_id,
         metadata=body.metadata,
         db=db,
+        thread_id=body.thread_id,
+        thread_type=body.thread_type,
+        thread_year=body.thread_year,
+        thread_quarter=body.thread_quarter,
     )
 
     # Increment template usage if a template was used
@@ -119,6 +123,28 @@ async def list_communications(
         db=db,
         limit=limit,
     )
+    return [CommunicationResponse.model_validate(c) for c in comms]
+
+
+# ---------------------------------------------------------------------------
+# Thread history
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/clients/{client_id}/communications/thread/{thread_id}",
+    response_model=List[CommunicationResponse],
+)
+async def get_thread_history(
+    client_id: UUID,
+    thread_id: UUID,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> List[CommunicationResponse]:
+    """Return all communications in a thread, ordered chronologically."""
+    check_client_access(auth, client_id, db)
+
+    comms = communication_service.get_thread_history(db, client_id, thread_id)
     return [CommunicationResponse.model_validate(c) for c in comms]
 
 

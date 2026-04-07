@@ -18,6 +18,10 @@ class CommunicationSendRequest(BaseModel):
     template_id: Optional[UUID] = None
     follow_up_days: Optional[int] = Field(None, ge=1, le=90)
     metadata: Optional[Dict[str, Any]] = None
+    thread_id: Optional[UUID] = None
+    thread_type: Optional[str] = Field(None, max_length=30)
+    thread_year: Optional[int] = None
+    thread_quarter: Optional[int] = Field(None, ge=1, le=4)
 
 
 class CommunicationResponse(BaseModel):

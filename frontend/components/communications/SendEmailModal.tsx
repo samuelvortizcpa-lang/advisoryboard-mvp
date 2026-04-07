@@ -8,13 +8,14 @@ import {
   CommunicationSendResponse,
   DraftEmailResponse,
   EmailTemplate,
+  QuarterlyEstimateDraftResponse,
   RenderedTemplate,
   createCommunicationsApi,
 } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Approach = "template" | "ai" | "scratch" | null;
+type Approach = "template" | "ai" | "scratch" | "quarterly" | null;
 
 interface SendEmailModalProps {
   clientId: string;
@@ -61,6 +62,25 @@ export default function SendEmailModal({
   const [aiDrafted, setAiDrafted] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
 
+  // Quarterly estimate state
+  const [qeTaxYear, setQeTaxYear] = useState(new Date().getFullYear());
+  const [qeQuarter, setQeQuarter] = useState(() => {
+    const m = new Date().getMonth();
+    if (m < 3) return 1;
+    if (m < 5) return 2;
+    if (m < 8) return 3;
+    return 4;
+  });
+  const [qeDrafting, setQeDrafting] = useState(false);
+  const [qeError, setQeError] = useState<string | null>(null);
+  const [qeResult, setQeResult] = useState<QuarterlyEstimateDraftResponse | null>(null);
+  const [qeOpenItemsExpanded, setQeOpenItemsExpanded] = useState(false);
+
+  // Thread view state
+  const [threadViewOpen, setThreadViewOpen] = useState(false);
+  const [threadComms, setThreadComms] = useState<ClientCommunication[]>([]);
+  const [threadLoading, setThreadLoading] = useState(false);
+
   // Email form state
   const [to, setTo] = useState(clientEmail || "");
   const [subject, setSubject] = useState("");
@@ -95,6 +115,7 @@ export default function SendEmailModal({
     } else if (a === "scratch") {
       setShowEditor(true);
     }
+    // "quarterly" and "ai" just show their form — no extra loading needed
   }
 
   // ── Handle template selection ──────────────────────────────────────────────
@@ -120,6 +141,42 @@ export default function SendEmailModal({
       setShowEditor(true);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to render template", "error");
+    }
+  }
+
+  // ── Handle quarterly estimate draft ───────────────────────────────────────
+
+  async function handleGenerateQuarterlyDraft() {
+    setQeDrafting(true);
+    setQeError(null);
+    try {
+      const result = await createCommunicationsApi(getToken).draftQuarterlyEstimate(clientId, qeTaxYear, qeQuarter);
+      setQeResult(result);
+      setSubject(result.subject);
+      setBodyHtml(result.body_html);
+      setFollowUpDays(7);
+      setShowEditor(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to generate quarterly estimate draft.";
+      setQeError(msg);
+      showToast(msg, "error");
+    } finally {
+      setQeDrafting(false);
+    }
+  }
+
+  // ── Load thread history ──────────────────────────────────────────────────
+
+  async function loadThreadHistory(threadId: string) {
+    setThreadLoading(true);
+    try {
+      const comms = await createCommunicationsApi(getToken).getThreadHistory(clientId, threadId);
+      setThreadComms(comms);
+      setThreadViewOpen(true);
+    } catch {
+      showToast("Failed to load thread history", "error");
+    } finally {
+      setThreadLoading(false);
     }
   }
 
@@ -170,7 +227,17 @@ export default function SendEmailModal({
         recipient_name: clientName,
         template_id: templateId || undefined,
         follow_up_days: followUpDays || undefined,
-        metadata: aiDrafted ? { ai_drafted: true, purpose } : undefined,
+        metadata: aiDrafted
+          ? { ai_drafted: true, purpose }
+          : qeResult
+            ? { ai_drafted: true, quarterly_estimate: true }
+            : undefined,
+        ...(qeResult ? {
+          thread_id: qeResult.thread_id,
+          thread_type: qeResult.thread_type,
+          thread_year: qeResult.thread_year,
+          thread_quarter: qeResult.thread_quarter,
+        } : {}),
       });
       showToast(`Email sent to ${clientName}`, "success");
       setTimeout(() => {
@@ -280,6 +347,20 @@ export default function SendEmailModal({
                       <div>
                         <p className="text-sm font-semibold text-gray-900">Write From Scratch</p>
                         <p className="text-xs text-gray-500">Start with a blank email</p>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => selectApproach("quarterly")}
+                    className="group w-full rounded-xl border border-gray-200 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100">
+                        <CalculatorIcon />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Quarterly Estimate</p>
+                        <p className="text-xs text-gray-500">AI-drafted estimate email with financial context and thread history</p>
                       </div>
                     </div>
                   </button>
@@ -401,6 +482,75 @@ export default function SendEmailModal({
                   )}
                 </div>
               )}
+
+              {/* Quarterly estimate form */}
+              {approach === "quarterly" && (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => setApproach(null)}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    &larr; Back
+                  </button>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CalculatorIcon />
+                      <p className="text-sm font-semibold text-gray-900">Quarterly Estimated Tax Payment</p>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Generate an AI-drafted email using {clientName}&apos;s financial data, prior correspondence, and open items.
+                    </p>
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Tax Year</label>
+                        <select
+                          value={qeTaxYear}
+                          onChange={(e) => setQeTaxYear(Number(e.target.value))}
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {[0, 1, -1].map((offset) => {
+                            const y = new Date().getFullYear() + offset;
+                            return <option key={y} value={y}>{y}</option>;
+                          })}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Quarter</label>
+                        <select
+                          value={qeQuarter}
+                          onChange={(e) => setQeQuarter(Number(e.target.value))}
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value={1}>Q1 — Due Apr 15</option>
+                          <option value={2}>Q2 — Due Jun 15</option>
+                          <option value={3}>Q3 — Due Sep 15</option>
+                          <option value={4}>Q4 — Due Jan 15</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleGenerateQuarterlyDraft}
+                    disabled={qeDrafting}
+                    className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {qeDrafting ? (
+                      <>
+                        <SmallSpinner />
+                        Analyzing financial data and prior correspondence...
+                      </>
+                    ) : (
+                      <>
+                        <SparklesIcon />
+                        Generate Draft
+                      </>
+                    )}
+                  </button>
+                  {qeError && (
+                    <p className="text-sm text-red-600">{qeError}</p>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             /* Step 3: Review & edit */
@@ -413,6 +563,8 @@ export default function SendEmailModal({
                     setBodyHtml("");
                     setAiDrafted(false);
                     setTemplateId(null);
+                    setQeResult(null);
+                    setQeOpenItemsExpanded(false);
                   }}
                   className="text-xs text-blue-600 hover:underline"
                 >
@@ -424,6 +576,64 @@ export default function SendEmailModal({
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-2.5 py-1 text-[11px] font-medium text-purple-700">
                   <SparklesIcon />
                   AI-drafted
+                </div>
+              )}
+
+              {/* Quarterly estimate context bar */}
+              {qeResult && (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CalculatorIcon />
+                        <span className="text-xs font-semibold text-blue-800">
+                          Q{qeResult.thread_quarter} {qeResult.thread_year} Estimated Tax Payment
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => loadThreadHistory(qeResult.thread_id)}
+                        disabled={threadLoading}
+                        className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+                      >
+                        {threadLoading ? "Loading..." : "View Thread"}
+                      </button>
+                    </div>
+                    {qeResult.financial_context_used.length > 0 && (
+                      <p className="mt-1 text-[11px] text-blue-600">
+                        Using {qeResult.financial_context_used.length} financial data points
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Open items from prior correspondence */}
+                  {qeResult.open_items_from_prior.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <button
+                        onClick={() => setQeOpenItemsExpanded(!qeOpenItemsExpanded)}
+                        className="flex w-full items-center justify-between text-left"
+                      >
+                        <span className="text-xs font-semibold text-amber-800">
+                          {qeResult.open_items_from_prior.length} open item{qeResult.open_items_from_prior.length !== 1 ? "s" : ""} from prior emails
+                        </span>
+                        <svg
+                          className={`h-4 w-4 text-amber-600 transition-transform ${qeOpenItemsExpanded ? "rotate-180" : ""}`}
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {qeOpenItemsExpanded && (
+                        <ul className="mt-2 space-y-1.5">
+                          {qeResult.open_items_from_prior.map((item, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs text-amber-700">
+                              <span className="mt-0.5 block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
+                              {item.question}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -526,6 +736,65 @@ export default function SendEmailModal({
         )}
       </div>
 
+      {/* Thread view slide-over */}
+      {threadViewOpen && (
+        <>
+          <div className="fixed inset-0 z-[60] bg-black/20" onClick={() => setThreadViewOpen(false)} />
+          <div className="fixed inset-y-0 right-0 z-[70] flex w-full max-w-md flex-col bg-white shadow-2xl animate-slide-in-right">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
+              <h3 className="text-sm font-semibold text-gray-900">Thread History</h3>
+              <button
+                onClick={() => setThreadViewOpen(false)}
+                className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {threadComms.length === 0 ? (
+                <p className="text-sm text-gray-400">No prior emails in this thread.</p>
+              ) : (
+                <div className="space-y-4">
+                  {threadComms.map((comm) => (
+                    <div key={comm.id} className="rounded-lg border border-gray-200 p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-semibold text-gray-900 truncate flex-1">
+                          {comm.subject}
+                        </p>
+                        <span className="ml-2 text-[10px] text-gray-400 whitespace-nowrap">
+                          {new Date(comm.sent_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {comm.body_text && (
+                        <p className="text-xs text-gray-500 line-clamp-3">
+                          {comm.body_text.slice(0, 200)}
+                        </p>
+                      )}
+                      {/* Show open items on this email */}
+                      {comm.open_items && (comm.open_items as Array<{question: string; status: string}>).length > 0 && (
+                        <div className="mt-2 border-t border-gray-100 pt-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 mb-1">
+                            Open Items
+                          </p>
+                          {(comm.open_items as Array<{question: string; status: string}>).map((item, i) => (
+                            <p key={i} className="text-[11px] text-amber-700 flex items-start gap-1.5">
+                              <span className="mt-1 block h-1 w-1 flex-shrink-0 rounded-full bg-amber-400" />
+                              {item.question}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes slide-in-right {
           from { transform: translateX(100%); }
@@ -569,6 +838,14 @@ function SendIcon() {
   return (
     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+    </svg>
+  );
+}
+
+function CalculatorIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25v-.008zm2.498-6.75h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007v-.008zm2.504-6.75h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008v-.008zm1.498 2.25h.008v.008h-.008v-.008zm-1.498-6.75h.008v.008h-.008V18zM15.75 15.75h.008v.008h-.008v-.008zm0 2.25h.007v.008h-.007v-.008zM15 9.75a.75.75 0 00-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 00.75-.75V10.5a.75.75 0 00-.75-.75H15zM4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15A2.25 2.25 0 002.25 6.75v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.5-4.875h4.125a1.125 1.125 0 010 2.25H12a1.125 1.125 0 010-2.25z" />
     </svg>
   );
 }

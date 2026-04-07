@@ -2062,8 +2062,35 @@ export interface ClientCommunication {
   status: string;
   resend_message_id: string | null;
   metadata: Record<string, unknown> | null;
+  thread_id: string | null;
+  thread_type: string | null;
+  thread_year: number | null;
+  thread_quarter: number | null;
+  open_items: OpenItemData[] | null;
+  open_items_resolved: Record<string, unknown>[] | null;
   sent_at: string;
   created_at: string;
+}
+
+export interface OpenItemData {
+  question: string;
+  asked_in_email_id: string;
+  asked_date: string;
+  status: "open" | "resolved" | "superseded";
+  resolved_in_email_id: string | null;
+  resolved_date: string | null;
+}
+
+export interface QuarterlyEstimateDraftResponse {
+  subject: string;
+  body_html: string;
+  body_text: string;
+  thread_id: string;
+  thread_type: string;
+  thread_year: number;
+  thread_quarter: number;
+  open_items_from_prior: { question: string; status: string }[];
+  financial_context_used: Record<string, unknown>[];
 }
 
 export interface EmailTemplate {
@@ -2099,6 +2126,10 @@ export interface CommunicationSendRequest {
   template_id?: string;
   follow_up_days?: number;
   metadata?: Record<string, unknown>;
+  thread_id?: string;
+  thread_type?: string;
+  thread_year?: number;
+  thread_quarter?: number;
 }
 
 export interface CommunicationSendResponse {
@@ -2201,6 +2232,22 @@ export function createCommunicationsApi(getToken: GetToken, orgId?: string) {
         method: "PATCH",
         body: JSON.stringify({ scheduling_url: url }),
       });
+    },
+
+    draftQuarterlyEstimate(clientId: string, taxYear: number, quarter: number) {
+      return f<QuarterlyEstimateDraftResponse>(
+        `/clients/${clientId}/communications/draft-quarterly-estimate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ tax_year: taxYear, quarter }),
+        },
+      );
+    },
+
+    getThreadHistory(clientId: string, threadId: string) {
+      return f<ClientCommunication[]>(
+        `/clients/${clientId}/communications/thread/${threadId}`,
+      );
     },
   };
 }
