@@ -32,6 +32,8 @@ from app.models.client_communication import ClientCommunication
 from app.models.follow_up_reminder import FollowUpReminder
 from app.models.extension_monitoring_rule import ExtensionMonitoringRule
 from app.models.client_financial_metric import ClientFinancialMetric
+from app.models.journal_entry import JournalEntry
+from app.models.profile_flag_history import ProfileFlagHistory
 
 __all__ = [
     "User",
@@ -67,4 +69,6 @@ __all__ = [
     "FollowUpReminder",
     "ExtensionMonitoringRule",
     "ClientFinancialMetric",
+    "JournalEntry",
+    "ProfileFlagHistory",
 ]
