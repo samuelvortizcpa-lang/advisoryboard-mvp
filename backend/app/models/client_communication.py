@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +57,16 @@ class ClientCommunication(Base):
     metadata_: Mapped[Optional[dict]] = mapped_column(
         "metadata", JSONB, nullable=True
     )
+
+    # Threading
+    thread_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    thread_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    thread_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    thread_quarter: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    open_items: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    open_items_resolved: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
 
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

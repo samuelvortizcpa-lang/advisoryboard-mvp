@@ -34,10 +34,41 @@ class CommunicationResponse(BaseModel):
     status: str
     resend_message_id: Optional[str]
     metadata: Optional[Dict[str, Any]] = Field(None, alias="metadata_")
+    thread_id: Optional[UUID] = None
+    thread_type: Optional[str] = None
+    thread_year: Optional[int] = None
+    thread_quarter: Optional[int] = None
+    open_items: Optional[List[Dict[str, Any]]] = None
+    open_items_resolved: Optional[List[Dict[str, Any]]] = None
     sent_at: datetime
     created_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class OpenItem(BaseModel):
+    """A tracked question or item from an email awaiting response."""
+
+    question: str
+    asked_in_email_id: UUID
+    asked_date: datetime
+    status: str = Field("open", pattern="^(open|resolved|superseded)$")
+    resolved_in_email_id: Optional[UUID] = None
+    resolved_date: Optional[datetime] = None
+
+
+class ThreadSummary(BaseModel):
+    """Summary of a communication thread."""
+
+    thread_id: UUID
+    thread_type: Optional[str] = None
+    thread_year: Optional[int] = None
+    thread_quarter: Optional[int] = None
+    email_count: int
+    open_items_count: int
+    last_email_date: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class FollowUpReminderResponse(BaseModel):
