@@ -247,5 +247,25 @@ async def update_flags(
     """Partial update of the client's tax strategy profile flags."""
     check_client_access(auth, client_id, db)
     flags_dict = body.model_dump(exclude_unset=True)
+
+    # Capture old values before update for change logging
+    from app.models.client import Client
+
+    client_before = db.query(Client).filter(Client.id == client_id).first()
+    old_values = {k: getattr(client_before, k, None) for k in flags_dict}
+
     client = strategy_service.update_profile_flags(db, client_id, flags_dict)
+
+    # Log each changed flag
+    from app.services.journal_service import log_profile_flag_change
+
+    for flag_name, new_value in flags_dict.items():
+        old_value = old_values.get(flag_name)
+        if old_value != new_value:
+            log_profile_flag_change(
+                db, client_id, flag_name,
+                old_value=old_value, new_value=new_value,
+                changed_by=auth.user_id, source="manual",
+            )
+
     return ProfileFlagsResponse.model_validate(client)

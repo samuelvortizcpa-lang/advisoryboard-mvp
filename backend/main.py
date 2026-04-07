@@ -41,6 +41,7 @@ from app.api.notifications import router as notifications_router
 from app.api.users import router as users_router
 from app.api.context import router as context_router
 from app.api.financials import router as financials_router
+from app.api.journal import router as journal_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -253,3 +254,4 @@ app.include_router(notifications_router,       prefix="/api", tags=["notificatio
 app.include_router(users_router,               prefix="/api", tags=["users"])
 app.include_router(context_router,             prefix="/api", tags=["context"])
 app.include_router(financials_router,          prefix="/api", tags=["financials"])
+app.include_router(journal_router,             prefix="/api", tags=["journal"])

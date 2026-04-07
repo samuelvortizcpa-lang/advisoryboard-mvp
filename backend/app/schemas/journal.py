@@ -42,12 +42,12 @@ class JournalEntryResponse(BaseModel):
     effective_date: Optional[date] = None
     source_type: Optional[str] = None
     source_id: Optional[UUID] = None
-    metadata: Optional[dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = Field(None, validation_alias="metadata_")
     is_pinned: bool
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class JournalFeedResponse(BaseModel):
