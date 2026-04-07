@@ -30,6 +30,8 @@ from app.models.client_communication import ClientCommunication
 from app.models.client_financial_metric import ClientFinancialMetric
 from app.models.client_strategy_status import ClientStrategyStatus
 from app.models.document import Document
+from app.models.client_engagement import ClientEngagement
+from app.models.engagement_template import EngagementTemplate
 from app.models.journal_entry import JournalEntry
 from app.models.profile_flag_history import ProfileFlagHistory
 from app.models.tax_strategy import TaxStrategy
@@ -217,7 +219,14 @@ async def assemble_context(
             include_pinned=False,
         )
 
-    # TODO: Feature 4 — populate ctx.engagement_calendar
+    # Populate engagement calendar for purposes that benefit from deadline awareness
+    if purpose in (
+        ContextPurpose.CHAT,
+        ContextPurpose.EMAIL_DRAFT,
+        ContextPurpose.QUARTERLY_ESTIMATE,
+        ContextPurpose.BRIEF,
+    ):
+        ctx.engagement_calendar = _fetch_engagement_calendar(db, client_id)
 
     # 3. Trim to budget -------------------------------------------------------
     budget = TOKEN_BUDGETS.get(purpose, TOKEN_BUDGETS[ContextPurpose.GENERAL])
@@ -574,6 +583,87 @@ def _fetch_profile_flag_history(
     ] if rows else []
 
 
+def _fetch_engagement_calendar(
+    db: Session,
+    client_id: UUID,
+    days_ahead: int = 90,
+) -> list[dict[str, Any]] | None:
+    """Calculate upcoming engagement deadlines for the next N days."""
+    from datetime import date, timedelta
+    import calendar as cal_mod
+
+    today = date.today()
+    window_end = today + timedelta(days=days_ahead)
+    current_year = today.year
+
+    engagements = (
+        db.query(ClientEngagement)
+        .options(
+            joinedload(ClientEngagement.template).joinedload(EngagementTemplate.tasks),
+        )
+        .filter(
+            ClientEngagement.client_id == client_id,
+            ClientEngagement.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
+
+    if not engagements:
+        return None
+
+    deadlines: list[dict[str, Any]] = []
+
+    for eng in engagements:
+        template = eng.template
+        if not template or not template.is_active:
+            continue
+
+        overrides = eng.custom_overrides or {}
+
+        for task in template.tasks:
+            for year in [current_year, current_year + 1]:
+                if year < eng.start_year:
+                    continue
+
+                # Calculate deadline(s) for this task in this year
+                override_key = str(task.id)
+                if override_key in overrides:
+                    ov = overrides[override_key]
+                    if isinstance(ov, dict) and "month" in ov and "day" in ov:
+                        try:
+                            task_deadlines = [date(year, ov["month"], ov["day"])]
+                        except (ValueError, TypeError):
+                            continue
+                    else:
+                        continue
+                elif task.month is not None and task.day is not None:
+                    try:
+                        max_day = cal_mod.monthrange(year, task.month)[1]
+                        actual_day = min(task.day, max_day)
+                        task_deadlines = [date(year, task.month, actual_day)]
+                    except (ValueError, TypeError):
+                        continue
+                else:
+                    continue
+
+                for deadline in task_deadlines:
+                    if today <= deadline <= window_end:
+                        deadlines.append({
+                            "task": task.task_name,
+                            "date": deadline.isoformat(),
+                            "priority": task.priority,
+                            "category": task.category,
+                            "template": template.name,
+                        })
+
+    if not deadlines:
+        return None
+
+    # Sort by date
+    deadlines.sort(key=lambda d: d["date"])
+    return deadlines
+
+
 # ---------------------------------------------------------------------------
 # Token estimation & budget trimming
 # ---------------------------------------------------------------------------
@@ -616,6 +706,8 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
             parts.append(json.dumps(ctx.journal_entries, default=str))
         if ctx.communication_history:
             parts.append(json.dumps(ctx.communication_history, default=str))
+        if ctx.engagement_calendar:
+            parts.append(json.dumps(ctx.engagement_calendar, default=str))
         if ctx.documents_summary:
             parts.append(json.dumps(ctx.documents_summary, default=str))
         return _estimate_tokens("".join(parts))
@@ -623,6 +715,7 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
     # Trim in reverse priority order
     trimmable = [
         "documents_summary",
+        "engagement_calendar",
         "communication_history",
         "journal_entries",
         "strategy_status",
@@ -823,6 +916,19 @@ def format_context_for_prompt(
                 line += f": {content}"
             journal_lines.append(line)
         sections.append("\n".join(journal_lines))
+
+    # --- Engagement calendar ------------------------------------------------
+    if ctx.engagement_calendar:
+        cal_lines = ["=== UPCOMING ENGAGEMENT DEADLINES ==="]
+        for item in ctx.engagement_calendar:
+            parts = [f"• {item['task']}"]
+            if item.get("priority"):
+                parts.append(f"[{item['priority'].upper()}]")
+            parts.append(f"due {item['date']}")
+            if item.get("template"):
+                parts.append(f"({item['template']})")
+            cal_lines.append(" ".join(parts))
+        sections.append("\n".join(cal_lines))
 
     # --- Documents summary --------------------------------------------------
     if ctx.documents_summary:
