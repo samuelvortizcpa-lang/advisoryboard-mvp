@@ -11,6 +11,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.client import Client
     from app.models.document import Document
+    from app.models.engagement_template_task import EngagementTemplateTask
 
 
 class ActionItem(Base):
@@ -63,7 +64,13 @@ class ActionItem(Base):
     # Provenance
     created_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="ai_extracted"
+        String(30), nullable=False, server_default="ai_extracted"
+    )
+
+    engagement_task_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("engagement_template_tasks.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     extracted_at: Mapped[Optional[datetime]] = mapped_column(
@@ -98,6 +105,9 @@ class ActionItem(Base):
     client: Mapped["Client"] = relationship(
         "Client",
         back_populates="action_items",
+    )
+    engagement_task: Mapped[Optional["EngagementTemplateTask"]] = relationship(
+        "EngagementTemplateTask",
     )
 
     def __repr__(self) -> str:

@@ -169,6 +169,10 @@ async def _startup_log() -> None:
     from app.services.deadline_reminder_service import start_deadline_scheduler
     start_deadline_scheduler()
 
+    # ── Engagement engine scheduler ──────────────────────────────────────
+    from app.services.engagement_engine import start_engagement_scheduler
+    start_engagement_scheduler()
+
     # ── Fix stuck documents on startup ──────────────────────────────────
     try:
         from sqlalchemy import text as sa_text
@@ -206,8 +210,10 @@ async def _shutdown() -> None:
     from app.services.auto_sync_service import stop_scheduler
     from app.services.background_processor import shutdown_executor
     from app.services.deadline_reminder_service import stop_deadline_scheduler
+    from app.services.engagement_engine import stop_engagement_scheduler
     stop_scheduler()
     stop_deadline_scheduler()
+    stop_engagement_scheduler()
     shutdown_executor()
 
 
