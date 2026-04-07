@@ -189,6 +189,34 @@ def _check_supersede(db: Session, new_doc: Document) -> None:
                     new_doc.document_period,
                 )
 
+                # Journal entry for amended return filing
+                try:
+                    from app.services.journal_service import create_auto_entry
+
+                    subtype = new_doc.document_subtype or "return"
+                    period = new_doc.document_period or "unknown year"
+                    create_auto_entry(
+                        db=db,
+                        client_id=new_doc.client_id,
+                        user_id="system",
+                        entry_type="financial_change",
+                        category="compliance",
+                        title=f"Amended {period} return ({subtype}) filed",
+                        content=(
+                            f"Amended return ({subtype}) supersedes original "
+                            f"({original.document_subtype}) for period {period}."
+                        ),
+                        source_type="document",
+                        source_id=new_doc.id,
+                        metadata={
+                            "original_document_id": str(original.id),
+                            "amends_subtype": new_doc.amends_subtype,
+                            "period": period,
+                        },
+                    )
+                except Exception:
+                    logger.warning("Journal entry for amendment failed (non-fatal)", exc_info=True)
+
         # Also check for prior amendments (e.g., 1040X #1 superseded by #2)
         prior_amendment = (
             db.query(Document)
@@ -495,6 +523,49 @@ async def process_document(db: Session, document: Document) -> None:
                     "RAG: page image processing failed for %s (non-fatal): %s",
                     doc_label, img_exc,
                 )
+
+        # 10. Journal entry for document upload (best-effort)
+        try:
+            from app.services.journal_service import create_auto_entry
+
+            subtype = document.document_subtype or document.document_type or "document"
+            period = document.document_period or ""
+            period_label = f" for {period}" if period else ""
+            title = f"New document uploaded: {subtype}{period_label}"
+
+            parts = []
+            if document.document_type:
+                parts.append(f"Type: {document.document_type}")
+            if document.document_subtype:
+                parts.append(f"Subtype: {subtype}")
+            if period:
+                parts.append(f"Period: {period}")
+            if document.classification_confidence:
+                parts.append(f"Classification confidence: {document.classification_confidence:.0%}")
+            content = "\n".join(parts) if parts else None
+
+            create_auto_entry(
+                db=db,
+                client_id=document.client_id,
+                user_id=document.owner_id or "system",
+                entry_type="document_insight",
+                category="general",
+                title=title,
+                content=content,
+                source_type="document",
+                source_id=document.id,
+                metadata={
+                    "filename": document.filename,
+                    "document_type": document.document_type,
+                    "document_subtype": document.document_subtype,
+                    "document_period": period or None,
+                },
+            )
+        except Exception as journal_exc:
+            logger.warning(
+                "RAG: journal entry failed for %s (non-fatal): %s",
+                doc_label, journal_exc,
+            )
 
     except Exception as exc:
         logger.error("RAG: failed to process %s: %s", doc_label, exc)

@@ -125,6 +125,27 @@ def send_client_email(
     db.add(comm)
     db.commit()
     db.refresh(comm)
+
+    # Journal entry for sent email
+    if email_status == "sent":
+        try:
+            from app.services.journal_service import create_auto_entry
+
+            create_auto_entry(
+                db=db,
+                client_id=client_id,
+                user_id=user_id,
+                entry_type="communication",
+                category="general",
+                title=f"Email sent: {subject}",
+                content=(body_text or "")[:200] or None,
+                source_type="email",
+                source_id=comm.id,
+                metadata={"recipient": recipient_email, "subject": subject},
+            )
+        except Exception:
+            logger.warning("Journal entry for communication failed (non-fatal)", exc_info=True)
+
     return comm
 
 

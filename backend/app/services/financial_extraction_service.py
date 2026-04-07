@@ -191,6 +191,24 @@ async def extract_financial_metrics(
         logger.info("Financial extraction: no metrics returned for %s", document_id)
         return []
 
+    # Snapshot existing values before upsert to detect changes
+    existing_values: dict[str, Decimal | None] = {}
+    for entry in raw_metrics:
+        mname = entry.get("metric_name")
+        if mname:
+            existing_row = (
+                db.query(ClientFinancialMetric.metric_value)
+                .filter(
+                    ClientFinancialMetric.client_id == client_id,
+                    ClientFinancialMetric.tax_year == tax_year,
+                    ClientFinancialMetric.metric_name == mname,
+                    ClientFinancialMetric.form_source == (entry.get("form_source") or form_source),
+                )
+                .first()
+            )
+            if existing_row is not None:
+                existing_values[mname] = existing_row[0]
+
     # Upsert into database
     results = _upsert_metrics(
         db,
@@ -207,6 +225,15 @@ async def extract_financial_metrics(
         len(results), document.filename, form_source, tax_year,
     )
 
+    # Journal entry for changed metrics (best-effort)
+    try:
+        if existing_values:
+            _journal_financial_changes(
+                db, client_id, document_id, tax_year, results, existing_values,
+            )
+    except Exception:
+        logger.warning("Financial journal entry failed (non-fatal)", exc_info=True)
+
     # Run threshold checks and profile flag suggestions (best-effort)
     try:
         check_financial_thresholds(db, client_id, tax_year, results)
@@ -219,6 +246,90 @@ async def extract_financial_metrics(
         logger.warning("Profile flag suggestion check failed (non-fatal)", exc_info=True)
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Journal helper
+# ---------------------------------------------------------------------------
+
+
+_METRIC_CATEGORY_MAP = {
+    "income": "income",
+    "deductions": "deductions",
+    "credits": "deductions",
+    "tax": "income",
+    "payments": "income",
+    "assets": "business",
+    "liabilities": "business",
+}
+
+
+def _journal_financial_changes(
+    db: Session,
+    client_id: UUID,
+    document_id: UUID,
+    tax_year: int,
+    results: list[ClientFinancialMetric],
+    existing_values: dict[str, Decimal | None],
+) -> None:
+    """Create a journal entry summarizing metrics that changed value."""
+    from app.services.journal_service import create_auto_entry
+
+    changes: list[dict[str, Any]] = []
+    for row in results:
+        if row.metric_name not in existing_values:
+            continue  # newly created, not an update
+        old_val = existing_values[row.metric_name]
+        new_val = row.metric_value
+        if old_val == new_val:
+            continue
+        change_pct = None
+        if old_val and old_val != 0 and new_val is not None:
+            change_pct = round(float((new_val - old_val) / abs(old_val) * 100), 1)
+        changes.append({
+            "metric": row.metric_name,
+            "old": float(old_val) if old_val is not None else None,
+            "new": float(new_val) if new_val is not None else None,
+            "change_pct": change_pct,
+        })
+
+    if not changes:
+        return
+
+    # Build title from the first (most important) change
+    first = changes[0]
+    old_fmt = f"${first['old']:,.0f}" if first["old"] is not None else "N/A"
+    new_fmt = f"${first['new']:,.0f}" if first["new"] is not None else "N/A"
+    label = first["metric"].replace("_", " ").upper()
+    title = f"{label} changed from {old_fmt} to {new_fmt} for tax year {tax_year}"
+    if len(changes) > 1:
+        title = f"{len(changes)} financial metrics updated for tax year {tax_year}"
+
+    lines = []
+    for ch in changes:
+        old_s = f"${ch['old']:,.0f}" if ch["old"] is not None else "N/A"
+        new_s = f"${ch['new']:,.0f}" if ch["new"] is not None else "N/A"
+        pct = f" ({ch['change_pct']:+.1f}%)" if ch["change_pct"] is not None else ""
+        lines.append(f"• {ch['metric'].replace('_', ' ')}: {old_s} → {new_s}{pct}")
+    content = "\n".join(lines)
+
+    # Use the first metric's category for the journal category
+    first_category = _METRIC_CATEGORY_MAP.get(
+        results[0].metric_category if results else "income", "general",
+    )
+
+    create_auto_entry(
+        db=db,
+        client_id=client_id,
+        user_id="system",
+        entry_type="financial_change",
+        category=first_category,
+        title=title,
+        content=content,
+        source_type="document",
+        source_id=document_id,
+        metadata={"changes": changes, "tax_year": tax_year},
+    )
 
 
 # ---------------------------------------------------------------------------

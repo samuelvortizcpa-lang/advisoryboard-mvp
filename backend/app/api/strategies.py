@@ -4,6 +4,7 @@ Tax Strategy Matrix endpoints.
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from uuid import UUID
 
@@ -31,6 +32,8 @@ from app.services import strategy_service
 from app.services.auth_context import AuthContext, check_client_access, get_auth
 from app.services.strategy_ai_service import apply_suggestions, generate_strategy_suggestions
 from app.services.strategy_report_service import generate_strategy_report
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -208,6 +211,21 @@ async def update_status(
 ):
     """Upsert the status of a single strategy for this client + year."""
     check_client_access(auth, client_id, db)
+
+    # Capture old status before update for journal logging
+    from app.models.client_strategy_status import ClientStrategyStatus
+
+    old_row = (
+        db.query(ClientStrategyStatus)
+        .filter(
+            ClientStrategyStatus.client_id == client_id,
+            ClientStrategyStatus.strategy_id == strategy_id,
+            ClientStrategyStatus.tax_year == body.tax_year,
+        )
+        .first()
+    )
+    old_status = old_row.status if old_row else None
+
     row = strategy_service.update_strategy_status(
         db,
         client_id=client_id,
@@ -218,6 +236,44 @@ async def update_status(
         estimated_impact=body.estimated_impact,
         user_id=auth.user_id,
     )
+
+    # Journal entry for strategy status change
+    if old_status != body.status:
+        try:
+            from app.services.journal_service import create_auto_entry
+
+            strat = db.query(TaxStrategy).filter(TaxStrategy.id == strategy_id).first()
+            strat_name = strat.name if strat else "Unknown strategy"
+            strat_category = (strat.category or "general").lower().replace(" ", "_") if strat else "general"
+
+            title = f"{strat_name} status changed to {body.status.replace('_', ' ').title()}"
+            parts = []
+            if body.notes:
+                parts.append(f"Notes: {body.notes}")
+            if body.estimated_impact is not None:
+                parts.append(f"Estimated impact: ${body.estimated_impact:,.0f}")
+            content = "\n".join(parts) if parts else None
+
+            create_auto_entry(
+                db=db,
+                client_id=client_id,
+                user_id=auth.user_id,
+                entry_type="strategy_change",
+                category=strat_category,
+                title=title,
+                content=content,
+                metadata={
+                    "strategy_name": strat_name,
+                    "strategy_id": str(strategy_id),
+                    "old_status": old_status,
+                    "new_status": body.status,
+                    "estimated_impact": body.estimated_impact,
+                    "tax_year": body.tax_year,
+                },
+            )
+        except Exception:
+            logger.warning("Journal entry for strategy change failed (non-fatal)", exc_info=True)
+
     return {
         "id": str(row.id),
         "client_id": str(row.client_id),
