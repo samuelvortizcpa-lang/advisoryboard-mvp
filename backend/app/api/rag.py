@@ -34,6 +34,11 @@ from app.models.document_page_image import DocumentPageImage
 from app.schemas.chat_message import ChatHistoryResponse, ChatMessageResponse
 from app.services import rag_service, storage_service
 from app.services.auth_context import AuthContext, check_client_access, get_auth
+from app.services.session_memory_service import (
+    attach_message_to_session,
+    embed_qa_pair,
+    get_or_create_session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -384,19 +389,25 @@ async def chat(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty."
         )
 
+    # Session memory: get or create active session
+    session = get_or_create_session(client_id, auth.user_id, auth.org_id, db)
+
     result = await rag_service.answer_question(
         db, client_id=client_id, question=request.question,
         user_id=auth.user_id,
     )
 
     # Persist user question
-    db.add(ChatMessage(
+    user_msg = ChatMessage(
         client_id=client_id,
         user_id=auth.user_id,
         role="user",
         content=request.question,
         sources=None,
-    ))
+    )
+    db.add(user_msg)
+    db.flush()
+    attach_message_to_session(session.id, user_msg.id, "user", db)
 
     # Generate signed URLs for page image sources and build persisted data
     sources_data = []
@@ -439,15 +450,37 @@ async def chat(
                 )
         response_sources.append(response_source)
 
-    db.add(ChatMessage(
+    assistant_msg = ChatMessage(
         client_id=client_id,
         user_id=auth.user_id,
         role="assistant",
         content=result["answer"],
         sources=sources_data or None,
-    ))
+    )
+    db.add(assistant_msg)
+    db.flush()
+    attach_message_to_session(session.id, assistant_msg.id, "assistant", db)
+
+    # Compute pair_index: count of assistant messages in this session so far
+    pair_idx = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.session_id == session.id,
+            ChatMessage.role == "assistant",
+        )
+        .count()
+        - 1  # zero-based
+    )
 
     db.commit()
+
+    # Embed Q/A pair (fire-and-forget — fast ~200ms call)
+    asyncio.create_task(
+        embed_qa_pair(
+            session.id, request.question, result["answer"],
+            assistant_msg.id, pair_idx, db,
+        )
+    )
 
     return ChatResponse(
         answer=result["answer"],

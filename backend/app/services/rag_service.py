@@ -1423,17 +1423,54 @@ async def answer_question_stream(
 
         sources.append(source)
 
-    # Persist chat messages
+    # Persist chat messages with session tracking
     from app.models.chat_message import ChatMessage
-    db.add(ChatMessage(
+    from app.services.session_memory_service import (
+        attach_message_to_session,
+        embed_qa_pair,
+        get_or_create_session,
+    )
+
+    # Resolve org_id from client
+    _org_id = db_client.org_id if db_client else None
+
+    session = get_or_create_session(client_id, user_id or "", _org_id, db)
+
+    user_msg = ChatMessage(
         client_id=client_id, user_id=user_id, role="user",
         content=question, sources=None,
-    ))
-    db.add(ChatMessage(
+    )
+    db.add(user_msg)
+    db.flush()
+    attach_message_to_session(session.id, user_msg.id, "user", db)
+
+    assistant_msg = ChatMessage(
         client_id=client_id, user_id=user_id, role="assistant",
         content=full_answer, sources=sources or None,
-    ))
+    )
+    db.add(assistant_msg)
+    db.flush()
+    attach_message_to_session(session.id, assistant_msg.id, "assistant", db)
+
+    pair_idx = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.session_id == session.id,
+            ChatMessage.role == "assistant",
+        )
+        .count()
+        - 1
+    )
+
     db.commit()
+
+    # Embed Q/A pair (fire-and-forget)
+    asyncio.create_task(
+        embed_qa_pair(
+            session.id, question, full_answer,
+            assistant_msg.id, pair_idx, db,
+        )
+    )
 
     # Send final event with metadata
     yield f'data: {_json.dumps({"type": "done", "sources": sources, "confidence_tier": confidence_tier, "confidence_score": round(best_score, 2), "model_used": model_used, "query_type": query_type, "quota_remaining": quota_remaining, "quota_warning": quota_warning})}\n\n'
