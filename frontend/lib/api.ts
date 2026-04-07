@@ -2758,6 +2758,109 @@ export function createSessionsApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Contradictions ──────────────────────────────────────────────────────────
+
+export interface DataContradiction {
+  id: string;
+  client_id: string;
+  user_id: string;
+  org_id: string | null;
+  contradiction_type: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  description: string;
+  field_name: string | null;
+  value_a: number | null;
+  value_b: number | null;
+  source_a_type: string | null;
+  source_a_id: string | null;
+  source_a_label: string | null;
+  source_b_type: string | null;
+  source_b_id: string | null;
+  source_b_label: string | null;
+  tax_year: number | null;
+  status: "open" | "resolved" | "dismissed";
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  source_a_document_name?: string | null;
+  source_b_document_name?: string | null;
+}
+
+export interface ContradictionListResponse {
+  contradictions: DataContradiction[];
+  total: number;
+  open_count: number;
+  page: number;
+  per_page: number;
+}
+
+export interface ContradictionScanResult {
+  new_contradictions: number;
+  existing_open: number;
+}
+
+export interface ContradictionSummaryClient {
+  client_id: string;
+  client_name: string;
+  open_count: number;
+  high_count: number;
+}
+
+export interface ContradictionDashboardSummary {
+  clients: ContradictionSummaryClient[];
+  total_open: number;
+}
+
+export function createContradictionsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    list(
+      clientId: string,
+      filters?: { status?: string; severity?: string; tax_year?: number; page?: number; per_page?: number },
+    ) {
+      const params = new URLSearchParams();
+      if (filters?.status) params.set("status", filters.status);
+      if (filters?.severity) params.set("severity", filters.severity);
+      if (filters?.tax_year) params.set("tax_year", String(filters.tax_year));
+      if (filters?.page) params.set("page", String(filters.page));
+      if (filters?.per_page) params.set("per_page", String(filters.per_page));
+      return f<ContradictionListResponse>(
+        `/clients/${clientId}/contradictions?${params}`
+      );
+    },
+
+    detail(clientId: string, contradictionId: string) {
+      return f<DataContradiction>(
+        `/clients/${clientId}/contradictions/${contradictionId}`
+      );
+    },
+
+    update(
+      clientId: string,
+      contradictionId: string,
+      data: { status: "resolved" | "dismissed"; resolution_note?: string },
+    ) {
+      return f<DataContradiction>(
+        `/clients/${clientId}/contradictions/${contradictionId}`,
+        { method: "PATCH", body: JSON.stringify(data) },
+      );
+    },
+
+    scan(clientId: string) {
+      return f<ContradictionScanResult>(
+        `/clients/${clientId}/contradictions/scan`,
+        { method: "POST" },
+      );
+    },
+
+    summary() {
+      return f<ContradictionDashboardSummary>(`/contradictions/summary`);
+    },
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.

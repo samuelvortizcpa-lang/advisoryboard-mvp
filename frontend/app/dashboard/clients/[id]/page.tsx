@@ -50,6 +50,7 @@ import StrategyChecklist from "@/components/strategies/StrategyChecklist";
 import Timeline from "@/components/timeline/Timeline";
 import JournalFeed from "@/components/journal/JournalFeed";
 import HelpTooltip from "@/components/ui/HelpTooltip";
+import ContradictionList from "@/components/contradictions/ContradictionList";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,7 @@ const ENTITY_TYPES = [
   "Other",
 ];
 
-type TabId = "overview" | "documents" | "actions" | "chat" | "conversations" | "timeline" | "strategies" | "journal" | "access";
+type TabId = "overview" | "documents" | "actions" | "chat" | "conversations" | "timeline" | "strategies" | "journal" | "data-quality" | "access";
 
 const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -76,6 +77,7 @@ const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "conversations", label: "Conversations" },
   { id: "timeline", label: "Timeline" },
+  { id: "data-quality", label: "Data Quality" },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -203,6 +205,10 @@ function ClientDetailContent() {
   const [pendingActionsCount, setPendingActionsCount] = useState<number | null>(null);
   const [nextDeadline, setNextDeadline] = useState<string | null | undefined>(undefined);
   const [lastChatDate, setLastChatDate] = useState<string | null | undefined>(undefined);
+
+  // ── Contradiction state ───────────────────────────────────────────────────
+  const [contradictionCount, setContradictionCount] = useState<number>(0);
+  const [hasHighContradiction, setHasHighContradiction] = useState(false);
 
   // ── Fetch all data on mount ─────────────────────────────────────────────────
   useEffect(() => {
@@ -905,6 +911,15 @@ function ClientDetailContent() {
                       ? pendingActionsCount
                       : tab.id === "strategies" && implementedCount !== null && implementedCount > 0
                       ? implementedCount
+                      : tab.id === "data-quality" && contradictionCount > 0
+                      ? contradictionCount
+                      : null;
+
+                  const badgeColor =
+                    tab.id === "data-quality" && contradictionCount > 0
+                      ? hasHighContradiction
+                        ? "bg-red-100 text-red-600"
+                        : "bg-yellow-100 text-yellow-700"
                       : null;
 
                   return (
@@ -921,7 +936,9 @@ function ClientDetailContent() {
                       {badge !== null && (
                         <span
                           className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${
-                            isActive
+                            badgeColor
+                              ? badgeColor
+                              : isActive
                               ? "bg-blue-100 text-blue-600"
                               : "bg-gray-100 text-gray-500"
                           }`}
@@ -1251,6 +1268,17 @@ function ClientDetailContent() {
                   onActionItemClick={() => navigateToTab("actions")}
                 />
               </div>
+            )}
+
+            {/* ── Data Quality ──────────────────────────────────────────── */}
+            {activeTab === "data-quality" && (
+              <ContradictionList
+                clientId={id}
+                onCountChange={(count, hasHigh) => {
+                  setContradictionCount(count);
+                  setHasHighContradiction(hasHigh);
+                }}
+              />
             )}
 
             {/* ── Team Access ───────────────────────────────────────────── */}

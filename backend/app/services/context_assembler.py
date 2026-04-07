@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.action_item import ActionItem
@@ -99,6 +99,7 @@ class ClientContext:
     strategy_status: dict[str, Any] | None = None
     engagement_calendar: list[dict[str, Any]] | None = None  # TODO: Feature 4
     session_history: list[dict[str, Any]] = field(default_factory=list)
+    contradictions: list[dict[str, Any]] = field(default_factory=list)
     rag_chunks: list[dict[str, Any]] | None = None
 
 
@@ -241,6 +242,12 @@ async def assemble_context(
         )
     except Exception:
         logger.warning("Session history gathering failed; continuing without it", exc_info=True)
+
+    # Populate open contradictions for ALL purposes
+    try:
+        ctx.contradictions = _gather_contradictions(db, client_id)
+    except Exception:
+        logger.warning("Contradiction gathering failed; continuing without it", exc_info=True)
 
     # 3. Trim to budget -------------------------------------------------------
     budget = TOKEN_BUDGETS.get(purpose, TOKEN_BUDGETS[ContextPurpose.GENERAL])
@@ -679,6 +686,51 @@ def _fetch_engagement_calendar(
 
 
 # ---------------------------------------------------------------------------
+# Contradictions
+# ---------------------------------------------------------------------------
+
+
+def _gather_contradictions(
+    db: Session,
+    client_id: UUID,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Fetch open data contradictions for inclusion in AI context."""
+    from app.models.data_contradiction import DataContradiction
+
+    rows = (
+        db.query(DataContradiction)
+        .filter(
+            DataContradiction.client_id == client_id,
+            DataContradiction.status == "open",
+        )
+        .order_by(
+            # high first
+            case(
+                (DataContradiction.severity == "high", 0),
+                (DataContradiction.severity == "medium", 1),
+                else_=2,
+            ),
+            DataContradiction.created_at.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "title": r.title,
+            "severity": r.severity,
+            "type": r.contradiction_type,
+            "field": r.field_name,
+            "description": r.description,
+            "tax_year": r.tax_year,
+        }
+        for r in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Session history (prior advisory conversations)
 # ---------------------------------------------------------------------------
 
@@ -949,6 +1001,17 @@ def format_context_for_prompt(
     in an AI prompt.
     """
     sections: list[str] = []
+
+    # --- Data contradictions (FIRST — high priority) ------------------------
+    if ctx.contradictions:
+        contra_lines = ["=== DATA CONTRADICTIONS (REQUIRES ATTENTION) ==="]
+        for c in ctx.contradictions:
+            sev = c.get("severity", "").upper()
+            title = c.get("title", "")
+            contra_lines.append(f"⚠ [{sev}] {title}")
+            if c.get("description"):
+                contra_lines.append(f"  {c['description']}")
+        sections.append("\n".join(contra_lines))
 
     # --- Client profile (always present) ------------------------------------
     p = ctx.client_profile

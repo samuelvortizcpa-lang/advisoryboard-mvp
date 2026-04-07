@@ -12,6 +12,7 @@ Alert types:
 - quarterly_estimate_due:        quarterly estimate prep task with upcoming deadline
 - follow_up_due:                 follow-up reminder whose remind_at has passed
 - session_follow_up:             chat session with decisions mentioning follow-up keywords
+- contradiction:                 open data contradiction with high or medium severity
 """
 
 from __future__ import annotations
@@ -443,6 +444,36 @@ def _compute_alerts_uncached(
             "message": f"Session follow-up suggested for {cname}: \"{decision_preview}\"",
             "related_id": str(sess.id),
             "created_at": (sess.ended_at or sess.started_at).isoformat(),
+        })
+
+    # ── Q12: Open data contradictions (high / medium) ───────────────
+    from app.models.data_contradiction import DataContradiction
+
+    open_contradictions = (
+        db.query(DataContradiction)
+        .filter(
+            DataContradiction.client_id.in_(client_ids),
+            DataContradiction.status == "open",
+            DataContradiction.severity.in_(["high", "medium"]),
+        )
+        .order_by(DataContradiction.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    for c in open_contradictions:
+        if ("contradiction", c.id) in dismissed:
+            continue
+        cname = client_names.get(c.client_id, "Unknown")
+        severity = "warning" if c.severity == "high" else "info"
+        alerts.append({
+            "id": str(c.id),
+            "type": "contradiction",
+            "severity": severity,
+            "client_id": str(c.client_id),
+            "client_name": cname,
+            "message": f"Data contradiction for {cname}: {c.title}",
+            "related_id": str(c.id),
+            "created_at": c.created_at.isoformat(),
         })
 
     # Sort: critical first, then warning, then info; within same severity by date

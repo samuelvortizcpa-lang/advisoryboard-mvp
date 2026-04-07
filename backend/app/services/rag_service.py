@@ -90,6 +90,11 @@ Prior conversation awareness:
 - When the user references past discussions ("what did we talk about", "last time", "previously"), use the session history context to answer.
 - When making recommendations, note if they build on or contradict prior decisions.
 
+Data contradiction awareness:
+- When data contradictions are listed in the context, proactively mention them if relevant to the user's question.
+- For example, if the user asks about a metric that has a contradiction, flag the discrepancy and explain both values.
+- Suggest resolution steps when appropriate (e.g. "You may want to verify which source is correct").
+
 Context:
 {context}
 """

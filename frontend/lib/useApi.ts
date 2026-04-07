@@ -19,6 +19,7 @@ import {
   createDocumentsApi,
   createIntegrationsApi,
   createOrganizationsApi,
+  createContradictionsApi,
 } from "@/lib/api";
 
 /**
@@ -48,6 +49,7 @@ export function useApi() {
       documents: createDocumentsApi(getToken, orgId),
       integrations: createIntegrationsApi(getToken, orgId),
       organizations: createOrganizationsApi(getToken, orgId),
+      contradictions: createContradictionsApi(getToken, orgId),
     }),
     [getToken, orgId]
   );

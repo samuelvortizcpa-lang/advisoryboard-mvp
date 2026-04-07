@@ -50,6 +50,12 @@ any follow-ups that may be needed.
 If strategy status data is provided, note which strategies are implemented,
 recommended, or pending review. Flag any high-impact opportunities.
 
+## Data Quality
+If data contradictions are listed in the context, summarize them here.
+Note the severity, which metrics are affected, and recommend resolution steps.
+This section should appear before Risk Flags so the CPA is aware of data
+integrity issues before making decisions.
+
 ## Risk Flags
 Highlight any potential risks, compliance issues, approaching deadlines, or
 items that need urgent attention.
