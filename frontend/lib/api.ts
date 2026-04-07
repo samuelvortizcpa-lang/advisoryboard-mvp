@@ -2365,6 +2365,79 @@ export function createTooltipsApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Journal ────────────────────────────────────────────────────────────────
+
+export interface JournalEntry {
+  id: string;
+  client_id: string;
+  user_id: string;
+  entry_type: string;
+  category: string | null;
+  title: string;
+  content: string | null;
+  effective_date: string | null;
+  source_type: string | null;
+  source_id: string | null;
+  metadata: Record<string, unknown> | null;
+  is_pinned: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JournalFeedResponse {
+  entries: JournalEntry[];
+  total: number;
+}
+
+export interface JournalEntryCreateData {
+  title: string;
+  content?: string;
+  entry_type?: string;
+  category?: string;
+  effective_date?: string;
+  is_pinned?: boolean;
+}
+
+export interface JournalEntryUpdateData {
+  title?: string;
+  content?: string;
+  category?: string;
+  effective_date?: string;
+  is_pinned?: boolean;
+}
+
+export function createJournalApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    list(clientId: string, params?: Record<string, string>) {
+      const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+      return f<JournalFeedResponse>(`/clients/${clientId}/journal${qs}`);
+    },
+
+    create(clientId: string, data: JournalEntryCreateData) {
+      return f<JournalEntry>(`/clients/${clientId}/journal`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    update(entryId: string, data: JournalEntryUpdateData) {
+      return f<JournalEntry>(`/journal/${entryId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+
+    delete(entryId: string) {
+      return f<void>(`/journal/${entryId}`, { method: "DELETE" });
+    },
+
+    togglePin(entryId: string) {
+      return f<JournalEntry>(`/journal/${entryId}/pin`, { method: "PATCH" });
+    },
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.

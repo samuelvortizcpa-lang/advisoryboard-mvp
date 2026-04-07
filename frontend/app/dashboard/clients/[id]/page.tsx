@@ -42,6 +42,7 @@ import ConsentBanner from "@/components/consent/ConsentBanner";
 import ProfileFlagsRow from "@/components/strategies/ProfileFlags";
 import StrategyChecklist from "@/components/strategies/StrategyChecklist";
 import Timeline from "@/components/timeline/Timeline";
+import JournalFeed from "@/components/journal/JournalFeed";
 import HelpTooltip from "@/components/ui/HelpTooltip";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -58,13 +59,14 @@ const ENTITY_TYPES = [
   "Other",
 ];
 
-type TabId = "overview" | "documents" | "actions" | "chat" | "timeline" | "strategies" | "access";
+type TabId = "overview" | "documents" | "actions" | "chat" | "timeline" | "strategies" | "journal" | "access";
 
 const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "documents", label: "Documents" },
   { id: "actions", label: "Actions" },
   { id: "strategies", label: "Tax Strategies" },
+  { id: "journal", label: "Journal" },
   { id: "chat", label: "Chat" },
   { id: "timeline", label: "Timeline" },
 ];
@@ -1098,6 +1100,11 @@ function ClientDetailContent() {
                 />
                 <StrategyChecklist clientId={id} clientName={client?.name} profileFlags={profileFlags} onFlagsChange={setProfileFlags} />
               </div>
+            )}
+
+            {/* ── Journal ───────────────────────────────────────────────── */}
+            {activeTab === "journal" && (
+              <JournalFeed clientId={id} />
             )}
 
             {/* ── Chat ──────────────────────────────────────────────────── */}
