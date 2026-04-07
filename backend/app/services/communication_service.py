@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from uuid import UUID
+
 from app.core.config import get_settings
 from app.models.action_item import ActionItem
 from app.models.client import Client
@@ -26,6 +28,7 @@ from app.models.email_template import EmailTemplate
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
+from app.schemas.communication import OpenItem
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,11 @@ def send_client_email(
     template_id: Optional[uuid.UUID],
     metadata: Optional[Dict[str, Any]],
     db: Session,
+    *,
+    thread_id: Optional[uuid.UUID] = None,
+    thread_type: Optional[str] = None,
+    thread_year: Optional[int] = None,
+    thread_quarter: Optional[int] = None,
 ) -> ClientCommunication:
     """Send an email via Resend and log it in client_communications."""
     import resend
@@ -121,13 +129,42 @@ def send_client_email(
         status=email_status,
         resend_message_id=resend_message_id,
         metadata_=metadata,
+        thread_id=thread_id,
+        thread_type=thread_type,
+        thread_year=thread_year,
+        thread_quarter=thread_quarter,
     )
     db.add(comm)
     db.commit()
     db.refresh(comm)
 
     # Journal entry for sent email
+    journal_metadata: Dict[str, Any] = {"recipient": recipient_email, "subject": subject}
     if email_status == "sent":
+        # Extract open items if this email is part of a thread
+        if thread_id:
+            try:
+                extracted = extract_open_items_from_email(body_text or "")
+                if extracted:
+                    now = datetime.now(timezone.utc)
+                    open_items_data = [
+                        {
+                            "question": item["question"],
+                            "asked_in_email_id": str(comm.id),
+                            "asked_date": now.isoformat(),
+                            "status": "open",
+                            "resolved_in_email_id": None,
+                            "resolved_date": None,
+                        }
+                        for item in extracted
+                    ]
+                    comm.open_items = open_items_data
+                    db.commit()
+                    journal_metadata["open_items_count"] = len(open_items_data)
+                    journal_metadata["thread_id"] = str(thread_id)
+            except Exception:
+                logger.warning("Open item extraction failed (non-fatal)", exc_info=True)
+
         try:
             from app.services.journal_service import create_auto_entry
 
@@ -141,7 +178,7 @@ def send_client_email(
                 content=(body_text or "")[:200] or None,
                 source_type="email",
                 source_id=comm.id,
-                metadata={"recipient": recipient_email, "subject": subject},
+                metadata=journal_metadata,
             )
         except Exception:
             logger.warning("Journal entry for communication failed (non-fatal)", exc_info=True)
@@ -647,6 +684,246 @@ def _build_email_html(
 </table>
 </body>
 </html>"""
+
+
+# ---------------------------------------------------------------------------
+# 10. Thread management
+# ---------------------------------------------------------------------------
+
+
+def get_or_create_thread(
+    db: Session,
+    client_id: uuid.UUID,
+    thread_type: str,
+    thread_year: int,
+    thread_quarter: Optional[int] = None,
+) -> uuid.UUID:
+    """
+    Return the existing thread_id for a client+type+year+quarter combination,
+    or generate a new UUID if no thread exists yet.
+    """
+    q = db.query(ClientCommunication.thread_id).filter(
+        ClientCommunication.client_id == client_id,
+        ClientCommunication.thread_type == thread_type,
+        ClientCommunication.thread_year == thread_year,
+        ClientCommunication.thread_id.isnot(None),
+    )
+    if thread_quarter is not None:
+        q = q.filter(ClientCommunication.thread_quarter == thread_quarter)
+    else:
+        q = q.filter(ClientCommunication.thread_quarter.is_(None))
+
+    row = q.first()
+    if row and row[0]:
+        return row[0]
+
+    return uuid.uuid4()
+
+
+def get_thread_history(
+    db: Session,
+    client_id: uuid.UUID,
+    thread_id: uuid.UUID,
+) -> List[ClientCommunication]:
+    """Return all communications in a thread, ordered chronologically."""
+    return (
+        db.query(ClientCommunication)
+        .filter(
+            ClientCommunication.client_id == client_id,
+            ClientCommunication.thread_id == thread_id,
+        )
+        .order_by(ClientCommunication.sent_at.asc())
+        .all()
+    )
+
+
+def get_thread_open_items(
+    db: Session,
+    client_id: uuid.UUID,
+    thread_id: uuid.UUID,
+) -> List[OpenItem]:
+    """
+    Scan all communications in a thread and return only open items.
+
+    Aggregates open_items from each email, then cross-references against
+    open_items_resolved in later emails to exclude resolved ones.
+    """
+    comms = get_thread_history(db, client_id, thread_id)
+
+    # Collect all resolved email IDs from resolved items across the thread
+    resolved_keys: set[tuple[str, str]] = set()
+    for comm in comms:
+        for item in (comm.open_items_resolved or []):
+            # Key: (question, asked_in_email_id) to match against open items
+            resolved_keys.add((
+                item.get("question", ""),
+                item.get("asked_in_email_id", ""),
+            ))
+
+    # Collect open items that haven't been resolved
+    result: List[OpenItem] = []
+    for comm in comms:
+        for item in (comm.open_items or []):
+            if item.get("status") == "resolved":
+                continue
+            key = (item.get("question", ""), item.get("asked_in_email_id", str(comm.id)))
+            if key in resolved_keys:
+                continue
+            result.append(OpenItem(
+                question=item["question"],
+                asked_in_email_id=uuid.UUID(item.get("asked_in_email_id", str(comm.id))),
+                asked_date=datetime.fromisoformat(item["asked_date"])
+                if "asked_date" in item
+                else comm.sent_at,
+                status="open",
+                resolved_in_email_id=None,
+                resolved_date=None,
+            ))
+
+    return result
+
+
+def extract_open_items_from_email(email_body: str) -> List[Dict[str, str]]:
+    """
+    Use GPT-4o-mini to extract questions and action items from an email body
+    that are directed at the recipient (client).
+
+    Returns a list of dicts: [{"question": "...", "category": "awaiting_response"}]
+    """
+    if not email_body or len(email_body.strip()) < 20:
+        return []
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return []
+
+    try:
+        import json as _json
+
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Extract questions and action items from this email that the sender "
+                        "is asking the recipient to answer or do. Return a JSON array of objects "
+                        'with "question" (the question/request text) and "category" '
+                        '(one of: "awaiting_response", "document_request", "confirmation_needed", '
+                        '"scheduling", "information_request"). '
+                        "Only include items that clearly require a response or action from the "
+                        "recipient. Return [] if there are no actionable items. "
+                        "Return ONLY the JSON array, no other text."
+                    ),
+                },
+                {"role": "user", "content": email_body[:3000]},
+            ],
+            temperature=0.1,
+            max_tokens=500,
+        )
+
+        content = response.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if content.startswith("```"):
+            content = re.sub(r"^```(?:json)?\s*", "", content)
+            content = re.sub(r"\s*```$", "", content)
+
+        items = _json.loads(content)
+        if not isinstance(items, list):
+            return []
+
+        # Validate structure
+        return [
+            {"question": item["question"], "category": item.get("category", "awaiting_response")}
+            for item in items
+            if isinstance(item, dict) and "question" in item
+        ]
+
+    except Exception:
+        logger.warning("Failed to extract open items from email (non-fatal)", exc_info=True)
+        return []
+
+
+def resolve_open_items(
+    db: Session,
+    thread_id: uuid.UUID,
+    resolved_items: List[Dict[str, Any]],
+    resolving_email_id: uuid.UUID,
+) -> int:
+    """
+    Mark specified open items as resolved.
+
+    Updates the open_items JSONB on the original email that asked each question.
+    Also stores the resolution record on the resolving email's open_items_resolved.
+
+    *resolved_items* is a list of dicts with at minimum:
+      {"question": "...", "asked_in_email_id": "..."}
+
+    Returns the number of items resolved.
+    """
+    if not resolved_items:
+        return 0
+
+    now = datetime.now(timezone.utc)
+    resolved_count = 0
+
+    # Group resolved items by the email they were asked in
+    by_email: Dict[str, List[Dict[str, Any]]] = {}
+    for item in resolved_items:
+        email_id = item.get("asked_in_email_id", "")
+        if email_id:
+            by_email.setdefault(email_id, []).append(item)
+
+    # Update the original emails' open_items to mark as resolved
+    for email_id_str, items_to_resolve in by_email.items():
+        try:
+            email_uuid = uuid.UUID(email_id_str)
+        except (ValueError, TypeError):
+            continue
+
+        original = (
+            db.query(ClientCommunication)
+            .filter(ClientCommunication.id == email_uuid)
+            .first()
+        )
+        if not original or not original.open_items:
+            continue
+
+        questions_to_resolve = {item["question"] for item in items_to_resolve}
+        updated_items = []
+        for oi in original.open_items:
+            if oi.get("question") in questions_to_resolve and oi.get("status") != "resolved":
+                oi["status"] = "resolved"
+                oi["resolved_in_email_id"] = str(resolving_email_id)
+                oi["resolved_date"] = now.isoformat()
+                resolved_count += 1
+            updated_items.append(oi)
+
+        original.open_items = updated_items
+
+    # Store resolution records on the resolving email
+    resolving_comm = (
+        db.query(ClientCommunication)
+        .filter(ClientCommunication.id == resolving_email_id)
+        .first()
+    )
+    if resolving_comm:
+        resolution_records = [
+            {
+                "question": item["question"],
+                "asked_in_email_id": item.get("asked_in_email_id", ""),
+                "resolved_date": now.isoformat(),
+            }
+            for item in resolved_items
+        ]
+        resolving_comm.open_items_resolved = resolution_records
+
+    db.commit()
+    return resolved_count
 
 
 # ---------------------------------------------------------------------------
