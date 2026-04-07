@@ -246,3 +246,147 @@ async def _generate_session_summary(session_id: UUID, db: Session) -> None:
 
     except Exception:
         logger.exception("Failed to generate summary for session %s", session_id)
+
+
+# ---------------------------------------------------------------------------
+# Search & retrieval
+# ---------------------------------------------------------------------------
+
+
+async def search_sessions(
+    client_id: UUID,
+    user_id: str,
+    query: str,
+    db: Session,
+    limit: int = 5,
+) -> list[dict]:
+    """Semantic search over session summaries using pgvector cosine distance."""
+    embedding = await _embed(query)
+
+    distance_col = ChatSession.summary_embedding.cosine_distance(embedding).label("distance")
+
+    rows = (
+        db.query(ChatSession, distance_col)
+        .filter(
+            ChatSession.client_id == client_id,
+            ChatSession.user_id == user_id,
+            ChatSession.is_active.is_(False),
+            ChatSession.summary_embedding.isnot(None),
+        )
+        .order_by(distance_col)
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+    for session, distance in rows:
+        score = (1 - distance / 2) * 100
+        results.append({
+            "id": session.id,
+            "title": session.title,
+            "summary": session.summary,
+            "key_topics": session.key_topics,
+            "key_decisions": session.key_decisions,
+            "started_at": session.started_at,
+            "ended_at": session.ended_at,
+            "message_count": session.message_count,
+            "similarity_score": round(score, 2),
+        })
+    return results
+
+
+async def search_qa_pairs(
+    client_id: UUID,
+    user_id: str,
+    query: str,
+    db: Session,
+    limit: int = 10,
+) -> list[dict]:
+    """Semantic search over embedded Q/A pairs in chat messages."""
+    embedding = await _embed(query)
+
+    distance_col = ChatMessage.pair_embedding.cosine_distance(embedding).label("distance")
+
+    rows = (
+        db.query(ChatMessage, ChatSession, distance_col)
+        .join(ChatSession, ChatMessage.session_id == ChatSession.id)
+        .filter(
+            ChatSession.client_id == client_id,
+            ChatSession.user_id == user_id,
+            ChatMessage.pair_embedding.isnot(None),
+        )
+        .order_by(distance_col)
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+    for msg, session, distance in rows:
+        score = (1 - distance / 2) * 100
+        # Find the preceding user message in the same session
+        user_msg = (
+            db.query(ChatMessage.content)
+            .filter(
+                ChatMessage.session_id == session.id,
+                ChatMessage.role == "user",
+                ChatMessage.created_at < msg.created_at,
+            )
+            .order_by(ChatMessage.created_at.desc())
+            .first()
+        )
+        results.append({
+            "question": user_msg[0] if user_msg else "",
+            "answer": msg.content,
+            "session_id": session.id,
+            "session_title": session.title,
+            "session_date": session.started_at,
+            "similarity_score": round(score, 2),
+        })
+    return results
+
+
+def get_recent_sessions(
+    client_id: UUID,
+    user_id: str,
+    db: Session,
+    limit: int = 3,
+) -> list[ChatSession]:
+    """Return the most recent closed sessions for a client+user."""
+    return (
+        db.query(ChatSession)
+        .filter(
+            ChatSession.client_id == client_id,
+            ChatSession.user_id == user_id,
+            ChatSession.is_active.is_(False),
+        )
+        .order_by(ChatSession.ended_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_session_detail(
+    session_id: UUID,
+    user_id: str,
+    db: Session,
+) -> ChatSession | None:
+    """Load a session with messages, verifying user access."""
+    session = (
+        db.query(ChatSession)
+        .filter(
+            ChatSession.id == session_id,
+            ChatSession.user_id == user_id,
+        )
+        .first()
+    )
+    if session is None:
+        return None
+
+    # Eagerly load messages ordered by created_at
+    session.messages = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    return session
