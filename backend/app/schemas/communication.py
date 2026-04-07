@@ -161,6 +161,27 @@ class DraftEmailResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class DraftQuarterlyEstimateRequest(BaseModel):
+    """Request body for drafting a quarterly estimate email."""
+
+    tax_year: int
+    quarter: int = Field(..., ge=1, le=4)
+
+
+class DraftQuarterlyEstimateResponse(BaseModel):
+    """Response from the quarterly estimate draft workflow."""
+
+    subject: str
+    body_html: str
+    body_text: str
+    thread_id: str
+    thread_type: str
+    thread_year: int
+    thread_quarter: int
+    open_items_from_prior: List[Dict[str, Any]] = []
+    financial_context_used: List[Dict[str, Any]] = []
+
+
 class SchedulingUrlUpdate(BaseModel):
     scheduling_url: Optional[str] = Field(None, max_length=500)
 

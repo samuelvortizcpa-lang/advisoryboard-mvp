@@ -20,6 +20,8 @@ from app.schemas.communication import (
     CommunicationSendResponse,
     DraftEmailRequest,
     DraftEmailResponse,
+    DraftQuarterlyEstimateRequest,
+    DraftQuarterlyEstimateResponse,
     FollowUpReminderResponse,
     RenderTemplateRequest,
     RenderedTemplate,
@@ -279,6 +281,49 @@ async def draft_email(
         )
 
     return DraftEmailResponse(**draft)
+
+
+# ---------------------------------------------------------------------------
+# Quarterly Estimate Draft
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/clients/{client_id}/communications/draft-quarterly-estimate",
+    response_model=DraftQuarterlyEstimateResponse,
+)
+async def draft_quarterly_estimate(
+    client_id: UUID,
+    body: DraftQuarterlyEstimateRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> DraftQuarterlyEstimateResponse:
+    """Draft a quarterly estimated tax payment email with thread and open item awareness."""
+    check_client_access(auth, client_id, db)
+
+    try:
+        from app.services.quarterly_estimate_service import draft_quarterly_estimate_email
+
+        result = await draft_quarterly_estimate_email(
+            db=db,
+            client_id=client_id,
+            user_id=auth.user_id,
+            tax_year=body.tax_year,
+            quarter=body.quarter,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception(
+            "Quarterly estimate draft failed for client %s Q%d %d",
+            client_id, body.quarter, body.tax_year,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate quarterly estimate draft. Please try again.",
+        )
+
+    return DraftQuarterlyEstimateResponse(**result)
 
 
 # ---------------------------------------------------------------------------
