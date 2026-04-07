@@ -2579,6 +2579,75 @@ export function createEngagementsApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Practice Book ──────────────────────────────────────────────────────────
+
+export interface PracticeHealthBreakdown {
+  communication: number;
+  action_items: number;
+  strategy: number;
+  documents: number;
+  journal: number;
+}
+
+export interface ClientHealthRow {
+  client_id: string;
+  name: string;
+  entity_type: string;
+  health_score: number;
+  health_breakdown: { total: number; breakdown: PracticeHealthBreakdown };
+  document_count: number;
+  open_action_count: number;
+  last_contact: string | null;
+  estimated_impact: number;
+  journal_count: number;
+  communication_count: number;
+}
+
+export interface PracticeSummary {
+  total_clients: number;
+  by_entity_type: Record<string, number>;
+  total_advisory_impact: number;
+  avg_engagement_health: number;
+  complexity_distribution: { low: number; medium: number; high: number };
+  transition_readiness: number;
+  clients: ClientHealthRow[];
+}
+
+export function createPracticeBookApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  const fb = boundFetchBlob(getToken, orgId);
+  return {
+    fetchSummary() {
+      return f<PracticeSummary>("/practice-book/summary");
+    },
+
+    exportPdf(clientIds?: string[]) {
+      return fb("/practice-book/export", {
+        method: "POST",
+        body: JSON.stringify({ format: "pdf", client_ids: clientIds }),
+      });
+    },
+
+    exportJson(clientIds?: string[]) {
+      return f<unknown>("/practice-book/export", {
+        method: "POST",
+        body: JSON.stringify({ format: "json", client_ids: clientIds }),
+      });
+    },
+
+    exportCsv(clientIds?: string[]) {
+      return fb("/practice-book/export", {
+        method: "POST",
+        body: JSON.stringify({ format: "csv", client_ids: clientIds }),
+      });
+    },
+
+    exportSingleClientPdf(clientId: string) {
+      return fb(`/clients/${clientId}/practice-book`, { method: "POST" });
+    },
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.

@@ -541,6 +541,7 @@ def _compute_engagement_health(
     return {
         "total": total,
         "breakdown": scores,
+        "_comm_count": recent_comms,
     }
 
 
@@ -584,9 +585,10 @@ def generate_practice_summary(
         )
         total_impact = float(impact_sum) if impact_sum else 0.0
 
-    # Per-client health scores and complexity
+    # Per-client health scores, complexity, and row data
     health_scores: list[int] = []
     complexity: dict[str, int] = {"low": 0, "medium": 0, "high": 0}
+    client_rows: list[dict[str, Any]] = []
 
     for c in clients:
         health = _compute_engagement_health(db, c.id, user_id, current_year)
@@ -611,6 +613,51 @@ def generate_practice_summary(
         else:
             complexity["low"] += 1
 
+        # Open action items
+        open_actions = (
+            db.query(func.count(ActionItem.id))
+            .filter(ActionItem.client_id == c.id, ActionItem.status == "pending")
+            .scalar()
+        ) or 0
+
+        # Last communication
+        last_comm = (
+            db.query(func.max(ClientCommunication.sent_at))
+            .filter(ClientCommunication.client_id == c.id)
+            .scalar()
+        )
+
+        # Per-client impact
+        client_impact = (
+            db.query(func.sum(ClientStrategyStatus.estimated_impact))
+            .filter(
+                ClientStrategyStatus.client_id == c.id,
+                ClientStrategyStatus.status == "implemented",
+            )
+            .scalar()
+        )
+
+        # Journal entry count
+        journal_count = (
+            db.query(func.count(JournalEntry.id))
+            .filter(JournalEntry.client_id == c.id)
+            .scalar()
+        ) or 0
+
+        client_rows.append({
+            "client_id": str(c.id),
+            "name": c.name,
+            "entity_type": c.entity_type or "unspecified",
+            "health_score": health["total"],
+            "health_breakdown": health,
+            "document_count": doc_count,
+            "open_action_count": open_actions,
+            "last_contact": last_comm.isoformat() if last_comm else None,
+            "estimated_impact": float(client_impact) if client_impact else 0.0,
+            "journal_count": journal_count,
+            "communication_count": health.get("_comm_count", 0),
+        })
+
     avg_health = round(sum(health_scores) / len(health_scores)) if health_scores else 0
     transition_ready = (
         round(sum(1 for s in health_scores if s > 60) / len(health_scores) * 100)
@@ -624,6 +671,7 @@ def generate_practice_summary(
         "avg_engagement_health": avg_health,
         "complexity_distribution": complexity,
         "transition_readiness": transition_ready,
+        "clients": client_rows,
     }
 
 
