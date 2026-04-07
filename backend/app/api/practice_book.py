@@ -128,6 +128,7 @@ async def export_practice_book(
             "Document Count",
             "Last Contact",
             "Open Actions",
+            "Data Quality",
         ])
         for c in summary.get("clients", []):
             if body.client_ids and UUID(c["client_id"]) not in body.client_ids:
@@ -140,6 +141,7 @@ async def export_practice_book(
                 c.get("document_count", ""),
                 c.get("last_contact", ""),
                 c.get("open_action_count", ""),
+                c.get("data_quality", "Clean"),
             ])
         return StreamingResponse(
             io.BytesIO(output.getvalue().encode("utf-8")),

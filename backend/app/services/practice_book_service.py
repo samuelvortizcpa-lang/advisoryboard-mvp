@@ -35,6 +35,7 @@ from app.models.engagement_template import EngagementTemplate
 from app.models.journal_entry import JournalEntry
 from app.models.organization import Organization
 from app.models.tax_strategy import TaxStrategy
+from app.models.data_contradiction import DataContradiction
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -529,6 +530,29 @@ def _compute_engagement_health(
     journal_score = min(100, (50 if pinned_count > 0 else 0) + min(50, recent_manual * 10))
     scores["journal"] = journal_score
 
+    # -- Data quality penalty --
+    high_contradictions = (
+        db.query(func.count(DataContradiction.id))
+        .filter(
+            DataContradiction.client_id == client_id,
+            DataContradiction.status == "open",
+            DataContradiction.severity == "high",
+        )
+        .scalar()
+    ) or 0
+    medium_contradictions = (
+        db.query(func.count(DataContradiction.id))
+        .filter(
+            DataContradiction.client_id == client_id,
+            DataContradiction.status == "open",
+            DataContradiction.severity == "medium",
+        )
+        .scalar()
+    ) or 0
+
+    data_quality_penalty = (high_contradictions * 15) + (medium_contradictions * 5)
+    scores["data_quality_penalty"] = data_quality_penalty
+
     # -- Weighted total --
     total = round(
         scores["communication"] * 0.25
@@ -537,11 +561,25 @@ def _compute_engagement_health(
         + scores["documents"] * 0.20
         + scores["journal"] * 0.15
     )
+    total = max(0, total - data_quality_penalty)
+
+    # Data quality label for export
+    if high_contradictions > 0:
+        data_quality_label = f"Urgent ({high_contradictions + medium_contradictions})"
+    elif medium_contradictions > 0:
+        data_quality_label = f"Review Needed ({medium_contradictions})"
+    else:
+        data_quality_label = "Clean"
 
     return {
         "total": total,
         "breakdown": scores,
         "_comm_count": recent_comms,
+        "data_quality": data_quality_label,
+        "data_quality_counts": {
+            "high": high_contradictions,
+            "medium": medium_contradictions,
+        },
     }
 
 
@@ -656,6 +694,7 @@ def generate_practice_summary(
             "estimated_impact": float(client_impact) if client_impact else 0.0,
             "journal_count": journal_count,
             "communication_count": health.get("_comm_count", 0),
+            "data_quality": health.get("data_quality", "Clean"),
         })
 
     avg_health = round(sum(health_scores) / len(health_scores)) if health_scores else 0
@@ -826,6 +865,19 @@ def generate_practice_book_pdf(
         f"High: {cx.get('high', 0)}  |  Medium: {cx.get('medium', 0)}  |  Low: {cx.get('low', 0)}",
         s["body"],
     ))
+
+    # ── Clients with data quality issues ─────────────────────────────
+    dq_clients = [c for c in summary["clients"] if c.get("data_quality", "Clean") != "Clean"]
+    if dq_clients:
+        elements.append(Spacer(1, 0.2 * inch))
+        elements.append(Paragraph("Clients with Data Quality Issues", s["subsection"]))
+        for c in sorted(dq_clients, key=lambda x: 0 if "Urgent" in x.get("data_quality", "") else 1):
+            dq = c["data_quality"]
+            color = "#dc2626" if "Urgent" in dq else "#d97706"
+            elements.append(Paragraph(
+                f'{c["name"]} — <font color="{color}"><b>{dq}</b></font>',
+                s["body"],
+            ))
 
     # ── Table of contents ─────────────────────────────────────────────
     elements.append(PageBreak())
@@ -1279,6 +1331,30 @@ def _build_client_section(
             ))
         elements.append(Spacer(1, 0.1 * inch))
 
+    # ── Data quality ─────────────────────────────────────────────────
+    dq = health.get("data_quality", "Clean")
+    dq_counts = health.get("data_quality_counts", {})
+    if dq != "Clean":
+        dq_color = "#dc2626" if dq_counts.get("high", 0) > 0 else "#d97706"
+        elements.append(Paragraph("Data Quality", s["subsection"]))
+        elements.append(Paragraph(
+            f'Status: <font color="{dq_color}"><b>{dq}</b></font>',
+            s["body"],
+        ))
+        if dq_counts.get("high", 0):
+            elements.append(Paragraph(
+                f"  High severity: {dq_counts['high']} conflict(s)", s["body"],
+            ))
+        if dq_counts.get("medium", 0):
+            elements.append(Paragraph(
+                f"  Medium severity: {dq_counts['medium']} conflict(s)", s["body"],
+            ))
+        elements.append(Paragraph(
+            f"Health score penalty: -{health['breakdown'].get('data_quality_penalty', 0)} points",
+            s["small"],
+        ))
+        elements.append(Spacer(1, 0.1 * inch))
+
     # ── Engagement health breakdown ───────────────────────────────────
     elements.append(Paragraph("Engagement Health Breakdown", s["subsection"]))
     breakdown = health["breakdown"]
@@ -1292,3 +1368,8 @@ def _build_client_section(
     for key, label in health_labels.items():
         val = breakdown.get(key, 0)
         elements.append(Paragraph(f"{label}: {val}%", s["body"]))
+    if breakdown.get("data_quality_penalty", 0) > 0:
+        elements.append(Paragraph(
+            f"Data quality penalty: -{breakdown['data_quality_penalty']} pts",
+            s["body"],
+        ))

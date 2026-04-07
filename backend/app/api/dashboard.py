@@ -110,6 +110,7 @@ class StatsBlock(BaseModel):
     action_items: ActionItemStats
     documents: CountWithLimit
     ai_queries: QueryStats
+    open_contradictions: Optional[int] = None
 
 
 class ActivityPoint(BaseModel):
@@ -310,6 +311,21 @@ def _build_dashboard_summary(
         completed_q = completed_q.filter(Client.id.in_(accessible_ids))
     completed_week = completed_q.scalar() or 0
 
+    # ── Open contradictions ──────────────────────────────────────────────
+    from app.models.data_contradiction import DataContradiction
+
+    contradiction_q = (
+        db.query(func.count(DataContradiction.id))
+        .join(Client, DataContradiction.client_id == Client.id)
+        .filter(
+            Client.org_id == auth.org_id,
+            DataContradiction.status == "open",
+        )
+    )
+    if accessible_ids is not None:
+        contradiction_q = contradiction_q.filter(Client.id.in_(accessible_ids))
+    contradiction_count = contradiction_q.scalar() or 0
+
     stats = StatsBlock(
         clients=CountWithLimit(count=client_count, limit=tier_config.get("max_clients")),
         action_items=ActionItemStats(pending=pending_count, overdue=overdue_count, completed_this_week=completed_week),
@@ -318,6 +334,7 @@ def _build_dashboard_summary(
             used=sub.strategic_queries_used,
             limit=sub.strategic_queries_limit,
         ),
+        open_contradictions=contradiction_count if contradiction_count > 0 else None,
     )
 
     # ── Activity chart ────────────────────────────────────────────────────

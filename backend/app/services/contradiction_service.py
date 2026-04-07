@@ -21,6 +21,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.models.action_item import ActionItem
 from app.models.client_financial_metric import ClientFinancialMetric
 from app.models.data_contradiction import DataContradiction
 from app.models.journal_entry import JournalEntry
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 # Metric value difference threshold — ignore rounding noise
 _MIN_DIFF = Decimal("100.00")
+
+# Days from detection until review task is due
+_REVIEW_TASK_LEAD_DAYS = 7
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +147,10 @@ def check_metric_contradictions(
             "Metric contradictions: %d new for client %s, year %d",
             len(created), client_id, tax_year,
         )
+        try:
+            _create_review_tasks(created, db)
+        except Exception:
+            logger.warning("Review task creation failed (non-fatal)", exc_info=True)
 
     return created
 
@@ -268,6 +276,10 @@ def check_yoy_anomalies(
         logger.info(
             "YoY anomalies: %d new for client %s", len(created), client_id,
         )
+        try:
+            _create_review_tasks(created, db)
+        except Exception:
+            logger.warning("Review task creation failed (non-fatal)", exc_info=True)
 
     return created
 
@@ -424,6 +436,53 @@ def dismiss_contradiction(
     contradiction.resolved_at = datetime.now(timezone.utc)
     db.commit()
     return contradiction
+
+
+# ---------------------------------------------------------------------------
+# Auto-generate review tasks
+# ---------------------------------------------------------------------------
+
+
+def _create_review_tasks(
+    contradictions: list[DataContradiction],
+    db: Session,
+) -> None:
+    """Create action items for high-severity contradictions."""
+    from datetime import timedelta
+
+    for c in contradictions:
+        if c.severity != "high":
+            continue
+
+        title = c.title
+        if len(title) > 150:
+            title = title[:147] + "..."
+        task_text = f"Review data conflict: {title}"
+
+        # Dedup: skip if a pending task already exists for this contradiction
+        existing = (
+            db.query(ActionItem.id)
+            .filter(
+                ActionItem.client_id == c.client_id,
+                ActionItem.text == task_text,
+                ActionItem.status == "pending",
+            )
+            .first()
+        )
+        if existing:
+            continue
+
+        item = ActionItem(
+            client_id=c.client_id,
+            text=task_text,
+            due_date=datetime.now(timezone.utc).date() + timedelta(days=_REVIEW_TASK_LEAD_DAYS),
+            priority="high",
+            source="engagement_engine",
+            status="pending",
+        )
+        db.add(item)
+
+    db.flush()
 
 
 # ---------------------------------------------------------------------------
