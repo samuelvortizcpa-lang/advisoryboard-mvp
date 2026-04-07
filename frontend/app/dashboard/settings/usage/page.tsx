@@ -68,14 +68,11 @@ const ENDPOINT_COLORS: Record<string, string> = {
   action_items: "bg-gray-100 text-gray-600",
 };
 
-const MODEL_LABELS: Record<string, string> = {
-  "gpt-4o-mini": "GPT-4o Mini",
-  "claude-sonnet-4-20250514": "Claude Sonnet",
-  "claude-opus-4-20250514": "Claude Opus",
-};
-
 function modelLabel(m: string) {
-  return MODEL_LABELS[m] ?? m;
+  const ml = m.toLowerCase();
+  if (ml.includes("opus")) return "Premium";
+  if (ml.includes("sonnet") || ml.includes("claude")) return "Advanced";
+  return "Standard";
 }
 
 // ─── Page ───────────────────────────────────────────────────────────────────
@@ -194,8 +191,8 @@ export default function UsageAnalyticsPage() {
   if (!summary || !subscription) return null;
 
   const avgCost = summary.total_queries > 0 ? summary.total_cost / summary.total_queries : 0;
-  const quotaUsed = subscription.strategic_queries_used;
-  const quotaLimit = subscription.strategic_queries_limit;
+  const quotaUsed = subscription.total_queries_used;
+  const quotaLimit = subscription.total_queries_limit;
   const quotaPct = quotaLimit > 0 ? Math.min(100, (quotaUsed / quotaLimit) * 100) : 0;
 
   // Chart data
@@ -203,11 +200,12 @@ export default function UsageAnalyticsPage() {
   const allModels = Array.from(
     new Set(daily.flatMap((d) => Object.keys(d.by_model)))
   );
-  const modelColors: Record<string, string> = {
-    "gpt-4o-mini": "bg-blue-400",
-    "claude-sonnet-4-20250514": "bg-purple-400",
-    "claude-opus-4-20250514": "bg-amber-400",
-  };
+  function modelColor(m: string) {
+    const ml = m.toLowerCase();
+    if (ml.includes("opus")) return "bg-purple-400";
+    if (ml.includes("sonnet") || ml.includes("claude")) return "bg-blue-400";
+    return "bg-gray-400";
+  }
 
   // Model breakdown from summary
   const modelBreakdown = summary.breakdown_by_model ?? [];
@@ -266,10 +264,10 @@ export default function UsageAnalyticsPage() {
         {/* ── Summary Cards ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Total Queries" value={fmtTokens(summary.total_queries)} />
-          <SummaryCard label="Total Cost" value={fmtCost(summary.total_cost)} labelExtra={<HelpTooltip content="Your AI cost is based on the models used. Quick queries cost less, while Deep and Opus queries use more powerful (and more expensive) models." position="bottom" maxWidth={260} />} />
+          <SummaryCard label="Total Cost" value={fmtCost(summary.total_cost)} labelExtra={<HelpTooltip content="Your AI cost varies by analysis tier. Standard queries cost less, while advanced and premium analyses use more powerful capabilities." position="bottom" maxWidth={260} />} />
           <SummaryCard label="Avg Cost / Query" value={fmtCost(avgCost, 4)} />
           <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-            <p className="text-xs font-medium text-gray-500">Strategic Queries</p>
+            <p className="text-xs font-medium text-gray-500">AI Queries</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {quotaUsed} <span className="text-sm font-normal text-gray-400">of {quotaLimit}</span>
             </p>
@@ -328,7 +326,7 @@ export default function UsageAnalyticsPage() {
                       return (
                         <div
                           key={s.model}
-                          className={modelColors[s.model] ?? "bg-gray-300"}
+                          className={modelColor(s.model)}
                           style={{ height: `${segPct}%` }}
                         />
                       );
@@ -346,20 +344,20 @@ export default function UsageAnalyticsPage() {
           {/* Legend */}
           <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-blue-400" /> GPT-4o Mini
+              <span className="h-2 w-2 rounded-full bg-gray-400" /> Standard
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-purple-400" /> Claude Sonnet
+              <span className="h-2 w-2 rounded-full bg-blue-400" /> Advanced
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-amber-400" /> Claude Opus
+              <span className="h-2 w-2 rounded-full bg-purple-400" /> Premium
             </span>
           </div>
         </div>
 
         {/* ── Model Breakdown ─────────────────────────────────────────────── */}
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-900">Cost Breakdown by Model</h2>
+          <h2 className="text-sm font-semibold text-gray-900">Cost Breakdown by Tier</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {modelBreakdown.map((m) => (
               <div key={m.model} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
@@ -386,7 +384,7 @@ export default function UsageAnalyticsPage() {
                 {modelBreakdown.map((m) => (
                   <div
                     key={m.model}
-                    className={modelColors[m.model] ?? "bg-gray-300"}
+                    className={modelColor(m.model)}
                     style={{ width: `${(m.cost / totalModelCost) * 100}%` }}
                   />
                 ))}
@@ -452,10 +450,10 @@ export default function UsageAnalyticsPage() {
                 onChange={(e) => { setHistoryModel(e.target.value); setHistoryPage(1); }}
                 className="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="">All Models</option>
-                <option value="gpt-4o-mini">GPT-4o Mini</option>
-                <option value="claude-sonnet-4-20250514">Claude Sonnet</option>
-                <option value="claude-opus-4-20250514">Claude Opus</option>
+                <option value="">All Tiers</option>
+                <option value="gpt-4o-mini">Standard</option>
+                <option value="claude-sonnet-4-20250514">Advanced</option>
+                <option value="claude-opus-4-20250514">Premium</option>
               </select>
               <select
                 value={historyEndpoint}
@@ -487,7 +485,7 @@ export default function UsageAnalyticsPage() {
                     <tr className="border-b border-gray-100 text-xs font-medium uppercase tracking-wide text-gray-400">
                       <th className="pb-2 pr-4">Date/Time</th>
                       <th className="pb-2 pr-4">Type</th>
-                      <th className="pb-2 pr-4">Model</th>
+                      <th className="pb-2 pr-4">Tier</th>
                       <th className="pb-2 pr-4 text-right">Tokens</th>
                       <th className="pb-2 pr-4 text-right">Cost</th>
                       <th className="pb-2">Client</th>
