@@ -50,6 +50,7 @@ const PRICING: {
   monthlyPrice: string;
   annualMonthlyPrice: string;
   annualTotal: string;
+  popular?: boolean;
   features: string[];
 }[] = [
   {
@@ -61,8 +62,9 @@ const PRICING: {
       "5 clients",
       "Unlimited documents",
       "50 AI queries/month",
+      "10 advanced analyses/month",
       "All document types",
-      "RAG Q&A",
+      "RAG Q&A with source citations",
     ],
   },
   {
@@ -73,8 +75,10 @@ const PRICING: {
     features: [
       "25 clients",
       "Unlimited documents",
-      "Standard AI",
-      "500MB storage",
+      "500 AI queries/month",
+      "50 advanced analyses/month",
+      "25 premium analyses/month",
+      "Email support",
     ],
   },
   {
@@ -82,12 +86,15 @@ const PRICING: {
     monthlyPrice: "$149",
     annualMonthlyPrice: "$119",
     annualTotal: "$1,428",
+    popular: true,
     features: [
       "100 clients",
       "Unlimited documents",
-      "100 AI queries/mo",
-      "10 deep analysis queries/mo",
-      "5GB storage",
+      "500 AI queries/month",
+      "100 advanced analyses/month",
+      "50 premium analyses/month",
+      "Document comparison",
+      "Priority support",
     ],
   },
   {
@@ -98,9 +105,12 @@ const PRICING: {
     features: [
       "Unlimited clients",
       "Unlimited documents",
-      "500 AI queries/mo",
-      "50 deep analysis queries/mo",
-      "25GB storage",
+      "1,000 AI queries/month",
+      "500 advanced analyses/month",
+      "100 premium analyses/month",
+      "Multi-user team access",
+      "Admin controls",
+      "Dedicated support",
     ],
   },
 ];
@@ -271,7 +281,7 @@ export default function SubscriptionManagementPage() {
   // Determine if any limit is > 80% for upgrade prompt
   const showUpgradePrompt = isFreeTier && subInfo && (
     (subInfo.max_clients !== null && subInfo.current_clients / subInfo.max_clients > 0.8) ||
-    (subInfo.strategic_queries_limit > 0 && subInfo.strategic_queries_used / subInfo.strategic_queries_limit > 0.8)
+    (subInfo.total_queries_limit > 0 && subInfo.total_queries_used / subInfo.total_queries_limit > 0.8)
   );
 
   return (
@@ -317,7 +327,7 @@ export default function SubscriptionManagementPage() {
         {subInfo && (
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <h2 className="text-sm font-semibold text-gray-900 mb-4">Usage Limits</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <UsageBar
                 label="Clients"
                 current={subInfo.current_clients}
@@ -330,15 +340,21 @@ export default function SubscriptionManagementPage() {
               />
               <UsageBar
                 label="AI Queries"
-                current={subInfo.strategic_queries_used}
-                limit={subInfo.strategic_queries_limit > 0 ? subInfo.strategic_queries_limit : null}
+                current={subInfo.total_queries_used}
+                limit={subInfo.total_queries_limit > 0 ? subInfo.total_queries_limit : null}
                 suffix="this billing period"
               />
-              {(currentTier === "professional" || currentTier === "firm") && (
+              <UsageBar
+                label="Advanced Analyses"
+                current={subInfo.sonnet_queries_used}
+                limit={subInfo.sonnet_queries_limit > 0 ? subInfo.sonnet_queries_limit : null}
+                suffix="this billing period"
+              />
+              {subInfo.opus_queries_limit > 0 && (
                 <UsageBar
-                  label="Deep Analysis"
-                  current={0}
-                  limit={currentTier === "professional" ? 10 : 50}
+                  label="Premium Analyses"
+                  current={subInfo.opus_queries_used}
+                  limit={subInfo.opus_queries_limit}
                   suffix="this billing period"
                 />
               )}
@@ -412,6 +428,11 @@ export default function SubscriptionManagementPage() {
                       {isCurrent && (
                         <span className="absolute -top-2.5 left-4 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-semibold text-white">
                           Current Plan
+                        </span>
+                      )}
+                      {plan.popular && !isCurrent && (
+                        <span className="absolute -top-2.5 left-4 rounded-full bg-purple-600 px-2.5 py-0.5 text-[10px] font-semibold text-white">
+                          Most Popular
                         </span>
                       )}
                       <div className="flex items-center gap-2">
@@ -629,10 +650,10 @@ export default function SubscriptionManagementPage() {
                           </span>
                         </td>
 
-                        {/* Strategic Queries */}
+                        {/* AI Queries */}
                         <td className="px-5 py-3">
                           {sub.strategic_queries_limit > 0 ? (
-                            <div className="w-36">
+                            <div className="w-44">
                               <p className="text-xs text-gray-700">
                                 {sub.strategic_queries_used} / {sub.strategic_queries_limit}
                               </p>
@@ -642,6 +663,11 @@ export default function SubscriptionManagementPage() {
                                   style={{ width: `${Math.min(100, pct)}%` }}
                                 />
                               </div>
+                              {(sub.sonnet_queries_limit > 0) && (
+                                <p className="mt-1 text-[10px] text-gray-400">
+                                  Advanced: {sub.sonnet_queries_used}/{sub.sonnet_queries_limit}
+                                </p>
+                              )}
                             </div>
                           ) : (
                             <span className="text-xs text-gray-400">N/A</span>

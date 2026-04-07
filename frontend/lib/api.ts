@@ -312,6 +312,15 @@ export interface SubscriptionInfo {
   strategic_queries_limit: number;
   strategic_queries_used: number;
   strategic_queries_remaining: number;
+  total_queries_used: number;
+  total_queries_limit: number;
+  total_queries_remaining: number;
+  sonnet_queries_used: number;
+  sonnet_queries_limit: number;
+  sonnet_queries_remaining: number;
+  opus_queries_used: number;
+  opus_queries_limit: number;
+  opus_queries_remaining: number;
   billing_period_start: string | null;
   billing_period_end: string | null;
   max_clients: number | null;
@@ -654,6 +663,8 @@ export interface AdminSubscription {
   tier: string;
   strategic_queries_limit: number;
   strategic_queries_used: number;
+  sonnet_queries_limit: number;
+  sonnet_queries_used: number;
   billing_period_start: string;
   billing_period_end: string | null;
   created_at: string;

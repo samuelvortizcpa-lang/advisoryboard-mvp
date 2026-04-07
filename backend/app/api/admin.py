@@ -322,6 +322,8 @@ class SubscriptionResponse(BaseModel):
     tier: str
     strategic_queries_limit: int
     strategic_queries_used: int
+    sonnet_queries_limit: int = 0
+    sonnet_queries_used: int = 0
     billing_period_start: datetime
     billing_period_end: Optional[datetime] = None
     created_at: datetime
@@ -373,6 +375,8 @@ def _build_response(sub: UserSubscription, user: Optional[User] = None) -> Subsc
         tier=sub.tier,
         strategic_queries_limit=limit,
         strategic_queries_used=used,
+        sonnet_queries_limit=sub.sonnet_queries_limit,
+        sonnet_queries_used=sub.sonnet_queries_used,
         billing_period_start=sub.billing_period_start,
         billing_period_end=sub.billing_period_end,
         created_at=sub.created_at,
