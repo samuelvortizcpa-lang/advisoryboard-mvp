@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.action_item import ActionItem
 from app.models.client import Client
 from app.models.client_communication import ClientCommunication
+from app.models.client_financial_metric import ClientFinancialMetric
 from app.models.client_strategy_status import ClientStrategyStatus
 from app.models.document import Document
 from app.models.tax_strategy import TaxStrategy
@@ -87,7 +88,7 @@ class ClientContext:
 
     client_profile: dict[str, Any]
     documents_summary: list[dict[str, Any]] = field(default_factory=list)
-    financial_metrics: dict[str, Any] | None = None  # TODO: Feature 2
+    financial_metrics: dict[str, Any] | None = None
     action_items: list[dict[str, Any]] = field(default_factory=list)
     communication_history: list[dict[str, Any]] = field(default_factory=list)
     journal_entries: list[dict[str, Any]] | None = None  # TODO: Feature 3
@@ -169,7 +170,18 @@ async def assemble_context(
         ctx.action_items = _fetch_action_items(db, client_id, limit=10)
         ctx.communication_history = _fetch_communications(db, client_id, limit=5)
 
-    # TODO: Feature 2 — populate ctx.financial_metrics
+    # Populate financial metrics for most purposes
+    if purpose in (
+        ContextPurpose.CHAT,
+        ContextPurpose.EMAIL_DRAFT,
+        ContextPurpose.QUARTERLY_ESTIMATE,
+        ContextPurpose.BRIEF,
+        ContextPurpose.STRATEGY_SUGGEST,
+    ):
+        ctx.financial_metrics = _fetch_financial_metrics(
+            db, client_id, current_year,
+        )
+
     # TODO: Feature 3 — populate ctx.journal_entries
     # TODO: Feature 4 — populate ctx.engagement_calendar
 
@@ -350,6 +362,45 @@ def _fetch_strategy_status(
     return {"years": {str(y): by_year.get(y, []) for y in years}}
 
 
+def _fetch_financial_metrics(
+    db: Session,
+    client_id: UUID,
+    current_year: int,
+) -> dict[str, Any] | None:
+    """Fetch financial metrics for the current year and 2 prior years."""
+    years = [current_year, current_year - 1, current_year - 2]
+    rows = (
+        db.query(ClientFinancialMetric)
+        .filter(
+            ClientFinancialMetric.client_id == client_id,
+            ClientFinancialMetric.tax_year.in_(years),
+        )
+        .order_by(
+            ClientFinancialMetric.tax_year.desc(),
+            ClientFinancialMetric.metric_name,
+        )
+        .all()
+    )
+    if not rows:
+        return None
+
+    by_year: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        yr_data = by_year.setdefault(row.tax_year, {})
+        entry: dict[str, Any] = {
+            "value": float(row.metric_value) if row.metric_value is not None else None,
+            "category": row.metric_category,
+            "form_source": row.form_source,
+        }
+        if row.line_reference:
+            entry["line_reference"] = row.line_reference
+        if row.is_amended:
+            entry["amended"] = True
+        yr_data[row.metric_name] = entry
+
+    return {str(y): by_year.get(y, {}) for y in years if by_year.get(y)}
+
+
 async def _fetch_rag_chunks(
     db: Session,
     client_id: UUID,
@@ -388,10 +439,11 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
     Priority order (highest to lowest):
     1. client_profile — never trimmed
     2. rag_chunks — only present for CHAT, high value
-    3. action_items
-    4. strategy_status
-    5. communication_history
-    6. documents_summary
+    3. financial_metrics
+    4. action_items
+    5. strategy_status
+    6. communication_history
+    7. documents_summary
     """
     import json
 
@@ -401,6 +453,8 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
         ]
         if ctx.rag_chunks:
             parts.append(json.dumps(ctx.rag_chunks, default=str))
+        if ctx.financial_metrics:
+            parts.append(json.dumps(ctx.financial_metrics, default=str))
         if ctx.action_items:
             parts.append(json.dumps(ctx.action_items, default=str))
         if ctx.strategy_status:
@@ -417,6 +471,7 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
         "communication_history",
         "strategy_status",
         "action_items",
+        "financial_metrics",
         "rag_chunks",
     ]
 
@@ -510,6 +565,48 @@ def format_context_for_prompt(
                 parts.append(f"→ {item['assigned_to_name']}")
             item_lines.append(" ".join(parts))
         sections.append("\n".join(item_lines))
+
+    # --- Financial metrics ---------------------------------------------------
+    if ctx.financial_metrics:
+        fin_lines = ["=== FINANCIAL METRICS ==="]
+        sorted_years = sorted(ctx.financial_metrics.keys(), reverse=True)
+        prev_year_data: dict[str, Any] | None = None
+
+        for yr in sorted_years:
+            yr_data = ctx.financial_metrics[yr]
+            fin_lines.append(f"\nTax Year {yr}:")
+            for name, info in sorted(yr_data.items()):
+                val = info.get("value")
+                if val is None:
+                    continue
+                line = f"  {name}: ${val:,.2f}"
+                if info.get("line_reference"):
+                    line += f" ({info['line_reference']})"
+                if info.get("amended"):
+                    line += " [AMENDED]"
+                # YoY change for QUARTERLY_ESTIMATE purpose
+                if purpose == ContextPurpose.QUARTERLY_ESTIMATE and prev_year_data:
+                    prev_info = prev_year_data.get(name)
+                    if prev_info and prev_info.get("value"):
+                        prev_val = prev_info["value"]
+                        if prev_val != 0:
+                            pct = ((val - prev_val) / abs(prev_val)) * 100
+                            line += f" ({pct:+.1f}% YoY)"
+                fin_lines.append(line)
+
+            # For QUARTERLY_ESTIMATE: note estimated payment status
+            if purpose == ContextPurpose.QUARTERLY_ESTIMATE:
+                paid_qs = []
+                for q in range(1, 5):
+                    qname = f"estimated_payments_q{q}"
+                    if qname in yr_data and yr_data[qname].get("value"):
+                        paid_qs.append(f"Q{q}")
+                if paid_qs:
+                    fin_lines.append(f"  Estimated payments made: {', '.join(paid_qs)}")
+
+            prev_year_data = yr_data
+
+        sections.append("\n".join(fin_lines))
 
     # --- Communications -----------------------------------------------------
     if ctx.communication_history:

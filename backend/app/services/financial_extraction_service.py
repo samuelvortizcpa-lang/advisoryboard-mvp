@@ -206,6 +206,18 @@ async def extract_financial_metrics(
         "Financial extraction: %d metrics extracted from %s (%s, %d)",
         len(results), document.filename, form_source, tax_year,
     )
+
+    # Run threshold checks and profile flag suggestions (best-effort)
+    try:
+        check_financial_thresholds(db, client_id, tax_year, results)
+    except Exception:
+        logger.warning("Financial threshold check failed (non-fatal)", exc_info=True)
+
+    try:
+        check_profile_flag_suggestions(db, client_id, results, document)
+    except Exception:
+        logger.warning("Profile flag suggestion check failed (non-fatal)", exc_info=True)
+
     return results
 
 
@@ -510,3 +522,265 @@ def _do_upsert(
         .first()
     )
     return row  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# Threshold-based alerts
+# ---------------------------------------------------------------------------
+
+# 2024 thresholds (updated annually)
+_NIIT_SINGLE = 200_000
+_NIIT_MFJ = 250_000
+_TOP_BRACKET_2024 = 578_125
+_QBI_SINGLE = 191_950
+_QBI_MFJ = 383_900
+
+
+def _metric_val(
+    metrics: list[ClientFinancialMetric], name: str,
+) -> float | None:
+    """Get a metric value by name from the extraction results."""
+    for m in metrics:
+        if m.metric_name == name and m.metric_value is not None:
+            return float(m.metric_value)
+    return None
+
+
+def check_financial_thresholds(
+    db: Session,
+    client_id: UUID,
+    tax_year: int,
+    metrics: list[ClientFinancialMetric],
+) -> list[dict[str, Any]]:
+    """
+    Check extracted metrics against tax planning thresholds and create
+    alerts for significant findings.
+
+    Alerts are created as ``financial_threshold`` type in the alerts system
+    via the ``DismissedAlert``-compatible pattern: they are computed
+    on-demand from the stored metrics by ``alerts_service``.
+
+    This function stores threshold-breach records so the alerts service
+    can surface them.  Returns the list of alert dicts generated
+    (for logging / testing purposes).
+    """
+    alerts: list[dict[str, Any]] = []
+
+    agi = _metric_val(metrics, "agi")
+    taxable_income = _metric_val(metrics, "taxable_income")
+    total_tax = _metric_val(metrics, "total_tax")
+    filing_status = _metric_val(metrics, "filing_status")
+    est_total = _metric_val(metrics, "estimated_payments_total")
+
+    # Determine filing-status-dependent thresholds
+    is_mfj = filing_status == 2.0
+
+    # 1. NIIT threshold
+    if agi is not None:
+        niit_threshold = _NIIT_MFJ if is_mfj else _NIIT_SINGLE
+        if agi > niit_threshold:
+            alerts.append({
+                "type": "financial_threshold",
+                "severity": "warning",
+                "client_id": str(client_id),
+                "message": (
+                    f"Client's MAGI of ${agi:,.0f} exceeds the "
+                    f"${niit_threshold:,} NIIT threshold. "
+                    f"Review Net Investment Income Tax planning strategies."
+                ),
+                "threshold": "niit",
+                "tax_year": tax_year,
+            })
+
+    # 2. Top bracket
+    if taxable_income is not None and taxable_income > _TOP_BRACKET_2024:
+        alerts.append({
+            "type": "financial_threshold",
+            "severity": "warning",
+            "client_id": str(client_id),
+            "message": (
+                f"Taxable income of ${taxable_income:,.0f} is in the top "
+                f"bracket. Consider income timing and deferral strategies."
+            ),
+            "threshold": "top_bracket",
+            "tax_year": tax_year,
+        })
+
+    # 3. QBI phase-out
+    if taxable_income is not None:
+        qbi_limit = _QBI_MFJ if is_mfj else _QBI_SINGLE
+        if taxable_income > qbi_limit:
+            alerts.append({
+                "type": "financial_threshold",
+                "severity": "info",
+                "client_id": str(client_id),
+                "message": (
+                    f"Taxable income of ${taxable_income:,.0f} exceeds the "
+                    f"${qbi_limit:,} QBI deduction phase-out threshold. "
+                    f"Review Section 199A planning."
+                ),
+                "threshold": "qbi_phaseout",
+                "tax_year": tax_year,
+            })
+
+    # 4. Year-over-year swing (>25% change)
+    prior_year = tax_year - 1
+    for metric_name in ("agi", "total_income", "schedule_c_net"):
+        current_val = _metric_val(metrics, metric_name)
+        if current_val is None:
+            continue
+
+        prior = (
+            db.query(ClientFinancialMetric)
+            .filter(
+                ClientFinancialMetric.client_id == client_id,
+                ClientFinancialMetric.tax_year == prior_year,
+                ClientFinancialMetric.metric_name == metric_name,
+            )
+            .first()
+        )
+        if prior and prior.metric_value is not None:
+            prior_val = float(prior.metric_value)
+            if prior_val != 0:
+                pct_change = ((current_val - prior_val) / abs(prior_val)) * 100
+                if abs(pct_change) >= 25:
+                    direction = "increased" if pct_change > 0 else "decreased"
+                    alerts.append({
+                        "type": "financial_threshold",
+                        "severity": "warning",
+                        "client_id": str(client_id),
+                        "message": (
+                            f"Client's {metric_name.replace('_', ' ')} "
+                            f"{direction} {abs(pct_change):.0f}% from "
+                            f"${prior_val:,.0f} to ${current_val:,.0f}. "
+                            f"Review estimated payments and planning strategies."
+                        ),
+                        "threshold": "yoy_swing",
+                        "tax_year": tax_year,
+                    })
+
+    # 5. Estimated payment shortfall
+    if total_tax is not None and est_total is not None and total_tax > 0:
+        if est_total < total_tax * 0.90:
+            shortfall = total_tax - est_total
+            alerts.append({
+                "type": "financial_threshold",
+                "severity": "warning",
+                "client_id": str(client_id),
+                "message": (
+                    f"Estimated payments of ${est_total:,.0f} are below 90% "
+                    f"of total tax (${total_tax:,.0f}). Potential underpayment "
+                    f"penalty of ~${shortfall * 0.08:,.0f}. Review safe harbor."
+                ),
+                "threshold": "est_payment_shortfall",
+                "tax_year": tax_year,
+            })
+
+    if alerts:
+        logger.info(
+            "Financial thresholds: %d alert(s) for client %s, year %d",
+            len(alerts), client_id, tax_year,
+        )
+
+    return alerts
+
+
+# ---------------------------------------------------------------------------
+# Profile flag suggestions
+# ---------------------------------------------------------------------------
+
+
+def check_profile_flag_suggestions(
+    db: Session,
+    client_id: UUID,
+    metrics: list[ClientFinancialMetric],
+    document: Document,
+) -> list[dict[str, Any]]:
+    """
+    Suggest profile flag updates based on extracted financial data.
+
+    Does NOT auto-set flags — creates alerts suggesting the CPA review
+    and update them via the strategy tab.
+    """
+    from app.models.client import Client
+
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if client is None:
+        return []
+
+    suggestions: list[dict[str, Any]] = []
+
+    # Schedule C net > 0 → has_business_entity
+    sched_c = _metric_val(metrics, "schedule_c_net")
+    if sched_c is not None and sched_c > 0 and not client.has_business_entity:
+        suggestions.append({
+            "type": "financial_threshold",
+            "severity": "info",
+            "client_id": str(client_id),
+            "message": (
+                f"Schedule C net income of ${sched_c:,.0f} detected. "
+                f"Consider enabling 'Has Business Entity' profile flag "
+                f"to unlock business tax strategies."
+            ),
+            "threshold": "flag_suggestion",
+            "suggested_flag": "has_business_entity",
+        })
+
+    # Schedule E net != 0 → has_real_estate
+    sched_e = _metric_val(metrics, "schedule_e_net")
+    if sched_e is not None and sched_e != 0 and not client.has_real_estate:
+        suggestions.append({
+            "type": "financial_threshold",
+            "severity": "info",
+            "client_id": str(client_id),
+            "message": (
+                f"Schedule E activity detected (${sched_e:,.0f}). "
+                f"Consider enabling 'Has Real Estate' profile flag "
+                f"to unlock real estate tax strategies."
+            ),
+            "threshold": "flag_suggestion",
+            "suggested_flag": "has_real_estate",
+        })
+
+    # AGI > $200K → has_high_income
+    agi = _metric_val(metrics, "agi")
+    if agi is not None and agi > 200_000 and not client.has_high_income:
+        suggestions.append({
+            "type": "financial_threshold",
+            "severity": "info",
+            "client_id": str(client_id),
+            "message": (
+                f"AGI of ${agi:,.0f} exceeds $200K. Consider enabling "
+                f"'Has High Income' profile flag to unlock high-income "
+                f"tax planning strategies."
+            ),
+            "threshold": "flag_suggestion",
+            "suggested_flag": "has_high_income",
+        })
+
+    # Form 1041 → has_estate_planning
+    if (
+        document.document_subtype
+        and "1041" in document.document_subtype
+        and not client.has_estate_planning
+    ):
+        suggestions.append({
+            "type": "financial_threshold",
+            "severity": "info",
+            "client_id": str(client_id),
+            "message": (
+                "Form 1041 (trust/estate return) detected. Consider "
+                "enabling 'Has Estate Planning' profile flag to unlock "
+                "estate planning strategies."
+            ),
+            "threshold": "flag_suggestion",
+            "suggested_flag": "has_estate_planning",
+        })
+
+    if suggestions:
+        logger.info(
+            "Profile flag suggestions: %d suggestion(s) for client %s",
+            len(suggestions), client_id,
+        )
+
+    return suggestions
