@@ -38,6 +38,7 @@ from app.models.profile_flag_history import ProfileFlagHistory
 from app.models.engagement_template import EngagementTemplate
 from app.models.engagement_template_task import EngagementTemplateTask
 from app.models.client_engagement import ClientEngagement
+from app.models.data_contradiction import DataContradiction
 
 __all__ = [
     "User",
@@ -80,4 +81,5 @@ __all__ = [
     "EngagementTemplate",
     "EngagementTemplateTask",
     "ClientEngagement",
+    "DataContradiction",
 ]
