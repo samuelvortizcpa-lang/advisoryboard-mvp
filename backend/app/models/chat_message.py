@@ -2,13 +2,19 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:  # pragma: no cover – pgvector optional in dev
+    Vector = None
+
 if TYPE_CHECKING:
+    from app.models.chat_session import ChatSession
     from app.models.client import Client
 
 
@@ -60,11 +66,28 @@ class ChatMessage(Base):
         nullable=False,
     )
 
+    # Session memory fields
+    session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    pair_embedding: Mapped[Optional[Any]] = mapped_column(
+        Vector(1536) if Vector else None,
+        nullable=True,
+    )
+
+    pair_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     # -----------------------------------------------------------------------
     # Relationships
     # -----------------------------------------------------------------------
 
     client: Mapped["Client"] = relationship("Client", back_populates="chat_messages")
+    session: Mapped[Optional["ChatSession"]] = relationship(
+        "ChatSession", back_populates="messages"
+    )
 
     def __repr__(self) -> str:
         return (

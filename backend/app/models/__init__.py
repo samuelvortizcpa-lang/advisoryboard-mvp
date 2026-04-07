@@ -11,6 +11,7 @@ from app.models.document_page_image import DocumentPageImage, IMAGE_EMBEDDING_DI
 from app.models.interaction import Interaction, INTERACTION_TYPES
 from app.models.action_item import ActionItem
 from app.models.chat_message import ChatMessage
+from app.models.chat_session import ChatSession, SUMMARY_EMBEDDING_DIM
 from app.models.integration_connection import IntegrationConnection
 from app.models.email_routing_rule import EmailRoutingRule
 from app.models.sync_log import SyncLog
@@ -51,6 +52,8 @@ __all__ = [
     "INTERACTION_TYPES",
     "ActionItem",
     "ChatMessage",
+    "ChatSession",
+    "SUMMARY_EMBEDDING_DIM",
     "IntegrationConnection",
     "EmailRoutingRule",
     "SyncLog",
