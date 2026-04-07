@@ -465,7 +465,27 @@ async def process_document(db: Session, document: Document) -> None:
                 doc_label, ver_exc,
             )
 
-        # 8. Page image processing for PDFs (best-effort — multimodal RAG)
+        # 8. Financial metric extraction (best-effort — structured data)
+        if document.document_type in ("tax_return", "financial_statement"):
+            try:
+                from app.services.financial_extraction_service import (
+                    extract_financial_metrics,
+                )
+                metrics = await extract_financial_metrics(
+                    db, document.id, document.client_id,
+                )
+                if metrics:
+                    logger.info(
+                        "RAG: extracted %d financial metric(s) for %s",
+                        len(metrics), doc_label,
+                    )
+            except Exception as fin_exc:
+                logger.warning(
+                    "RAG: financial extraction failed for %s (non-fatal): %s",
+                    doc_label, fin_exc,
+                )
+
+        # 9. Page image processing for PDFs (best-effort — multimodal RAG)
         if document.file_type == "pdf":
             try:
                 from app.services.page_image_service import process_page_images
