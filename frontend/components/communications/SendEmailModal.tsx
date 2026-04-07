@@ -23,6 +23,8 @@ interface SendEmailModalProps {
   clientEmail: string | null;
   onClose: () => void;
   onSent: () => void;
+  /** Pre-select quarterly estimate mode with specific year/quarter */
+  initialQuarterly?: { year: number; quarter: number };
 }
 
 // ─── Follow-up options ───────────────────────────────────────────────────────
@@ -43,11 +45,12 @@ export default function SendEmailModal({
   clientEmail,
   onClose,
   onSent,
+  initialQuarterly,
 }: SendEmailModalProps) {
   const { getToken } = useAuth();
 
   // Step state
-  const [approach, setApproach] = useState<Approach>(null);
+  const [approach, setApproach] = useState<Approach>(initialQuarterly ? "quarterly" : null);
   const [showEditor, setShowEditor] = useState(false);
 
   // Template state
@@ -63,8 +66,9 @@ export default function SendEmailModal({
   const [draftError, setDraftError] = useState<string | null>(null);
 
   // Quarterly estimate state
-  const [qeTaxYear, setQeTaxYear] = useState(new Date().getFullYear());
+  const [qeTaxYear, setQeTaxYear] = useState(initialQuarterly?.year ?? new Date().getFullYear());
   const [qeQuarter, setQeQuarter] = useState(() => {
+    if (initialQuarterly) return initialQuarterly.quarter;
     const m = new Date().getMonth();
     if (m < 3) return 1;
     if (m < 5) return 2;

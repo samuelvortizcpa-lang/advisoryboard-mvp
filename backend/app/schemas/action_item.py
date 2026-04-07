@@ -18,6 +18,8 @@ class ActionItemResponse(BaseModel):
     notes: Optional[str] = None
     created_by: Optional[str] = None
     source: str = "ai_extracted"
+    engagement_task_id: Optional[UUID] = None
+    engagement_workflow_type: Optional[str] = None
     extracted_at: Optional[datetime] = None
     completed_at: Optional[datetime]
     created_at: datetime

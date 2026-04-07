@@ -9,6 +9,7 @@ Alert types:
 - preparer_determination_needed: tax docs uploaded, preparer relationship not yet set
 - consent_needed:                preparer confirmed, full §7216 consent required
 - consent_expiring:              §7216 consent expires within 30 days
+- quarterly_estimate_due:        quarterly estimate prep task with upcoming deadline
 - follow_up_due:                 follow-up reminder whose remind_at has passed
 """
 
@@ -293,7 +294,60 @@ def _compute_alerts_uncached(
             "created_at": datetime.now(timezone.utc).date().isoformat(),
         })
 
-    # ── Q9: Follow-up reminders that are due ──────────────────────────────
+    # ── Q9.5: Quarterly estimate due — engagement tasks with workflow_type ─
+    import re
+    from app.models.engagement_template_task import EngagementTemplateTask
+
+    # IRS quarterly estimate due dates — (month, day)
+    _QE_DUE = {1: (4, 15), 2: (6, 15), 3: (9, 15), 4: (1, 15)}
+
+    thirty_days_ahead = today + timedelta(days=30)
+    qe_items = (
+        db.query(ActionItem)
+        .join(EngagementTemplateTask, ActionItem.engagement_task_id == EngagementTemplateTask.id)
+        .filter(
+            ActionItem.client_id.in_(client_ids),
+            ActionItem.status == "pending",
+            EngagementTemplateTask.workflow_type == "quarterly_estimate",
+            ActionItem.due_date.isnot(None),
+            ActionItem.due_date <= thirty_days_ahead,
+        )
+        .all()
+    )
+    for item in qe_items:
+        if ("quarterly_estimate_due", item.id) in dismissed:
+            continue
+        # Extract quarter from task text (e.g. "Q1 estimated tax prep (2026)")
+        m = re.search(r"Q(\d)", item.text)
+        quarter = int(m.group(1)) if m else None
+        # Extract year from text
+        yr_match = re.search(r"\((\d{4})\)", item.text)
+        tax_year = int(yr_match.group(1)) if yr_match else today.year
+        if quarter:
+            due_month, due_day = _QE_DUE.get(quarter, (4, 15))
+            due_year = tax_year + 1 if quarter == 4 else tax_year
+            try:
+                payment_due = date(due_year, due_month, due_day)
+                due_str = payment_due.strftime("%B %d, %Y")
+            except ValueError:
+                due_str = "upcoming"
+        else:
+            due_str = "upcoming"
+
+        cname = client_names.get(item.client_id, "Unknown")
+        q_label = f"Q{quarter} {tax_year}" if quarter else "Quarterly"
+        alerts.append({
+            "id": str(item.id),
+            "type": "quarterly_estimate_due",
+            "severity": "warning",
+            "client_id": str(item.client_id),
+            "client_name": cname,
+            "message": f"{q_label} estimated tax payment due {due_str} for {cname}. Draft estimate email?",
+            "related_id": str(item.id),
+            "created_at": item.due_date.isoformat() if item.due_date else today.isoformat(),
+        })
+
+    # ── Q10: Follow-up reminders that are due ──────────────────────────────
     now = datetime.now(timezone.utc)
     due_reminders = (
         db.query(FollowUpReminder)

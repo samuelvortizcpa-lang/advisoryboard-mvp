@@ -933,7 +933,7 @@ export function createConsentApi(getToken: GetToken, orgId?: string) {
 // ─── Alert types ───────────────────────────────────────────────────────────────
 
 export type AlertSeverity = "critical" | "warning" | "info";
-export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document" | "consent_needed" | "consent_expiring" | "preparer_determination_needed" | "follow_up_due";
+export type AlertType = "overdue_action" | "upcoming_deadline" | "stale_client" | "stuck_document" | "consent_needed" | "consent_expiring" | "preparer_determination_needed" | "quarterly_estimate_due" | "follow_up_due";
 
 export interface Alert {
   id: string;
@@ -995,6 +995,7 @@ export interface ActionItem {
   notes: string | null;
   source: "ai_extracted" | "manual" | "engagement_engine";
   engagement_task_id: string | null;
+  engagement_workflow_type: string | null;
   created_by: string | null;
   extracted_at: string | null;
   completed_at: string | null;

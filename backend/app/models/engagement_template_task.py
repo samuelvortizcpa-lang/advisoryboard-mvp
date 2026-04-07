@@ -63,6 +63,10 @@ class EngagementTemplateTask(Base):
         Integer, server_default="0", nullable=False,
     )
 
+    workflow_type: Mapped[Optional[str]] = mapped_column(
+        String(30), nullable=True,
+    )  # "quarterly_estimate" or null — triggers specialized workflow instead of generic email
+
     # ── Relationships ──────────────────────────────────────────────────────
 
     template: Mapped["EngagementTemplate"] = relationship(

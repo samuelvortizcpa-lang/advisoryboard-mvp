@@ -15,6 +15,7 @@ import {
   Client,
 } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
+import SendEmailModal from "@/components/communications/SendEmailModal";
 
 interface Props {
   item: ActionItem | null; // null = creating new
@@ -54,6 +55,9 @@ export default function TaskDetailPanel({
   const [toast, setToast] = useState<string | null>(null);
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [showEstimateEmail, setShowEstimateEmail] = useState(false);
+  const [estimateEmailSent, setEstimateEmailSent] = useState(false);
+  const [estimateClient, setEstimateClient] = useState<Client | null>(null);
 
   // Animation state: mounted = in DOM, visible = slide-in triggered
   const [mounted, setMounted] = useState(false);
@@ -237,10 +241,12 @@ export default function TaskDetailPanel({
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
                   item.source === "manual"
                     ? "bg-blue-50 text-blue-600"
+                    : item.source === "engagement_engine"
+                    ? "bg-violet-50 text-violet-600"
                     : "bg-gray-100 text-gray-500"
                 }`}
               >
-                {item.source === "manual" ? "Manual" : "AI extracted"}
+                {item.source === "manual" ? "Manual" : item.source === "engagement_engine" ? "Engagement" : "AI extracted"}
               </span>
             )}
           </div>
@@ -359,6 +365,48 @@ export default function TaskDetailPanel({
             />
           </div>
 
+          {/* Quarterly estimate email button */}
+          {item && item.engagement_workflow_type === "quarterly_estimate" && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <CalculatorIcon />
+                <span className="text-xs font-semibold text-emerald-800">Quarterly Estimate Workflow</span>
+              </div>
+              {estimateEmailSent ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-emerald-700">Estimate email sent! Mark this task as complete?</p>
+                  <button
+                    onClick={() => {
+                      setStatus("completed");
+                      setEstimateEmailSent(false);
+                      handleSave();
+                    }}
+                    className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                  >
+                    Mark Complete
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={async () => {
+                    // Fetch client details for SendEmailModal
+                    try {
+                      const clientData = await createClientsApi(getToken, activeOrg?.id).get(item.client_id);
+                      setEstimateClient(clientData);
+                      setShowEstimateEmail(true);
+                    } catch {
+                      setToast("Failed to load client");
+                    }
+                  }}
+                  className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                >
+                  <EnvelopeIcon />
+                  {`Draft Q${parseQuarter(item.text) ?? "?"} Estimate Email`}
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Metadata footer */}
           {item && (
             <div className="space-y-1 pt-2 border-t border-gray-100">
@@ -421,6 +469,24 @@ export default function TaskDetailPanel({
           </div>
         )}
       </div>
+
+      {/* Quarterly estimate email modal */}
+      {showEstimateEmail && estimateClient && item && (
+        <SendEmailModal
+          clientId={item.client_id}
+          clientName={estimateClient.name}
+          clientEmail={estimateClient.email}
+          initialQuarterly={{
+            year: parseYear(item.text) ?? new Date().getFullYear(),
+            quarter: parseQuarter(item.text) ?? 1,
+          }}
+          onClose={() => setShowEstimateEmail(false)}
+          onSent={() => {
+            setShowEstimateEmail(false);
+            setEstimateEmailSent(true);
+          }}
+        />
+      )}
     </>,
     document.body
   );
@@ -441,12 +507,38 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function parseQuarter(text: string): number | null {
+  const m = text.match(/Q(\d)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function parseYear(text: string): number | null {
+  const m = text.match(/\((\d{4})\)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 function XIcon() {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
+function CalculatorIcon() {
+  return (
+    <svg className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25v-.008zm2.498-6.75h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007v-.008zm2.504-6.75h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008v-.008zm1.498 2.25h.008v.008h-.008v-.008zm-1.498-6.75h.008v.008h-.008V18zM15.75 15.75h.008v.008h-.008v-.008zm0 2.25h.007v.008h-.007v-.008zM15 9.75a.75.75 0 00-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 00.75-.75V10.5a.75.75 0 00-.75-.75H15zM4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15A2.25 2.25 0 002.25 6.75v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.5-4.875h4.125a1.125 1.125 0 010 2.25H12a1.125 1.125 0 010-2.25z" />
+    </svg>
+  );
+}
+
+function EnvelopeIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
     </svg>
   );
 }

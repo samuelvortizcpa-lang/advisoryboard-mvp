@@ -208,6 +208,7 @@ def _process_task(
             except Exception:
                 logger.warning("Journal entry for engagement task failed (non-fatal)", exc_info=True)
 
+
     db.commit()
     return created
 
@@ -263,6 +264,8 @@ def _format_task_text(task_name: str, year: int) -> str:
     if str(year) in task_name:
         return task_name
     return f"{task_name} ({year})"
+
+
 
 
 # ---------------------------------------------------------------------------

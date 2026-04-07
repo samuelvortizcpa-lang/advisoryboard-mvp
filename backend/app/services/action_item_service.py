@@ -62,6 +62,11 @@ def _to_response(item: ActionItem, client_name: str | None = None) -> ActionItem
         notes=item.notes,
         created_by=item.created_by,
         source=item.source,
+        engagement_task_id=item.engagement_task_id,
+        engagement_workflow_type=(
+            item.engagement_task.workflow_type
+            if item.engagement_task else None
+        ),
         extracted_at=item.extracted_at,
         completed_at=item.completed_at,
         created_at=item.created_at,
@@ -99,7 +104,7 @@ def get_action_items(
 
     items = (
         base
-        .options(joinedload(ActionItem.document))
+        .options(joinedload(ActionItem.document), joinedload(ActionItem.engagement_task))
         .order_by(ActionItem.created_at.desc())
         .offset(skip)
         .limit(limit)
@@ -118,7 +123,7 @@ def get_action_item_by_id(
     query = (
         db.query(ActionItem)
         .join(Client, ActionItem.client_id == Client.id)
-        .options(joinedload(ActionItem.document))
+        .options(joinedload(ActionItem.document), joinedload(ActionItem.engagement_task))
     )
     if org_id is not None:
         query = query.filter(ActionItem.id == item_id, Client.org_id == org_id)
@@ -288,7 +293,7 @@ def get_org_action_items(
             ActionItem.created_at.desc(),
         )
 
-    rows = query.options(joinedload(ActionItem.document)).offset(skip).limit(limit).all()
+    rows = query.options(joinedload(ActionItem.document), joinedload(ActionItem.engagement_task)).offset(skip).limit(limit).all()
 
     items = [_to_response(item, client_name=cname) for item, cname in rows]
     return items, total
