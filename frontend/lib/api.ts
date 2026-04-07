@@ -301,8 +301,10 @@ export interface ChatApiResponse {
   sources: RagSource[];
   model_used: string;
   query_type: string;
+  analysis_tier: string | null;
   quota_remaining: number | null;
   quota_warning: string | null;
+  quota_warning_message: string | null;
 }
 
 export interface SubscriptionInfo {
@@ -378,17 +380,16 @@ export function createRagApi(getToken: GetToken, orgId?: string) {
       );
     },
 
-    chat(clientId: string, question: string, modelOverride?: string | null) {
+    chat(clientId: string, question: string) {
       return f<ChatApiResponse>(`/clients/${clientId}/rag/chat`, {
         method: "POST",
-        body: JSON.stringify({ question, model_override: modelOverride ?? null }),
+        body: JSON.stringify({ question }),
       });
     },
 
     async chatStream(
       clientId: string,
       question: string,
-      modelOverride: string | null | undefined,
       onToken: (token: string) => void,
       onDone: (meta: {
         sources: RagSource[];
@@ -396,8 +397,10 @@ export function createRagApi(getToken: GetToken, orgId?: string) {
         confidence_score: number;
         model_used: string;
         query_type: string;
+        analysis_tier: string | null;
         quota_remaining: number | null;
         quota_warning: string | null;
+        quota_warning_message: string | null;
       }) => void,
     ): Promise<void> {
       const token = await getToken();
@@ -412,7 +415,7 @@ export function createRagApi(getToken: GetToken, orgId?: string) {
         {
           method: "POST",
           headers,
-          body: JSON.stringify({ question, model_override: modelOverride ?? null }),
+          body: JSON.stringify({ question }),
         },
       );
 

@@ -15,9 +15,9 @@ interface Message {
   sources?: RagSource[];
   confidence_tier?: "high" | "medium" | "low";
   confidence_score?: number;
-  model_used?: string;
+  analysis_tier?: string | null;
   query_type?: string;
-  quota_warning?: string | null;
+  quota_warning_message?: string | null;
   error?: boolean;
 }
 
@@ -41,8 +41,6 @@ export default function ClientChat({ clientId, documentCount }: Props) {
   const [status, setStatus] = useState<RagStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-
-  const [modelMode, setModelMode] = useState<"auto" | "fast" | "balanced" | "opus">("auto");
 
   const [exportingFormat, setExportingFormat] = useState<"txt" | "pdf" | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -149,11 +147,9 @@ export default function ClientChat({ clientId, documentCount }: Props) {
     ]);
 
     try {
-      const override = modelMode === "auto" ? null : modelMode;
       await createRagApi(getToken).chatStream(
         clientId,
         question,
-        override,
         // onToken — append each token to the streaming message
         (token: string) => {
           setMessages((prev) => {
@@ -176,9 +172,9 @@ export default function ClientChat({ clientId, documentCount }: Props) {
                 sources: meta.sources,
                 confidence_tier: meta.confidence_tier as "high" | "medium" | "low",
                 confidence_score: meta.confidence_score,
-                model_used: meta.model_used,
+                analysis_tier: meta.analysis_tier,
                 query_type: meta.query_type,
-                quota_warning: meta.quota_warning,
+                quota_warning_message: meta.quota_warning_message,
               };
             }
             return updated;
@@ -373,39 +369,8 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           <div ref={bottomRef} />
         </div>
 
-        {/* ── Model selector + Input ────────────────────────────────────── */}
+        {/* ── Input ────────────────────────────────────────────────────── */}
         <div className="border-t border-gray-100">
-          <div className="flex items-center gap-1 px-3 pt-2">
-            <span className="mr-1 text-[10px] text-gray-400">Model:</span>
-            <HelpTooltip content="Auto picks the best model per question. Quick uses GPT-4o-mini for fast lookups. Deep uses Claude for complex analysis. Opus uses the most powerful model for nuanced strategic work." position="top" maxWidth={280} />
-            {([
-              { key: "auto" as const, label: "Auto", icon: "\u2728", tip: "Auto-route based on question type" },
-              { key: "fast" as const, label: "Quick", icon: "\u26A1", tip: "Fast lookups using GPT-4o-mini" },
-              { key: "balanced" as const, label: "Deep", icon: "\uD83E\uDDE0", tip: "Strategic analysis using Claude Sonnet" },
-              { key: "opus" as const, label: "Opus", icon: "\uD83D\uDC8E", tip: "Complex multi-doc analysis using Claude Opus" },
-            ]).map(({ key, label, icon, tip }) => (
-              <button
-                key={key}
-                type="button"
-                title={tip}
-                onClick={() => setModelMode(key)}
-                className={[
-                  "rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors",
-                  modelMode === key
-                    ? key === "auto"
-                      ? "bg-gray-200 text-gray-700"
-                      : key === "fast"
-                      ? "bg-blue-100 text-blue-700"
-                      : key === "opus"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-purple-100 text-purple-700"
-                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-600",
-                ].join(" ")}
-              >
-                {icon} {label}
-              </button>
-            ))}
-          </div>
         <form
           onSubmit={handleSubmit}
           className="flex items-center gap-2 px-3 pb-3 pt-1.5"
@@ -636,20 +601,12 @@ function MessageBubble({
         {!isUser && message.confidence_tier && (
           <ConfidenceBadge tier={message.confidence_tier} score={message.confidence_score ?? 0} />
         )}
-        {!isUser && message.model_used && (
+        {!isUser && message.analysis_tier && message.analysis_tier !== "standard" && (
           <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
             <span className={`h-1.5 w-1.5 rounded-full ${
-              message.model_used === "claude-opus-4.6"
-                ? "bg-amber-400"
-                : message.query_type === "strategic"
-                ? "bg-purple-400"
-                : "bg-gray-300"
+              message.analysis_tier === "premium" ? "bg-purple-400" : "bg-blue-400"
             }`} />
-            {message.model_used === "claude-opus-4.6"
-              ? "Opus Analysis"
-              : message.model_used === "gpt-4o-mini"
-              ? "Quick Lookup"
-              : "Deep Analysis"}
+            {message.analysis_tier === "premium" ? "Premium analysis" : "Advanced analysis"}
           </span>
         )}
 
@@ -684,13 +641,13 @@ function MessageBubble({
         )}
 
         {/* Quota warning */}
-        {!isUser && message.quota_warning && (
+        {!isUser && message.quota_warning_message && (
           <div className={`w-full rounded-lg px-3 py-1.5 text-xs ${
-            message.quota_warning.includes("limit reached") || message.quota_warning.includes("does not include")
+            message.quota_warning_message.includes("limit reached") || message.quota_warning_message.includes("does not include")
               ? "border border-red-200 bg-red-50 text-red-600"
               : "border border-amber-200 bg-amber-50 text-amber-700"
           }`}>
-            {message.quota_warning}
+            {message.quota_warning_message}
           </div>
         )}
       </div>
