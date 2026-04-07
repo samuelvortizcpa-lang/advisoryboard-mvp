@@ -18,10 +18,10 @@ export const RANGE_DAYS: Record<TimeRange, number> = {
 };
 
 export const DIST_COLORS: Record<string, string> = {
-  "Quick Lookup": "#3B82F6",
-  "Deep Analysis": "#8B5CF6",
-  Brief: "#14B8A6",
-  "Action Items": "#F59E0B",
+  "Document lookups": "#9CA3AF",
+  "Advanced analyses": "#3B82F6",
+  "Premium analyses": "#8B5CF6",
+  Briefs: "#14B8A6",
   Other: "#D1D5DB",
 };
 

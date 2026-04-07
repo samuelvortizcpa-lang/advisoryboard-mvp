@@ -171,14 +171,24 @@ class DashboardSummary(BaseModel):
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
-# Map raw endpoint values to human-friendly labels
+# Map raw endpoint values to human-friendly labels (non-chat endpoints)
 _ENDPOINT_LABELS = {
-    "chat": "Quick Lookup",
-    "chat_strategic": "Deep Analysis",
-    "brief": "Brief",
-    "action_items": "Action Items",
+    "brief": "Briefs",
+    "action_items": "Other",
     "classify": "Other",
 }
+
+
+def _model_to_tier_label(model: str | None) -> str:
+    """Map a model identifier to its analysis-tier label for the donut chart."""
+    if not model:
+        return "Document lookups"
+    m = model.lower()
+    if "opus" in m:
+        return "Premium analyses"
+    if "sonnet" in m or "claude" in m:
+        return "Advanced analyses"
+    return "Document lookups"
 
 
 def _usage_filter(query, auth: AuthContext):
@@ -335,20 +345,21 @@ def _build_dashboard_summary(
 
     dist_q = db.query(
         TokenUsage.endpoint,
+        TokenUsage.model,
         func.count(TokenUsage.id).label("cnt"),
     ).filter(TokenUsage.created_at >= cutoff)
     dist_q = _usage_filter(dist_q, auth)
-    dist_rows = dist_q.group_by(TokenUsage.endpoint).all()
+    dist_rows = dist_q.group_by(TokenUsage.endpoint, TokenUsage.model).all()
 
-    query_distribution: list[QueryTypeCount] = []
-    for row in dist_rows:
-        label = _ENDPOINT_LABELS.get(row.endpoint or "", "Other")
-        query_distribution.append(QueryTypeCount(type=label, count=row.cnt))
-
-    # Merge duplicates (multiple raw endpoints → same label)
+    # Group chat/chat_stream/chat_strategic by model tier; others by endpoint label
     merged: dict[str, int] = {}
-    for qd in query_distribution:
-        merged[qd.type] = merged.get(qd.type, 0) + qd.count
+    for row in dist_rows:
+        ep = row.endpoint or ""
+        if ep in ("chat", "chat_stream", "chat_strategic"):
+            label = _model_to_tier_label(row.model)
+        else:
+            label = _ENDPOINT_LABELS.get(ep, "Other")
+        merged[label] = merged.get(label, 0) + row.cnt
     query_distribution = [QueryTypeCount(type=t, count=c) for t, c in merged.items()]
 
     # ── Attention items (pending action items, prioritized) ───────────────

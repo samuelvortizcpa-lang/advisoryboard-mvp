@@ -100,7 +100,7 @@ export default function AdminDashboard({ data, timeRange, onTimeRangeChange }: P
       {/* Row 3: Activity trends */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3fr_2fr]">
         <AreaChartCard title="Activity" data={chartData} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-        <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" titleExtra={<HelpTooltip content="Shows how your AI queries are routed: factual lookups, multi-document synthesis, or strategic advisory analysis." />} />
+        <DonutChartCard title="Query distribution" data={donutData} centerValue={totalQueries} centerLabel="queries" titleExtra={<HelpTooltip content="Breakdown of AI query types: document lookups, advanced analyses, and premium analyses." />} />
       </div>
       {/* Contextual tooltip for client search */}
       <ContextualTooltip

@@ -79,10 +79,10 @@ describe("RANGE_DAYS", () => {
 
 describe("DIST_COLORS", () => {
   it("has colors for all query types", () => {
-    expect(DIST_COLORS["Quick Lookup"]).toBeDefined();
-    expect(DIST_COLORS["Deep Analysis"]).toBeDefined();
-    expect(DIST_COLORS.Brief).toBeDefined();
-    expect(DIST_COLORS["Action Items"]).toBeDefined();
+    expect(DIST_COLORS["Document lookups"]).toBeDefined();
+    expect(DIST_COLORS["Advanced analyses"]).toBeDefined();
+    expect(DIST_COLORS["Premium analyses"]).toBeDefined();
+    expect(DIST_COLORS.Briefs).toBeDefined();
     expect(DIST_COLORS.Other).toBeDefined();
   });
 });
