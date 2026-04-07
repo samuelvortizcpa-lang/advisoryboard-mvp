@@ -7,13 +7,14 @@ import {
   ActionItemTimelineItem,
   CommunicationTimelineItem,
   DocumentTimelineItem,
+  SessionTimelineItem,
   TimelineItem,
   createTimelineApi,
 } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type FilterType = "all" | "document" | "action_item" | "communication";
+type FilterType = "all" | "document" | "action_item" | "communication" | "session";
 
 interface TimelineProps {
   clientId: string;
@@ -130,6 +131,14 @@ function MailIcon() {
   return (
     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+    </svg>
+  );
+}
+
+function ChatBubbleIcon() {
+  return (
+    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
     </svg>
   );
 }
@@ -260,6 +269,35 @@ function CommunicationCard({ item }: { item: CommunicationTimelineItem }) {
   );
 }
 
+function SessionCard({ item }: { item: SessionTimelineItem }) {
+  return (
+    <div className="rounded-lg border border-gray-200 px-3 py-2.5 transition hover:border-indigo-200 hover:bg-indigo-50/40">
+      <p className="truncate text-sm font-medium text-gray-900">
+        {item.title || "Untitled conversation"}
+      </p>
+      <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
+        <span>{item.message_count} message{item.message_count !== 1 ? "s" : ""}</span>
+        {item.topic_count > 0 && (
+          <>
+            <span>·</span>
+            <span>{item.topic_count} topic{item.topic_count !== 1 ? "s" : ""}</span>
+          </>
+        )}
+        {item.ended_at && (
+          <>
+            <span>·</span>
+            <span>
+              {Math.round(
+                (new Date(item.ended_at).getTime() - new Date(item.date).getTime()) / 60000
+              )} min
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function Timeline({
@@ -325,6 +363,7 @@ export default function Timeline({
               { value: "document" as FilterType, label: "Documents" },
               { value: "action_item" as FilterType, label: "Actions" },
               { value: "communication" as FilterType, label: "Emails" },
+              { value: "session" as FilterType, label: "Sessions" },
             ] as const
           ).map(({ value, label }) => (
             <button
@@ -399,6 +438,8 @@ export default function Timeline({
                               ? "bg-blue-500"
                               : item.type === "communication"
                               ? "bg-green-500"
+                              : item.type === "session"
+                              ? "bg-indigo-500"
                               : "bg-purple-500"
                           }`}
                         >
@@ -406,6 +447,8 @@ export default function Timeline({
                             <DocIcon />
                           ) : item.type === "communication" ? (
                             <MailIcon />
+                          ) : item.type === "session" ? (
+                            <ChatBubbleIcon />
                           ) : (
                             <CheckIcon />
                           )}
@@ -421,6 +464,8 @@ export default function Timeline({
                               ? "Document uploaded"
                               : item.type === "communication"
                               ? "Email sent"
+                              : item.type === "session"
+                              ? "Advisory session"
                               : "Action item created"}
                           </span>
                           <span
@@ -439,6 +484,8 @@ export default function Timeline({
                           />
                         ) : item.type === "communication" ? (
                           <CommunicationCard item={item} />
+                        ) : item.type === "session" ? (
+                          <SessionCard item={item} />
                         ) : (
                           <ActionItemCard
                             item={item}

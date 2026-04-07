@@ -29,6 +29,9 @@ import {
   createRagApi,
   createStrategiesApi,
   createCommunicationsApi,
+  createSessionsApi,
+  ChatSessionSummary,
+  ChatSessionDetail,
 } from "@/lib/api";
 import { useOrg } from "@/contexts/OrgContext";
 import ActionItemList from "@/components/action-items/ActionItemList";
@@ -62,7 +65,7 @@ const ENTITY_TYPES = [
   "Other",
 ];
 
-type TabId = "overview" | "documents" | "actions" | "chat" | "timeline" | "strategies" | "journal" | "access";
+type TabId = "overview" | "documents" | "actions" | "chat" | "conversations" | "timeline" | "strategies" | "journal" | "access";
 
 const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -71,6 +74,7 @@ const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "strategies", label: "Tax Strategies" },
   { id: "journal", label: "Journal" },
   { id: "chat", label: "Chat" },
+  { id: "conversations", label: "Conversations" },
   { id: "timeline", label: "Timeline" },
 ];
 
@@ -1231,6 +1235,11 @@ function ClientDetailContent() {
               </div>
             )}
 
+            {/* ── Conversations ─────────────────────────────────────────── */}
+            {activeTab === "conversations" && (
+              <ConversationsTab clientId={id} getToken={getToken} />
+            )}
+
             {/* ── Timeline ──────────────────────────────────────────────── */}
             {activeTab === "timeline" && (
               <div className="space-y-8">
@@ -1843,6 +1852,231 @@ function OverviewChatIcon() {
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
     </svg>
+  );
+}
+
+function ConversationsTab({
+  clientId,
+  getToken,
+}: {
+  clientId: string;
+  getToken: () => Promise<string | null>;
+}) {
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ChatSessionDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const perPage = 15;
+  const api = createSessionsApi(getToken);
+
+  async function loadPage(p: number) {
+    setLoading(true);
+    try {
+      const res = await api.getClientSessions(clientId, p, perPage);
+      setSessions(res.sessions);
+      setTotal(res.total);
+      setPage(p);
+    } catch (err) {
+      console.error("Failed to load sessions:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  async function toggleDetail(sessionId: string) {
+    if (expandedId === sessionId) {
+      setExpandedId(null);
+      setDetail(null);
+      return;
+    }
+    setExpandedId(sessionId);
+    setDetailLoading(true);
+    try {
+      const d = await api.getSessionDetail(clientId, sessionId);
+      setDetail(d);
+    } catch (err) {
+      console.error("Failed to load session:", err);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function fmtDate(d: string) {
+    return new Date(d).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  const totalPages = Math.ceil(total / perPage);
+
+  if (loading && sessions.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-16 text-gray-400">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mr-2" />
+        Loading conversations...
+      </div>
+    );
+  }
+
+  if (!loading && sessions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+          <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-gray-700">No conversations yet</p>
+        <p className="mt-1 max-w-xs text-xs text-gray-400">
+          Start chatting with the AI about this client to build conversation history.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold text-gray-900">Conversations</h2>
+        <span className="text-xs text-gray-400">{total} total</span>
+      </div>
+
+      <div className="space-y-2">
+        {sessions.map((s) => (
+          <div
+            key={s.id}
+            className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+          >
+            <button
+              onClick={() => toggleDetail(s.id)}
+              className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">
+                  {s.title || "Untitled conversation"}
+                </p>
+                {s.summary && (
+                  <p className="mt-0.5 text-xs text-gray-500 line-clamp-2">
+                    {s.summary}
+                  </p>
+                )}
+                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-gray-400">
+                  <span>{fmtDate(s.started_at)}</span>
+                  <span>·</span>
+                  <span>{s.message_count} message{s.message_count !== 1 ? "s" : ""}</span>
+                </div>
+                {s.key_topics && s.key_topics.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {s.key_topics.map((topic, i) => (
+                      <span
+                        key={i}
+                        className="rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[10px] text-blue-600"
+                      >
+                        {topic}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {s.key_decisions && s.key_decisions.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {s.key_decisions.map((d, i) => (
+                      <p key={i} className="text-[11px] text-green-600 flex items-center gap-1">
+                        <svg className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        {d}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <svg
+                className={`h-4 w-4 flex-shrink-0 text-gray-400 mt-1 transition-transform ${
+                  expandedId === s.id ? "rotate-180" : ""
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {/* Expanded transcript */}
+            {expandedId === s.id && (
+              <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 max-h-96 overflow-y-auto">
+                {detailLoading ? (
+                  <div className="flex items-center justify-center py-4 text-xs text-gray-400">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent mr-1.5" />
+                    Loading transcript...
+                  </div>
+                ) : detail && detail.messages.length > 0 ? (
+                  <div className="space-y-3">
+                    {detail.messages.map((msg) => (
+                      <div key={msg.id} className="flex items-start gap-2">
+                        <div
+                          className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold mt-0.5 ${
+                            msg.role === "user"
+                              ? "bg-blue-100 text-blue-600"
+                              : "bg-gray-200 text-gray-600"
+                          }`}
+                        >
+                          {msg.role === "user" ? "U" : "AI"}
+                        </div>
+                        <div className="text-xs text-gray-600 leading-relaxed min-w-0">
+                          {msg.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 text-center py-3">
+                    No messages in this session
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <button
+            onClick={() => loadPage(page - 1)}
+            disabled={page <= 1 || loading}
+            className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          >
+            Previous
+          </button>
+          <span className="text-xs text-gray-400">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            onClick={() => loadPage(page + 1)}
+            disabled={page >= totalPages || loading}
+            className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          >
+            Next
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

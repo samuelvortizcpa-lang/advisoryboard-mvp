@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { RagSource, RagStatus, createRagApi } from "@/lib/api";
 import HelpTooltip from "@/components/ui/HelpTooltip";
+import SessionHistory from "@/components/sessions/SessionHistory";
 import MarkdownContent from "./MarkdownContent";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -324,6 +325,9 @@ export default function ClientChat({ clientId, documentCount }: Props) {
             </button>
           </div>
         )}
+
+        {/* ── Past conversations (collapsible) ─────────────────────────── */}
+        <SessionHistory clientId={clientId} />
 
         {/* ── Message list ──────────────────────────────────────────────── */}
         <div className="flex min-h-[300px] max-h-[480px] flex-col gap-4 overflow-y-auto p-4">

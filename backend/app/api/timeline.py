@@ -17,10 +17,12 @@ from app.models.action_item import ActionItem
 from app.models.client import Client
 from app.models.client_communication import ClientCommunication
 from app.models.document import Document
+from app.models.chat_session import ChatSession
 from app.schemas.timeline import (
     ActionItemTimelineItem,
     CommunicationTimelineItem,
     DocumentTimelineItem,
+    SessionTimelineItem,
     TimelineItem,
     TimelineResponse,
 )
@@ -49,6 +51,7 @@ async def get_client_timeline(
     include_documents = not types or "document" in types
     include_action_items = not types or "action_item" in types
     include_communications = not types or "communication" in types
+    include_sessions = not types or "session" in types
 
     items: List[TimelineItem] = []
 
@@ -136,6 +139,34 @@ async def get_client_timeline(
                     subtitle=f"To {comm.recipient_name or comm.recipient_email}",
                     icon_hint="email",
                     metadata=meta,
+                )
+            )
+
+    # Fetch closed sessions
+    if include_sessions:
+        sess_query = (
+            db.query(ChatSession)
+            .filter(
+                ChatSession.client_id == client_id,
+                ChatSession.is_active.is_(False),
+            )
+            .order_by(ChatSession.started_at.desc())
+        )
+        if start_date:
+            sess_query = sess_query.filter(ChatSession.started_at >= start_date)
+        if end_date:
+            sess_query = sess_query.filter(ChatSession.started_at <= end_date)
+        for sess in sess_query.limit(fetch_limit).all():
+            items.append(
+                SessionTimelineItem(
+                    type="session",
+                    id=sess.id,
+                    date=sess.started_at,
+                    title=sess.title,
+                    ended_at=sess.ended_at,
+                    message_count=sess.message_count or 0,
+                    topic_count=len(sess.key_topics) if sess.key_topics else 0,
+                    icon_hint="chat",
                 )
             )
 

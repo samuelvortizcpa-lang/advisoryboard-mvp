@@ -1143,7 +1143,18 @@ export interface CommunicationTimelineItem {
   } | null;
 }
 
-export type TimelineItem = DocumentTimelineItem | ActionItemTimelineItem | CommunicationTimelineItem;
+export interface SessionTimelineItem {
+  type: "session";
+  id: string;
+  date: string;
+  title: string | null;
+  ended_at: string | null;
+  message_count: number;
+  topic_count: number;
+  icon_hint: string;
+}
+
+export type TimelineItem = DocumentTimelineItem | ActionItemTimelineItem | CommunicationTimelineItem | SessionTimelineItem;
 
 export interface TimelineResponse {
   items: TimelineItem[];
@@ -2658,6 +2669,91 @@ export function createPracticeBookApi(getToken: GetToken, orgId?: string) {
 
     exportSingleClientPdf(clientId: string) {
       return fb(`/clients/${clientId}/practice-book`, { method: "POST" });
+    },
+  };
+}
+
+// ─── Session Memory types ─────────────────────────────────────────────────────
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  key_topics: string[];
+  key_decisions: string[];
+  started_at: string;
+  ended_at: string | null;
+  message_count: number;
+}
+
+export interface ChatSessionDetail extends ChatSessionSummary {
+  messages: ChatMessage[];
+}
+
+export interface SessionListResponse {
+  sessions: ChatSessionSummary[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+export interface SessionSearchResult {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  key_topics: string[];
+  key_decisions: string[];
+  started_at: string;
+  ended_at: string | null;
+  message_count: number;
+  similarity_score: number;
+}
+
+export interface QAPairResult {
+  question: string;
+  answer: string;
+  session_id: string;
+  session_title: string | null;
+  session_date: string;
+  similarity_score: number;
+}
+
+export interface SessionSearchResponse {
+  sessions: SessionSearchResult[];
+  qa_pairs: QAPairResult[];
+}
+
+// ─── Sessions API factory ────────────────────────────────────────────────────
+
+export function createSessionsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    getClientSessions(clientId: string, page = 1, perPage = 20) {
+      return f<SessionListResponse>(
+        `/clients/${clientId}/sessions?page=${page}&per_page=${perPage}`
+      );
+    },
+
+    getSessionDetail(clientId: string, sessionId: string) {
+      return f<ChatSessionDetail>(
+        `/clients/${clientId}/sessions/${sessionId}`
+      );
+    },
+
+    searchSessions(clientId: string, query: string, limit = 5) {
+      return f<SessionSearchResponse>(
+        `/clients/${clientId}/sessions/search`,
+        {
+          method: "POST",
+          body: JSON.stringify({ query, limit }),
+        }
+      );
+    },
+
+    deleteSession(clientId: string, sessionId: string) {
+      return f<void>(`/clients/${clientId}/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
     },
   };
 }

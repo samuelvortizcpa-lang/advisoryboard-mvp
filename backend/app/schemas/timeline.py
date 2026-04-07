@@ -41,8 +41,21 @@ class CommunicationTimelineItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SessionTimelineItem(BaseModel):
+    type: Literal["session"] = "session"
+    id: UUID
+    date: datetime
+    title: Optional[str] = None
+    ended_at: Optional[datetime] = None
+    message_count: int = 0
+    topic_count: int = 0
+    icon_hint: str = "chat"
+
+    model_config = {"from_attributes": True}
+
+
 TimelineItem = Annotated[
-    Union[DocumentTimelineItem, ActionItemTimelineItem, CommunicationTimelineItem],
+    Union[DocumentTimelineItem, ActionItemTimelineItem, CommunicationTimelineItem, SessionTimelineItem],
     Field(discriminator="type"),
 ]
 

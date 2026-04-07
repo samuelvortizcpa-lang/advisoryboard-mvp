@@ -244,8 +244,92 @@ async def _generate_session_summary(session_id: UUID, db: Session) -> None:
             session_id, len(key_topics), len(key_decisions),
         )
 
+        # ── Create journal entry for sessions with key decisions ──────
+        if key_decisions and session:
+            try:
+                from app.services.journal_service import create_auto_entry
+
+                decisions_text = "\n".join(f"- {d}" for d in key_decisions)
+                journal_content = f"Session summary: {summary_text}\n\nDecisions:\n{decisions_text}"
+                session_title = session.title or "Untitled conversation"
+
+                create_auto_entry(
+                    db=db,
+                    client_id=session.client_id,
+                    user_id=session.user_id,
+                    entry_type="system",
+                    category="general",
+                    title=f"Advisory session: {session_title[:150]}",
+                    content=journal_content,
+                    source_type="chat",
+                    source_id=session.id,
+                    effective_date=session.started_at.date() if session.started_at else None,
+                    metadata={"key_topics": key_topics, "message_count": session.message_count},
+                )
+                db.flush()
+                logger.info("Created journal entry for session %s", session_id)
+            except Exception:
+                logger.exception("Failed to create journal entry for session %s", session_id)
+
+        # ── Create follow-up alert for decisions mentioning follow-up ─
+        if key_decisions and session:
+            try:
+                _create_follow_up_alerts(session, key_decisions, db)
+            except Exception:
+                logger.exception("Failed to create follow-up alerts for session %s", session_id)
+
     except Exception:
         logger.exception("Failed to generate summary for session %s", session_id)
+
+
+# ---------------------------------------------------------------------------
+# Follow-up alert detection
+# ---------------------------------------------------------------------------
+
+_FOLLOW_UP_KEYWORDS = [
+    "follow up", "follow-up", "followup",
+    "revisit", "next time", "come back to",
+    "check on", "circle back", "touch base",
+    "remind me", "don't forget",
+]
+
+
+def _create_follow_up_alerts(
+    session: ChatSession,
+    key_decisions: list[str],
+    db: Session,
+) -> None:
+    """Create follow-up alerts for decisions that mention follow-up keywords.
+
+    Best-effort heuristic — simple keyword matching, never blocks session flow.
+    """
+    from app.models.action_item import ActionItem
+
+    trigger_date = (session.started_at or datetime.now(timezone.utc)) + timedelta(days=7)
+
+    for decision in key_decisions:
+        decision_lower = decision.lower()
+        if not any(kw in decision_lower for kw in _FOLLOW_UP_KEYWORDS):
+            continue
+
+        # Create a pending action item as the follow-up reminder
+        item = ActionItem(
+            client_id=session.client_id,
+            text=f"Follow up: {decision[:200]}",
+            status="pending",
+            priority="medium",
+            source="ai",
+            due_date=trigger_date.date(),
+            created_by=session.user_id,
+            assigned_to=session.user_id,
+        )
+        db.add(item)
+
+    db.flush()
+    logger.info(
+        "Checked %d decisions for follow-up keywords in session %s",
+        len(key_decisions), session.id,
+    )
 
 
 # ---------------------------------------------------------------------------

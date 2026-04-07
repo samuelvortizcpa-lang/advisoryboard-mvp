@@ -11,6 +11,7 @@ Alert types:
 - consent_expiring:              §7216 consent expires within 30 days
 - quarterly_estimate_due:        quarterly estimate prep task with upcoming deadline
 - follow_up_due:                 follow-up reminder whose remind_at has passed
+- session_follow_up:             chat session with decisions mentioning follow-up keywords
 """
 
 from __future__ import annotations
@@ -397,6 +398,52 @@ def _compute_alerts_uncached(
 
     if due_reminders:
         db.commit()
+
+    # ── Q11: Session follow-up suggestions ────────────────────────────
+    from app.models.chat_session import ChatSession
+
+    _FOLLOW_UP_KW = [
+        "follow up", "follow-up", "followup", "revisit", "next time",
+        "come back to", "check on", "circle back", "touch base",
+    ]
+
+    # Sessions closed in the last 14 days that have key_decisions
+    fourteen_days_ago = datetime.now(timezone.utc) - timedelta(days=14)
+    recent_sessions = (
+        db.query(ChatSession)
+        .filter(
+            ChatSession.client_id.in_(client_ids),
+            ChatSession.is_active.is_(False),
+            ChatSession.ended_at >= fourteen_days_ago,
+            ChatSession.key_decisions.isnot(None),
+        )
+        .limit(100)
+        .all()
+    )
+    for sess in recent_sessions:
+        if ("session_follow_up", sess.id) in dismissed:
+            continue
+        if not sess.key_decisions:
+            continue
+        # Check if any decision mentions follow-up keywords
+        matching = [
+            d for d in sess.key_decisions
+            if any(kw in d.lower() for kw in _FOLLOW_UP_KW)
+        ]
+        if not matching:
+            continue
+        cname = client_names.get(sess.client_id, "Unknown")
+        decision_preview = matching[0][:100]
+        alerts.append({
+            "id": str(sess.id),
+            "type": "session_follow_up",
+            "severity": "info",
+            "client_id": str(sess.client_id),
+            "client_name": cname,
+            "message": f"Session follow-up suggested for {cname}: \"{decision_preview}\"",
+            "related_id": str(sess.id),
+            "created_at": (sess.ended_at or sess.started_at).isoformat(),
+        })
 
     # Sort: critical first, then warning, then info; within same severity by date
     alerts.sort(key=lambda a: (SEVERITY_ORDER.get(a["severity"], 99), a["created_at"]))
