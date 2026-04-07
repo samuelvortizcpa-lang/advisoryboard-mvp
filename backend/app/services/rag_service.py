@@ -116,34 +116,108 @@ async def embed_text(text: str) -> list[float]:
 
 def _check_supersede(db: Session, new_doc: Document) -> None:
     """
-    If an older document of the same type+subtype exists for the same client,
-    and the new document has a more recent period, mark the older one as
-    superseded.
-    """
-    older_docs = (
-        db.query(Document)
-        .filter(
-            Document.client_id == new_doc.client_id,
-            Document.id != new_doc.id,
-            Document.document_type == new_doc.document_type,
-            Document.document_subtype == new_doc.document_subtype,
-            Document.document_period.isnot(None),
-            Document.is_superseded == False,  # noqa: E712
-        )
-        .all()
-    )
+    Mark older documents as superseded when a newer version arrives.
 
-    for older in older_docs:
-        # Simple string comparison works for formats like "2023", "2024",
-        # "Q1 2024" < "Q2 2024", etc.
-        if (older.document_period or "") < (new_doc.document_period or ""):
-            older.is_superseded = True
-            older.superseded_by = new_doc.id
-            logger.info(
-                "Versioning: %s (%s) superseded by %s (%s)",
-                older.id, older.document_period,
-                new_doc.id, new_doc.document_period,
+    Case 1 — Same type+subtype, more recent period supersedes older period.
+    Case 2 — Amendment superseding: a document with amends_subtype set
+             (e.g. 1040X amends Form 1040) supersedes the original form
+             for the same client and period.
+    """
+    # ── Case 1: newer period supersedes older period (same type+subtype) ──
+    if new_doc.document_subtype and new_doc.document_period:
+        older_docs = (
+            db.query(Document)
+            .filter(
+                Document.client_id == new_doc.client_id,
+                Document.id != new_doc.id,
+                Document.document_type == new_doc.document_type,
+                Document.document_subtype == new_doc.document_subtype,
+                Document.document_period.isnot(None),
+                Document.is_superseded == False,  # noqa: E712
             )
+            .all()
+        )
+
+        for older in older_docs:
+            # Simple string comparison works for formats like "2023", "2024",
+            # "Q1 2024" < "Q2 2024", etc.
+            if (older.document_period or "") < (new_doc.document_period or ""):
+                older.is_superseded = True
+                older.superseded_by = new_doc.id
+                logger.info(
+                    "Versioning: %s (%s) superseded by %s (%s)",
+                    older.id, older.document_period,
+                    new_doc.id, new_doc.document_period,
+                )
+
+    # ── Case 2: amendment supersedes original (or prior amendment) ────────
+    if new_doc.amends_subtype and new_doc.document_period:
+        # Find the most recent non-superseded document that this amends
+        original = (
+            db.query(Document)
+            .filter(
+                Document.client_id == new_doc.client_id,
+                Document.id != new_doc.id,
+                Document.document_subtype == new_doc.amends_subtype,
+                Document.document_period == new_doc.document_period,
+                Document.is_superseded == False,  # noqa: E712
+            )
+            .order_by(Document.upload_date.desc())
+            .first()
+        )
+
+        if original:
+            if original.document_period != new_doc.document_period:
+                # Should never happen given the query filter, but guard anyway
+                logger.warning(
+                    "Amendment period mismatch: new %s period=%s vs original %s period=%s — skipping",
+                    new_doc.id, new_doc.document_period,
+                    original.id, original.document_period,
+                )
+            else:
+                original.is_superseded = True
+                original.superseded_by = new_doc.id
+                logger.info(
+                    "Amendment: %s (%s) supersedes %s (%s) for period %s",
+                    new_doc.id, new_doc.document_subtype,
+                    original.id, original.document_subtype,
+                    new_doc.document_period,
+                )
+
+        # Also check for prior amendments (e.g., 1040X #1 superseded by #2)
+        prior_amendment = (
+            db.query(Document)
+            .filter(
+                Document.client_id == new_doc.client_id,
+                Document.id != new_doc.id,
+                Document.amends_subtype == new_doc.amends_subtype,
+                Document.document_period == new_doc.document_period,
+                Document.is_superseded == False,  # noqa: E712
+            )
+            .order_by(Document.upload_date.desc())
+            .first()
+        )
+
+        if prior_amendment:
+            prior_amendment.is_superseded = True
+            prior_amendment.superseded_by = new_doc.id
+            logger.info(
+                "Amendment chain: %s supersedes prior amendment %s for period %s",
+                new_doc.id, prior_amendment.id, new_doc.document_period,
+            )
+
+        # Auto-set amendment_number based on existing amendments
+        existing_count = (
+            db.query(Document)
+            .filter(
+                Document.client_id == new_doc.client_id,
+                Document.id != new_doc.id,
+                Document.amends_subtype == new_doc.amends_subtype,
+                Document.document_period == new_doc.document_period,
+            )
+            .count()
+        )
+        new_doc.amendment_number = existing_count + 1
 
     db.commit()
 
@@ -376,8 +450,9 @@ async def process_document(db: Session, document: Document) -> None:
             )
 
         # 7. Version check — supersede older documents of same type+subtype
+        #    Also triggers for amendments (amends_subtype set)
         try:
-            if document.document_type and document.document_period:
+            if (document.document_type and document.document_period) or document.amends_subtype:
                 _check_supersede(db, document)
         except Exception as ver_exc:
             logger.warning(
