@@ -205,6 +205,7 @@ async def _analyze_with_gpt(
     excerpts: list[dict],
     strategies: list[TaxStrategy],
     current_flags: dict[str, bool],
+    strategy_context: str = "",
 ) -> dict:
     """Call GPT-4o to analyze document excerpts against strategy list."""
 
@@ -232,7 +233,12 @@ Applicable strategies to evaluate:
 {strategy_list}
 
 Document excerpts ({len(excerpts)} documents):
-{doc_context}
+{doc_context}"""
+
+    if strategy_context:
+        user_prompt += f"\n\n{strategy_context}"
+
+    user_prompt += """
 
 Analyze these documents and suggest statuses for each strategy listed above. \
 Also suggest any profile flag changes."""
@@ -290,7 +296,19 @@ async def generate_strategy_suggestions(
     # 1. Rule-based flag suggestions from document subtypes
     rule_flag_suggestions = _suggest_flags_from_documents(db, client_id, current_flags)
 
-    # 2. Gather document excerpts for GPT analysis
+    # 2. Assemble supplementary context (strategy history, doc metadata)
+    from app.services.context_assembler import (
+        ContextPurpose,
+        assemble_context,
+        format_context_for_prompt,
+    )
+
+    ai_ctx = await assemble_context(
+        db, client_id=client_id, user_id=user_id,
+        purpose=ContextPurpose.STRATEGY_SUGGEST,
+    )
+
+    # 3. Gather document excerpts for GPT analysis (full text needed)
     excerpts, doc_count = _gather_document_excerpts(db, client_id)
 
     if not excerpts:
@@ -302,7 +320,7 @@ async def generate_strategy_suggestions(
             "tax_year": tax_year,
         }
 
-    # 3. Determine applicable strategies (using current flags + any newly suggested flags)
+    # 4. Determine applicable strategies (using current flags + any newly suggested flags)
     merged_flags = {**current_flags}
     for fs in rule_flag_suggestions:
         merged_flags[fs["flag"]] = fs["suggested_value"]
@@ -326,8 +344,23 @@ async def generate_strategy_suggestions(
             "tax_year": tax_year,
         }
 
-    # 4. GPT-4o analysis
-    gpt_result = await _analyze_with_gpt(excerpts, applicable, current_flags)
+    # 5. GPT-4o analysis — include prior-year strategy context
+    #    Format strategy status as supplementary context for GPT
+    strategy_context = ""
+    if ai_ctx.strategy_status and ai_ctx.strategy_status.get("years"):
+        lines = ["Prior strategy status:"]
+        for year, strategies in ai_ctx.strategy_status["years"].items():
+            for s in strategies:
+                lines.append(
+                    f"  {year}: {s['strategy']} ({s['category']}) — {s['status']}"
+                    + (f" | {s['notes']}" if s.get("notes") else "")
+                )
+        if len(lines) > 1:
+            strategy_context = "\n".join(lines)
+
+    gpt_result = await _analyze_with_gpt(
+        excerpts, applicable, current_flags, strategy_context=strategy_context,
+    )
 
     # Merge flag suggestions: rule-based first, then GPT (deduplicated)
     seen_flags = {fs["flag"] for fs in rule_flag_suggestions}

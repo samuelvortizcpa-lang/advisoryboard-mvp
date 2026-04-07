@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.action_item import ActionItem
-from app.models.chat_message import ChatMessage
 from app.models.client import Client
 from app.models.client_communication import ClientCommunication
 from app.models.document import Document
@@ -475,114 +474,32 @@ async def draft_email_with_ai(
             if org and org.org_type != "personal":
                 preparer_firm = org.name
 
-    # Client type label
-    client_type_label = ""
-    if client.client_type:
-        client_type_label = client.client_type.name
-
-    # Last 5 chat messages
-    recent_chats = (
-        db.query(ChatMessage)
-        .filter(ChatMessage.client_id == client_id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(5)
-        .all()
+    # --- Assemble client context via the unified context assembler ---
+    from app.services.context_assembler import (
+        ContextPurpose,
+        assemble_context,
+        format_context_for_prompt,
     )
-    recent_chats.reverse()  # chronological order
-    chat_context = ""
-    if recent_chats:
-        lines = []
-        for msg in recent_chats:
-            role = "CPA" if msg.role == "user" else "AI"
-            # Truncate long messages
-            content = msg.content[:300] + "..." if len(msg.content) > 300 else msg.content
-            lines.append(f"  {role}: {content}")
-        chat_context = "\n".join(lines)
 
-    # Top 5 pending action items
-    pending_items = (
-        db.query(ActionItem)
-        .filter(
-            ActionItem.client_id == client_id,
-            ActionItem.status == "pending",
-        )
-        .order_by(ActionItem.due_date.asc().nulls_last())
-        .limit(5)
-        .all()
+    ai_ctx = await assemble_context(
+        db, client_id=client_id, user_id=user_id,
+        purpose=ContextPurpose.EMAIL_DRAFT,
     )
-    action_items_text = ""
-    if pending_items:
-        lines = []
-        for item in pending_items:
-            due = f" (due {item.due_date.strftime('%b %d, %Y')})" if item.due_date else ""
-            priority = f" [{item.priority}]" if item.priority else ""
-            lines.append(f"  - {item.text}{due}{priority}")
-        action_items_text = "\n".join(lines)
-
-    # Most recent communication
-    last_comm = (
-        db.query(ClientCommunication)
-        .filter(
-            ClientCommunication.client_id == client_id,
-            ClientCommunication.status == "sent",
-        )
-        .order_by(ClientCommunication.sent_at.desc())
-        .first()
-    )
-    last_comm_text = ""
-    if last_comm:
-        last_comm_text = (
-            f"Subject: {last_comm.subject}\n"
-            f"  Sent: {last_comm.sent_at.strftime('%B %d, %Y')}"
-        )
-
-    # Document count
-    doc_count = (
-        db.query(func.count(Document.id))
-        .filter(Document.client_id == client_id)
-        .scalar()
-        or 0
-    )
+    formatted_context = format_context_for_prompt(ai_ctx, ContextPurpose.EMAIL_DRAFT)
 
     # --- Build user message ---
     context_parts = [
         f"PURPOSE: {purpose}",
         "",
-        "CLIENT INFORMATION:",
-        f"  Name: {client.name}",
+        formatted_context,
+        "",
+        "ADVISOR INFORMATION:",
+        f"  Name: {preparer_name}",
     ]
-    if client.business_name:
-        context_parts.append(f"  Business: {client.business_name}")
-    if client.entity_type:
-        context_parts.append(f"  Entity Type: {client.entity_type}")
-    if client_type_label:
-        context_parts.append(f"  Engagement Type: {client_type_label}")
-    if client.email:
-        context_parts.append(f"  Email: {client.email}")
-    context_parts.append(f"  Documents on file: {doc_count}")
-
-    context_parts.append("")
-    context_parts.append("ADVISOR INFORMATION:")
-    context_parts.append(f"  Name: {preparer_name}")
     if preparer_firm:
         context_parts.append(f"  Firm: {preparer_firm}")
     if scheduling_url:
         context_parts.append(f"  Scheduling link: {scheduling_url}")
-
-    if action_items_text:
-        context_parts.append("")
-        context_parts.append("PENDING ACTION ITEMS:")
-        context_parts.append(action_items_text)
-
-    if chat_context:
-        context_parts.append("")
-        context_parts.append("RECENT CONVERSATION (last 5 messages):")
-        context_parts.append(chat_context)
-
-    if last_comm_text:
-        context_parts.append("")
-        context_parts.append("MOST RECENT EMAIL SENT:")
-        context_parts.append(f"  {last_comm_text}")
 
     if additional_context:
         context_parts.append("")
