@@ -473,7 +473,7 @@ export default function LandingPage() {
               <a href="#pricing">Pricing</a>
               <a href="#extension">Extension</a>
               <Link href="/sign-in">Log in</Link>
-              <Link href="/sign-in" className="nav-cta">Get started</Link>
+              <Link href="/sign-up" className="nav-cta">Get started free</Link>
             </div>
             <button
               className={`hamburger${menuOpen ? ' open' : ''}`}
@@ -489,7 +489,7 @@ export default function LandingPage() {
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
               <a href="#extension" onClick={() => setMenuOpen(false)}>Extension</a>
               <Link href="/sign-in" onClick={() => setMenuOpen(false)}>Log in</Link>
-              <Link href="/sign-in" className="mobile-menu-cta" onClick={() => setMenuOpen(false)}>Get started</Link>
+              <Link href="/sign-up" className="mobile-menu-cta" onClick={() => setMenuOpen(false)}>Get started free</Link>
             </div>
           )}
         </nav>
@@ -502,7 +502,7 @@ export default function LandingPage() {
               <h1>Your documents,<br /><em>finally</em> answering<br />your questions.</h1>
               <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get cited answers with confidence scores in seconds.</p>
               <div className="hero-buttons">
-                <Link href="/sign-in" className="btn btn-primary">
+                <Link href="/sign-up" className="btn btn-primary">
                   Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
                 </Link>
                 <a href="#features" className="btn btn-ghost">See how it works</a>
@@ -912,7 +912,7 @@ export default function LandingPage() {
                   <li>10 extension captures/day</li>
                   <li>Standard AI</li>
                 </ul>
-                <Link href="/sign-in" className="p-btn p-btn-ghost">Start free</Link>
+                <Link href="/sign-up" className="p-btn p-btn-ghost">Start free</Link>
               </div>
               <div className="p-card">
                 <div className="p-tier">Starter</div>
@@ -926,7 +926,7 @@ export default function LandingPage() {
                   <li>50 extension captures/day</li>
                   <li>All integrations</li>
                 </ul>
-                <Link href="/sign-in" className="p-btn p-btn-ghost">Start 14-day trial</Link>
+                <Link href="/sign-up" className="p-btn p-btn-ghost">Start 14-day trial</Link>
               </div>
               <div className="p-card featured">
                 <div className="p-tier">Professional</div>
@@ -940,7 +940,7 @@ export default function LandingPage() {
                   <li>200 extension captures/day</li>
                   <li>Smart alerts + compliance</li>
                 </ul>
-                <Link href="/sign-in" className="p-btn p-btn-primary">Start 14-day trial</Link>
+                <Link href="/sign-up" className="p-btn p-btn-primary">Start 14-day trial</Link>
               </div>
               <div className="p-card">
                 <div className="p-tier">Firm</div>
@@ -953,7 +953,7 @@ export default function LandingPage() {
                   <li>Dedicated onboarding</li>
                   <li>Client allocation</li>
                 </ul>
-                <Link href="/sign-in" className="p-btn p-btn-ghost">Contact us</Link>
+                <Link href="/sign-up" className="p-btn p-btn-ghost">Contact us</Link>
               </div>
             </div>
           </div>
@@ -984,7 +984,7 @@ export default function LandingPage() {
           <h2 data-reveal>Stop searching.<br />Start <em>advising.</em></h2>
           <div className="finale-rule" data-reveal />
           <p data-reveal>Free tier includes 5 clients and unlimited documents. No credit card required. Set up in under two minutes.</p>
-          <Link href="/sign-in" className="cta-btn" data-reveal>
+          <Link href="/sign-up" className="cta-btn" data-reveal>
             Get started for free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
           </Link>
           <p className="trust" data-reveal><span>{'\u2605\u2605\u2605\u2605\u2605'}</span>&ensp; Trusted by financial professionals nationwide</p>
