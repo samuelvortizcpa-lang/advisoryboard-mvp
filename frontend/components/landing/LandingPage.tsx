@@ -19,7 +19,7 @@ const faqData = [
   },
   {
     q: 'How accurate are the AI answers?',
-    a: 'Every AI response includes a confidence score and source citations pointing to the specific document and page. You can verify any answer by clicking the source reference. We route between fast lookups for standard queries and deep analysis for complex questions to balance speed and accuracy.',
+    a: 'Every AI response includes a confidence score and source citations pointing to the specific document and page. You can verify any answer by clicking the source reference. Callwen automatically selects the right level of analysis for each question — from fast document lookups to advanced and premium analyses — to balance speed and accuracy.',
   },
   {
     q: 'Can my team share a workspace?',

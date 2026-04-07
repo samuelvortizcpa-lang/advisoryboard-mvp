@@ -24,7 +24,7 @@ const settingsCards = [
   },
   {
     title: "Subscription Management",
-    description: "Manage user tiers, strategic query quotas, and billing periods.",
+    description: "Manage user tiers, AI query quotas, and billing periods.",
     href: "/dashboard/settings/subscriptions",
   },
 ];
