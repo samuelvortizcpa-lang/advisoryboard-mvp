@@ -39,32 +39,32 @@ const t = {
 const signUpFeatures = [
   {
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
         <polyline points="17 8 12 3 7 8" />
         <line x1="12" y1="3" x2="12" y2="15" />
       </svg>
     ),
     title: "Upload anything",
-    desc: "Tax returns, engagement letters, meeting recordings, emails — all searchable in seconds.",
+    desc: "Tax returns, recordings, emails — all searchable.",
   },
   {
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
     title: "Ask across all files",
-    desc: "One question searches every document for a client. Cite sources automatically.",
+    desc: "One question searches every client document.",
   },
   {
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       </svg>
     ),
     title: "§7216 built in",
-    desc: "Automatic consent tracking for tax documents. No other AI tool does this.",
+    desc: "Automatic consent tracking. No other AI tool does this.",
   },
 ];
 
@@ -361,7 +361,7 @@ function SignUpContent() {
           fontWeight: 400,
           color: t.white,
           lineHeight: 1.15,
-          marginBottom: "1.25rem",
+          marginBottom: "0.75rem",
           ...anim("0.2s"),
         }}
       >
@@ -387,32 +387,31 @@ function SignUpContent() {
       </p>
 
       {/* Feature cards */}
-      <div className="hidden md:flex" style={{ flexDirection: "column", gap: 12, marginTop: "2rem" }}>
+      <div className="hidden md:flex" style={{ flexDirection: "column", gap: 8, marginTop: "1.5rem" }}>
         {signUpFeatures.map((f, i) => (
           <div
             key={f.title}
             style={{
               display: "flex",
-              alignItems: "flex-start",
-              gap: 14,
+              alignItems: "center",
+              gap: 12,
               background: "rgba(255,255,255,0.03)",
               border: "1px solid rgba(201,148,74,0.12)",
-              borderRadius: 12,
-              padding: "14px 18px",
+              borderRadius: 10,
+              padding: "12px 16px",
               ...anim(`${0.4 + i * 0.1}s`),
             }}
           >
             <div
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 9,
+                width: 32,
+                height: 32,
+                borderRadius: 8,
                 background: "rgba(201,148,74,0.08)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
-                marginTop: 2,
               }}
             >
               {f.icon}
@@ -421,10 +420,10 @@ function SignUpContent() {
               <div
                 style={{
                   fontFamily: t.sans,
-                  fontSize: "0.9rem",
+                  fontSize: "0.85rem",
                   fontWeight: 600,
                   color: t.white,
-                  marginBottom: 3,
+                  marginBottom: 2,
                 }}
               >
                 {f.title}
@@ -432,10 +431,10 @@ function SignUpContent() {
               <div
                 style={{
                   fontFamily: t.sans,
-                  fontSize: "0.82rem",
+                  fontSize: "0.78rem",
                   fontWeight: 300,
                   color: "#9a958e",
-                  lineHeight: 1.45,
+                  lineHeight: 1.4,
                 }}
               >
                 {f.desc}
@@ -445,38 +444,6 @@ function SignUpContent() {
         ))}
       </div>
 
-      {/* Testimonial quote */}
-      <div
-        className="hidden md:block"
-        style={{
-          marginTop: "2rem",
-          ...anim("0.7s"),
-        }}
-      >
-        <p
-          style={{
-            fontFamily: t.serif,
-            fontSize: "1.1rem",
-            fontStyle: "italic",
-            color: "#d0cdc7",
-            lineHeight: 1.5,
-          }}
-        >
-          &ldquo;Finally, an AI tool that understands how a CPA actually works.&rdquo;
-        </p>
-        <p
-          style={{
-            fontFamily: t.sans,
-            fontSize: "0.78rem",
-            fontWeight: 400,
-            color: t.accent,
-            marginTop: 8,
-          }}
-        >
-          — Built by a licensed CPA
-        </p>
-      </div>
-
       {/* Free tier callout */}
       <div
         style={{
@@ -484,12 +451,12 @@ function SignUpContent() {
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          marginTop: "1.5rem",
+          marginTop: "1rem",
           padding: "10px 20px",
           borderRadius: 8,
           border: "1px solid rgba(201,148,74,0.15)",
           background: "rgba(201,148,74,0.04)",
-          ...anim("0.8s"),
+          ...anim("0.7s"),
         }}
       >
         <span
@@ -616,14 +583,17 @@ function SignInContent() {
               width: "100%",
               height: "auto",
               display: "block",
-              filter: "blur(0.5px) brightness(0.95)",
+              filter: "brightness(0.92)",
             }}
           />
           <div
             style={{
               position: "absolute",
-              inset: 0,
-              background: "linear-gradient(to bottom, rgba(14,13,12,0.05) 0%, rgba(14,13,12,0.15) 100%)",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 60,
+              background: "linear-gradient(transparent, rgba(14,13,12,0.8))",
               pointerEvents: "none",
             }}
           />
