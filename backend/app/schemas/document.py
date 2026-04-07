@@ -19,6 +19,8 @@ class DocumentResponse(BaseModel):
     document_subtype: Optional[str] = None
     document_period: Optional[str] = None
     classification_confidence: Optional[float] = None
+    amends_subtype: Optional[str] = None
+    amendment_number: Optional[int] = None
     is_superseded: bool = False
     superseded_by: Optional[UUID] = None
 

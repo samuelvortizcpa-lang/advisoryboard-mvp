@@ -100,6 +100,14 @@ class Document(Base):
         Float, nullable=True
     )
 
+    # Amended return tracking
+    amends_subtype: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True
+    )
+    amendment_number: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )
+
     # Document versioning
     superseded_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
