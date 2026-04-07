@@ -160,8 +160,10 @@ class ChatResponse(BaseModel):
     sources: List[SourceItem]
     model_used: str = "gpt-4o-mini"
     query_type: str = "factual"
+    analysis_tier: str | None = None
     quota_remaining: int | None = None
     quota_warning: str | None = None
+    quota_warning_message: str | None = None
 
 
 class CompareRequest(BaseModel):
@@ -384,7 +386,7 @@ async def chat(
 
     result = await rag_service.answer_question(
         db, client_id=client_id, question=request.question,
-        user_id=auth.user_id, model_override=request.model_override,
+        user_id=auth.user_id,
     )
 
     # Persist user question
@@ -454,8 +456,10 @@ async def chat(
         sources=[SourceItem(**s) for s in response_sources],
         model_used=result.get("model_used", "gpt-4o-mini"),
         query_type=result.get("query_type", "factual"),
+        analysis_tier=result.get("analysis_tier", "standard"),
         quota_remaining=result.get("quota_remaining"),
         quota_warning=result.get("quota_warning"),
+        quota_warning_message=result.get("quota_warning_message"),
     )
 
 
@@ -482,14 +486,10 @@ async def chat_stream(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty."
         )
 
-    override = request.model_override
-    if override == "opus":
-        override = "balanced"  # streaming doesn't support opus, downgrade to sonnet
-
     async def event_generator():
         async for chunk in rag_service.answer_question_stream(
             db, client_id=client_id, question=request.question,
-            user_id=auth.user_id, model_override=override,
+            user_id=auth.user_id,
         ):
             yield chunk
 

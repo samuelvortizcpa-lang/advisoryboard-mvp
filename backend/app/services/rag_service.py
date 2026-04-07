@@ -781,7 +781,6 @@ async def answer_question(
     client_id: UUID,
     question: str,
     user_id: str | None = None,
-    model_override: str | None = None,
 ) -> dict:
     """
     RAG Q&A: retrieve relevant chunks then synthesise an answer.
@@ -979,16 +978,9 @@ async def answer_question(
         )
 
     # Classify and route to appropriate model
-    if model_override == "fast":
-        query_type = "factual"
-    elif model_override == "balanced":
-        query_type = "strategic"
-    elif model_override == "opus":
-        query_type = "opus"
-    else:
-        query_type = await classify_query(
-            question, db=db, user_id=user_id, client_id=client_id
-        )
+    query_type = await classify_query(
+        question, db=db, user_id=user_id, client_id=client_id
+    )
     # Resolve client type name for domain-specific prompts
     _client_type_name = (
         db_client.client_type.name
@@ -1002,8 +994,11 @@ async def answer_question(
     )
     answer = route_result["answer"]
     model_used = route_result["model_used"]
+    analysis_tier = route_result.get("analysis_tier", "standard")
+    query_type = route_result.get("query_type", query_type)
     quota_remaining = route_result.get("quota_remaining")
     quota_warning = route_result.get("quota_warning")
+    quota_warning_message = route_result.get("quota_warning_message")
 
     # ------------------------------------------------------------------
     # Build deduplicated source list — answer-aware page matching
@@ -1196,8 +1191,10 @@ async def answer_question(
         "sources": sources,
         "model_used": model_used,
         "query_type": query_type,
+        "analysis_tier": analysis_tier,
         "quota_remaining": quota_remaining,
         "quota_warning": quota_warning,
+        "quota_warning_message": quota_warning_message,
     }
 
 
@@ -1206,7 +1203,6 @@ async def answer_question_stream(
     client_id: UUID,
     question: str,
     user_id: str | None = None,
-    model_override: str | None = None,
 ):
     """
     Streaming variant of answer_question. Yields SSE-formatted strings.
@@ -1325,14 +1321,9 @@ async def answer_question_stream(
         )
 
     # ── Classify query type ──
-    if model_override == "fast":
-        query_type = "factual"
-    elif model_override == "balanced":
-        query_type = "strategic"
-    else:
-        query_type = await classify_query(
-            question, db=db, user_id=user_id, client_id=client_id
-        )
+    query_type = await classify_query(
+        question, db=db, user_id=user_id, client_id=client_id
+    )
 
     _client_type_name = (
         db_client.client_type.name if db_client and db_client.client_type else None

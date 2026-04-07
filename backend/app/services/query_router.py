@@ -1,14 +1,16 @@
 """
 Query classifier and model router for the Advisory Intelligence Layer.
 
-Classifies user questions as "factual" or "strategic" using GPT-4o-mini,
-then routes to the appropriate model:
+Classifies user questions into three tiers using GPT-4o-mini:
   - factual   → GPT-4o-mini  (fast, cheap lookups)
-  - strategic  → Claude Sonnet 4.6 (deep analysis & reasoning)
-  - opus       → Claude Opus 4.6 (complex multi-document analysis)
+  - synthesis  → Claude Sonnet 4.6 (cross-document analysis)
+  - strategic  → Claude Opus 4.6 (deep reasoning & recommendations)
+
+Cascading fallback on quota exhaustion:
+  strategic → Sonnet → GPT-4o-mini
+  synthesis → GPT-4o-mini
 
 Falls back to GPT-4o-mini if ANTHROPIC_API_KEY is not configured.
-Enforces subscription quota for strategic and opus queries.
 """
 
 from __future__ import annotations
@@ -29,26 +31,33 @@ logger = logging.getLogger(__name__)
 
 _anthropic_warned = False
 
+_VALID_QUERY_TYPES = frozenset({"factual", "synthesis", "strategic"})
+
 CLASSIFIER_SYSTEM_PROMPT = """\
 You are a query classifier for a CPA advisory platform. Classify the user's question into exactly one category.
 
-FACTUAL — Questions that ask for specific data points, numbers, dates, or facts from documents:
-- "What is the total income on Line 9?"
-- "What was the AGI in 2024?"
-- "How much is Box 1 on the W-2?"
-- "When was this document uploaded?"
-- "What deductions are listed on Schedule A?"
+FACTUAL — Direct data retrieval from documents. The answer exists verbatim or nearly verbatim in the uploaded documents:
+- "What was the AGI?"
+- "Show me the deductions on Schedule A"
+- "What is the client's filing status?"
+- "How much was the total income?"
+- "What date was the engagement letter signed?"
 
-STRATEGIC — Questions that require analysis, interpretation, comparison, planning, or advice:
+SYNTHESIS — Compare, summarize, contrast, or analyze information across one or more documents. Requires reading comprehension and organization but NOT generating novel recommendations:
+- "Compare 2023 vs 2024 tax returns"
+- "Summarize all action items for this client"
+- "What changed between these two documents?"
+- "Give me an overview of this client's financial situation"
+- "List all the K-1 entities and their income"
+
+STRATEGIC — Generate recommendations, strategies, predictions, or forward-looking advice. Requires reasoning beyond what's in the documents:
 - "What tax-loss harvesting opportunities should we explore?"
-- "How does 2023 compare to 2024?"
-- "What strategies could reduce their tax burden?"
-- "Should they convert to an S-Corp?"
-- "What are the risks in their current structure?"
-- "Summarize the key issues for this client"
-- "What should I discuss in the meeting?"
+- "Should this client restructure as an S-corp?"
+- "What estate planning strategies would you recommend?"
+- "How can we reduce their effective tax rate?"
+- "What are the risks of this entity structure?"
 
-Respond with ONLY the word "factual" or "strategic". Nothing else."""
+Respond with ONLY the word "factual", "synthesis", or "strategic". Nothing else."""
 
 
 async def classify_query(
@@ -58,7 +67,7 @@ async def classify_query(
     user_id: Optional[str] = None,
     client_id: Optional[UUID] = None,
 ) -> str:
-    """Classify a user question as 'factual' or 'strategic' using GPT-4o-mini."""
+    """Classify a user question as 'factual', 'synthesis', or 'strategic' using GPT-4o-mini."""
     try:
         settings = get_settings()
         client = AsyncOpenAI(api_key=settings.openai_api_key)
@@ -72,7 +81,7 @@ async def classify_query(
             max_tokens=10,
         )
         result = (response.choices[0].message.content or "").strip().lower()
-        query_type = "strategic" if "strategic" in result else "factual"
+        query_type = result if result in _VALID_QUERY_TYPES else "factual"
         logger.info("Query classified as %s: %s", query_type, question[:80])
 
         # Log classification token usage
@@ -98,6 +107,19 @@ async def classify_query(
         return "factual"
 
 
+# ─── Analysis tier labels (user-facing) ─────────────────────────────────────
+
+_TIER_MAP = {
+    "gpt-4o-mini": "standard",
+    "claude-sonnet-4.6": "advanced",
+    "claude-opus-4.6": "premium",
+}
+
+
+def _analysis_tier(model_used: str) -> str:
+    return _TIER_MAP.get(model_used, "standard")
+
+
 async def route_completion(
     query_type: str,
     system_prompt: str,
@@ -109,37 +131,44 @@ async def route_completion(
     client_type: Optional[str] = None,
 ) -> dict[str, Any]:
     """
-    Route to the appropriate model based on query_type.
+    Route to the appropriate model based on query_type with cascading fallback.
 
-    Returns dict with: answer, model_used, quota_remaining, quota_warning.
+    Cascade:
+      strategic → Opus (quota) → Sonnet (quota) → GPT-4o-mini
+      synthesis → Sonnet (quota) → GPT-4o-mini
+      factual   → GPT-4o-mini
+
+    Returns dict with: answer, model_used, analysis_tier, query_type,
+                        quota_remaining, quota_warning, quota_warning_message.
     """
     global _anthropic_warned
     settings = get_settings()
 
     quota_remaining: int | None = None
     quota_warning: str | None = None
+    quota_warning_message: str | None = None
 
-    # ── Opus path: explicit model_override="opus" ─────────────────────────
-    if query_type == "opus" and db and user_id and settings.anthropic_api_key:
+    # ── Strategic path: try Opus → Sonnet → GPT-4o-mini ─────────────────
+    if query_type == "strategic" and db and user_id and settings.anthropic_api_key:
         try:
             from app.services.subscription_service import check_opus_quota
             opus_quota = check_opus_quota(db, user_id)
             if not opus_quota["allowed"]:
-                # Exceed Opus quota → fall back to Sonnet (not GPT-4o-mini)
                 logger.info(
-                    "Opus query downgraded to strategic for user %s (opus used=%d/%d)",
+                    "Strategic query: Opus quota exceeded for user %s (used=%d/%d), trying Sonnet",
                     user_id, opus_quota["used"], opus_quota["limit"],
                 )
-                quota_warning = (
-                    f"Opus query limit reached ({opus_quota['used']}/{opus_quota['limit']}). "
-                    "Using Claude Sonnet instead."
+                quota_warning_message = (
+                    "Your premium analysis quota for this month has been reached. "
+                    "This response used advanced analysis."
                 )
-                query_type = "strategic"
-            # If allowed, fall through to the opus completion block below
+                # Fall through to synthesis path (Sonnet)
+                query_type = "synthesis"
+            # If allowed, fall through to Opus completion below
         except Exception:
             logger.error("Opus quota check failed — allowing query", exc_info=True)
 
-    if query_type == "opus" and settings.anthropic_api_key:
+    if query_type == "strategic" and settings.anthropic_api_key:
         strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
         try:
             client = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -151,7 +180,8 @@ async def route_completion(
                 temperature=0.2,
             )
             answer = response.content[0].text
-            logger.info("Opus query answered by Claude Opus 4.6")
+            model_used = "claude-opus-4.6"
+            logger.info("Strategic query answered by Claude Opus 4.6")
 
             if db and user_id:
                 try:
@@ -160,7 +190,7 @@ async def route_completion(
                         db,
                         user_id=user_id,
                         client_id=client_id,
-                        query_type="opus",
+                        query_type="strategic",
                         model="claude-opus-4-20250514",
                         prompt_tokens=usage.input_tokens if usage else 0,
                         completion_tokens=usage.output_tokens if usage else 0,
@@ -171,48 +201,48 @@ async def route_completion(
 
             return {
                 "answer": answer,
-                "model_used": "claude-opus-4.6",
+                "model_used": model_used,
+                "analysis_tier": _analysis_tier(model_used),
+                "query_type": "strategic",
                 "quota_remaining": quota_remaining,
                 "quota_warning": quota_warning,
+                "quota_warning_message": quota_warning_message,
             }
         except Exception:
             logger.exception("Claude Opus call failed — falling back to Sonnet")
-            query_type = "strategic"
+            query_type = "synthesis"
 
-    # Check quota for strategic queries
-    if query_type == "strategic" and db and user_id:
+    # ── Synthesis path: try Sonnet → GPT-4o-mini ────────────────────────
+    if query_type == "synthesis" and db and user_id:
         try:
-            from app.services.subscription_service import check_quota, increment_usage
+            from app.services.subscription_service import check_quota
 
             quota = check_quota(db, user_id)
             quota_remaining = quota["remaining"]
 
             if not quota["allowed"]:
-                # Quota exceeded or tier doesn't allow strategic — fall back
                 logger.info(
-                    "Strategic query downgraded to factual for user %s (tier=%s, used=%d/%d)",
+                    "Synthesis/strategic query downgraded to factual for user %s (tier=%s, used=%d/%d)",
                     user_id, quota["tier"], quota["used"], quota["limit"],
                 )
                 if quota["limit"] == 0:
-                    quota_warning = (
-                        "Your plan does not include strategic analysis. "
-                        "Upgrade to Professional for deep analysis with Claude."
+                    quota_warning_message = (
+                        "Your plan does not include advanced analysis. "
+                        "Upgrade to Professional for deeper insights."
                     )
                 else:
-                    quota_warning = (
-                        "Strategic query limit reached for this month. "
-                        "Responses are using the standard model."
-                    )
+                    if not quota_warning_message:
+                        quota_warning_message = (
+                            "Your advanced analysis quota for this month has been reached. "
+                            "This response used standard analysis."
+                        )
                 quota_remaining = 0
-                # Fall through to GPT-4o-mini path below
                 query_type = "factual"
         except Exception:
             logger.error("Quota check failed — allowing query", exc_info=True)
 
-    if query_type == "strategic" and settings.anthropic_api_key:
-        # Build enhanced strategic prompt with domain-specific guidance
+    if query_type == "synthesis" and settings.anthropic_api_key:
         strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
-        # Route to Claude Sonnet 4.6
         try:
             client = AsyncAnthropic(api_key=settings.anthropic_api_key)
             response = await client.messages.create(
@@ -223,7 +253,8 @@ async def route_completion(
                 temperature=0.2,
             )
             answer = response.content[0].text
-            logger.info("Strategic query answered by Claude Sonnet 4.6")
+            model_used = "claude-sonnet-4.6"
+            logger.info("Synthesis query answered by Claude Sonnet 4.6")
 
             # Log Anthropic token usage
             if db and user_id:
@@ -251,7 +282,7 @@ async def route_completion(
                     quota_remaining = updated_quota["remaining"]
                     if quota_remaining is not None and quota_remaining < 10:
                         quota_warning = (
-                            f"You have {quota_remaining} strategic "
+                            f"You have {quota_remaining} advanced analysis "
                             f"quer{'y' if quota_remaining == 1 else 'ies'} "
                             f"remaining this month."
                         )
@@ -260,24 +291,27 @@ async def route_completion(
 
             return {
                 "answer": answer,
-                "model_used": "claude-sonnet-4.6",
+                "model_used": model_used,
+                "analysis_tier": _analysis_tier(model_used),
+                "query_type": query_type,
                 "quota_remaining": quota_remaining,
                 "quota_warning": quota_warning,
+                "quota_warning_message": quota_warning_message,
             }
         except Exception:
             logger.exception("Claude call failed — falling back to GPT-4o-mini")
             # Fall through to GPT-4o-mini below
 
-    if query_type == "strategic" and not settings.anthropic_api_key and not _anthropic_warned:
+    if query_type in ("synthesis", "strategic") and not settings.anthropic_api_key and not _anthropic_warned:
         logger.warning(
             "ANTHROPIC_API_KEY not set — all queries will use GPT-4o-mini. "
-            "Set ANTHROPIC_API_KEY to enable Claude for strategic queries."
+            "Set ANTHROPIC_API_KEY to enable Claude for synthesis/strategic queries."
         )
         _anthropic_warned = True
 
-    # Factual queries (or fallback)
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-    response = await client.chat.completions.create(
+    # ── Factual queries (or fallback) ───────────────────────────────────
+    oai = AsyncOpenAI(api_key=settings.openai_api_key)
+    response = await oai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
@@ -287,6 +321,7 @@ async def route_completion(
         max_tokens=1_500,
     )
     answer = response.choices[0].message.content or "No answer generated."
+    model_used = "gpt-4o-mini"
     logger.info("Query answered by GPT-4o-mini")
 
     # Log OpenAI token usage
@@ -308,9 +343,12 @@ async def route_completion(
 
     return {
         "answer": answer,
-        "model_used": "gpt-4o-mini",
+        "model_used": model_used,
+        "analysis_tier": _analysis_tier(model_used),
+        "query_type": query_type,
         "quota_remaining": quota_remaining,
         "quota_warning": quota_warning,
+        "quota_warning_message": quota_warning_message,
     }
 
 
@@ -328,33 +366,40 @@ async def route_completion_stream(
     Streaming variant of route_completion. Yields (token, None) for content
     chunks and (None, metadata_dict) as the final item with model_used etc.
 
-    For simplicity, always uses GPT-4o-mini with streaming to avoid
-    complexity of streaming from three different providers. The non-streaming
-    endpoint still routes to Claude for strategic queries.
+    Supports the three-level cascade:
+      strategic → Opus N/A for streaming (downgrade to synthesis)
+      synthesis → Sonnet (quota) → GPT-4o-mini
+      factual → GPT-4o-mini
     """
     global _anthropic_warned
     settings = get_settings()
 
     quota_remaining: int | None = None
     quota_warning: str | None = None
+    quota_warning_message: str | None = None
     model_used = "gpt-4o-mini"
 
-    # Check strategic quota (same logic as non-streaming)
-    if query_type == "strategic" and db and user_id:
+    # Strategic streaming: downgrade to synthesis (streaming doesn't support Opus)
+    if query_type == "strategic":
+        query_type = "synthesis"
+
+    # Check synthesis/strategic quota
+    if query_type == "synthesis" and db and user_id:
         try:
             from app.services.subscription_service import check_quota
             quota = check_quota(db, user_id)
             quota_remaining = quota["remaining"]
             if not quota["allowed"]:
-                quota_warning = (
-                    f"Strategic query limit reached. Using standard model."
+                quota_warning_message = (
+                    "Your advanced analysis quota for this month has been reached. "
+                    "This response used standard analysis."
                 )
                 query_type = "factual"
         except Exception:
             logger.error("Quota check failed — allowing query", exc_info=True)
 
-    # Strategic queries: stream from Claude Sonnet if available
-    if query_type == "strategic" and settings.anthropic_api_key:
+    # Synthesis queries: stream from Claude Sonnet if available
+    if query_type == "synthesis" and settings.anthropic_api_key:
         strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
         try:
             client = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -371,7 +416,7 @@ async def route_completion_stream(
                     yield text, None
 
             model_used = "claude-sonnet-4.6"
-            logger.info("Streaming strategic query answered by Claude Sonnet 4.6")
+            logger.info("Streaming synthesis query answered by Claude Sonnet 4.6")
 
             # Increment usage
             if db and user_id:
@@ -382,7 +427,7 @@ async def route_completion_stream(
                     quota_remaining = updated_quota["remaining"]
                     if quota_remaining is not None and quota_remaining < 10:
                         quota_warning = (
-                            f"You have {quota_remaining} strategic "
+                            f"You have {quota_remaining} advanced analysis "
                             f"quer{'y' if quota_remaining == 1 else 'ies'} "
                             f"remaining this month."
                         )
@@ -406,8 +451,11 @@ async def route_completion_stream(
 
             yield None, {
                 "model_used": model_used,
+                "analysis_tier": _analysis_tier(model_used),
+                "query_type": query_type,
                 "quota_remaining": quota_remaining,
                 "quota_warning": quota_warning,
+                "quota_warning_message": quota_warning_message,
             }
             return
         except Exception:
@@ -449,6 +497,9 @@ async def route_completion_stream(
 
     yield None, {
         "model_used": model_used,
+        "analysis_tier": _analysis_tier(model_used),
+        "query_type": query_type,
         "quota_remaining": quota_remaining,
         "quota_warning": quota_warning,
+        "quota_warning_message": quota_warning_message,
     }
