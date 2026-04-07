@@ -993,7 +993,8 @@ export interface ActionItem {
   assigned_to: string | null;
   assigned_to_name: string | null;
   notes: string | null;
-  source: "ai_extracted" | "manual";
+  source: "ai_extracted" | "manual" | "engagement_engine";
+  engagement_task_id: string | null;
   created_by: string | null;
   extracted_at: string | null;
   completed_at: string | null;
@@ -2434,6 +2435,98 @@ export function createJournalApi(getToken: GetToken, orgId?: string) {
 
     togglePin(entryId: string) {
       return f<JournalEntry>(`/journal/${entryId}/pin`, { method: "PATCH" });
+    },
+  };
+}
+
+// ─── Engagement types ─────────────────────────────────────────────────────────
+
+export interface EngagementTemplateTask {
+  id: string;
+  task_name: string;
+  category: string | null;
+  recurrence: string;
+  month: number | null;
+  day: number | null;
+  lead_days: number;
+  priority: string;
+  display_order: number;
+}
+
+export interface EngagementTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  entity_types: string[] | null;
+  is_system: boolean;
+  is_active: boolean;
+  tasks: EngagementTemplateTask[];
+}
+
+export interface ClientEngagement {
+  id: string;
+  client_id: string;
+  template: EngagementTemplate;
+  start_year: number;
+  is_active: boolean;
+  custom_overrides: Record<string, unknown> | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface AssignEngagementData {
+  template_id: string;
+  start_year?: number;
+  custom_overrides?: Record<string, unknown>;
+}
+
+export interface CreateTemplateData {
+  name: string;
+  description?: string;
+  entity_types?: string[];
+}
+
+export interface GenerateTasksResponse {
+  tasks_created: number;
+  details: Record<string, unknown>[];
+}
+
+export function createEngagementsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    listTemplates() {
+      return f<EngagementTemplate[]>("/engagement-templates");
+    },
+
+    createTemplate(data: CreateTemplateData) {
+      return f<EngagementTemplate>("/engagement-templates", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    listClientEngagements(clientId: string) {
+      return f<ClientEngagement[]>(`/clients/${clientId}/engagements`);
+    },
+
+    assignEngagement(clientId: string, data: AssignEngagementData) {
+      return f<ClientEngagement>(`/clients/${clientId}/engagements`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    removeEngagement(clientId: string, engagementId: string) {
+      return f<void>(`/clients/${clientId}/engagements/${engagementId}`, {
+        method: "DELETE",
+      });
+    },
+
+    generateTasks(clientId: string) {
+      return f<GenerateTasksResponse>(
+        `/clients/${clientId}/engagements/generate`,
+        { method: "POST" },
+      );
     },
   };
 }

@@ -10,10 +10,12 @@ import {
   ClientAccessSummary,
   ClientBrief,
   ClientType,
+  ClientEngagement,
   ClientUpdateData,
   CompareResponse,
   ComparisonType,
   Document,
+  EngagementTemplate,
   OrgMember,
   ProfileFlags,
   createActionItemsApi,
@@ -22,6 +24,7 @@ import {
   createClientsApi,
   createConsentApi,
   createDocumentsApi,
+  createEngagementsApi,
   createOrganizationsApi,
   createRagApi,
   createStrategiesApi,
@@ -186,6 +189,12 @@ function ClientDetailContent() {
     has_employees: false,
   });
 
+  // ── Engagement state ────────────────────────────────────────────────────────
+  const [clientEngagements, setClientEngagements] = useState<ClientEngagement[]>([]);
+  const [engagementTemplates, setEngagementTemplates] = useState<EngagementTemplate[]>([]);
+  const [engDropdownOpen, setEngDropdownOpen] = useState(false);
+  const [engAssigning, setEngAssigning] = useState(false);
+
   // ── Overview summary data ───────────────────────────────────────────────────
   const [pendingActionsCount, setPendingActionsCount] = useState<number | null>(null);
   const [nextDeadline, setNextDeadline] = useState<string | null | undefined>(undefined);
@@ -267,6 +276,15 @@ function ClientDetailContent() {
       .getLastCommunication(id)
       .then((comm) => setLastContacted(comm?.sent_at ?? null))
       .catch(() => setLastContacted(null));
+
+    // Engagements: client assignments + available templates
+    const engApi = createEngagementsApi(getToken);
+    engApi.listClientEngagements(id)
+      .then(setClientEngagements)
+      .catch(() => {/* non-fatal */});
+    engApi.listTemplates()
+      .then(setEngagementTemplates)
+      .catch(() => {/* non-fatal */});
   }, [id, getToken]);
 
   // Load team access data when org is available
@@ -499,6 +517,39 @@ function ClientDetailContent() {
       showAccessFeedback(err instanceof Error ? err.message : "Failed to revoke access", "error");
     } finally {
       setAccessActionLoading(null);
+    }
+  }
+
+  // ── Engagement handlers ──────────────────────────────────────────────────────
+
+  // Templates available for this client (not yet assigned, matching entity type)
+  const assignedTemplateIds = new Set(clientEngagements.map((e) => e.template.id));
+  const availableTemplates = engagementTemplates.filter((t) => {
+    if (assignedTemplateIds.has(t.id)) return false;
+    if (!t.entity_types || t.entity_types.length === 0) return true;
+    const clientEntity = client?.entity_type?.toLowerCase() ?? "";
+    return t.entity_types.some((et) => clientEntity.includes(et.toLowerCase()));
+  });
+
+  async function handleAssignEngagement(templateId: string) {
+    setEngAssigning(true);
+    try {
+      const eng = await createEngagementsApi(getToken).assignEngagement(id, { template_id: templateId });
+      setClientEngagements((prev) => [...prev, eng]);
+      setEngDropdownOpen(false);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setEngAssigning(false);
+    }
+  }
+
+  async function handleRemoveEngagement(engagementId: string) {
+    try {
+      await createEngagementsApi(getToken).removeEngagement(id, engagementId);
+      setClientEngagements((prev) => prev.filter((e) => e.id !== engagementId));
+    } catch {
+      /* non-fatal */
     }
   }
 
@@ -771,6 +822,71 @@ function ClientDetailContent() {
             clientEmail={client.email}
             getToken={getToken}
           />
+
+          {/* ── Engagement badges ──────────────────────────────────────────── */}
+          <div className="border-b border-gray-100 bg-gray-50/50 px-8 py-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wide mr-1">Engagements</span>
+              {clientEngagements.length === 0 && (
+                <span className="text-xs text-gray-400 italic">
+                  No engagement template assigned. Assign one to auto-generate recurring tasks.
+                </span>
+              )}
+              {clientEngagements.map((eng) => (
+                <span
+                  key={eng.id}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 border border-indigo-200 pl-2.5 pr-1 py-0.5 text-xs font-medium text-indigo-700"
+                >
+                  {eng.template.name}
+                  <button
+                    onClick={() => handleRemoveEngagement(eng.id)}
+                    className="rounded-full p-0.5 text-indigo-400 transition-colors hover:bg-indigo-100 hover:text-indigo-600"
+                    title={`Remove ${eng.template.name}`}
+                  >
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+              <div className="relative">
+                <button
+                  onClick={() => setEngDropdownOpen(!engDropdownOpen)}
+                  disabled={engAssigning || availableTemplates.length === 0}
+                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2.5 py-0.5 text-xs font-medium text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Add
+                </button>
+                {engDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setEngDropdownOpen(false)} />
+                    <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                      {availableTemplates.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => handleAssignEngagement(t.id)}
+                          className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{t.name}</p>
+                            {t.description && (
+                              <p className="text-xs text-gray-400 truncate">{t.description}</p>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                      {availableTemplates.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-gray-400">All templates assigned</p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* ── Tab navigation bar ────────────────────────────────────────── */}
           <div className="sticky top-[56px] z-10 bg-white border-b border-gray-200 shadow-sm">

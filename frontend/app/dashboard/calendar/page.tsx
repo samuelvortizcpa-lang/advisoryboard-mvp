@@ -399,7 +399,10 @@ export default function CalendarPage() {
             <LegendItem dotClass="bg-yellow-400" label="Medium priority" />
             <LegendItem dotClass="bg-gray-400"   label="Low priority" />
             <LegendItem dotClass="bg-green-500"  label="Completed" />
-            {/* TODO: add org-wide documents endpoint to populate document events */}
+            <div className="flex items-center gap-1.5">
+              <span className="rounded bg-violet-100 px-1 py-px text-[9px] font-semibold leading-none text-violet-600">Auto</span>
+              <span className="text-xs text-gray-500">Engagement-generated</span>
+            </div>
           </div>
 
           {/* ── Monthly calendar grid ─────────────────────────────────────────── */}
@@ -475,6 +478,11 @@ export default function CalendarPage() {
                           >
                             {item.text.length > 25 ? item.text.slice(0, 25) + "…" : item.text}
                           </span>
+                          {item.engagement_task_id && (
+                            <span className="shrink-0 rounded bg-violet-100 px-1 py-px text-[9px] font-semibold leading-none text-violet-600">
+                              Auto
+                            </span>
+                          )}
                         </button>
                       ))}
                       {overflow > 0 && (
@@ -579,6 +587,11 @@ export default function CalendarPage() {
                             {!item.priority && (
                               <span className="text-xs capitalize text-gray-400">
                                 {item.status}
+                              </span>
+                            )}
+                            {item.engagement_task_id && (
+                              <span className="rounded bg-violet-100 px-1 py-px text-[10px] font-semibold leading-none text-violet-600">
+                                Auto
                               </span>
                             )}
                           </div>

@@ -307,6 +307,7 @@ export default function TaskBoard({ data }: Props) {
       assigned_to_name: null,
       notes: null,
       source: "ai_extracted",
+      engagement_task_id: null,
       created_by: null,
       extracted_at: null,
       completed_at: boardItem.completed_at,
