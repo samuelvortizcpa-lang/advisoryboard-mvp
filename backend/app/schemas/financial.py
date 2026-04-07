@@ -43,6 +43,13 @@ class FinancialTrend(BaseModel):
     values: dict[int, Optional[Decimal]]  # tax_year → value
 
 
+class AmendmentInfo(BaseModel):
+    """Amendment history for a single tax year."""
+
+    tax_year: int
+    amended_metric_count: int
+
+
 class FinancialSummary(BaseModel):
     """Top-level financial overview for a client."""
 
@@ -50,3 +57,11 @@ class FinancialSummary(BaseModel):
     years_available: list[int]
     metrics_by_year: list[FinancialMetricsByYear]
     key_trends: list[FinancialTrend]
+    amendment_history: list[AmendmentInfo] = []
+
+
+class ReextractResponse(BaseModel):
+    """Result of a bulk re-extraction run."""
+
+    documents_processed: int
+    metrics_extracted: int
