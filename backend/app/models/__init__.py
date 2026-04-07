@@ -34,6 +34,9 @@ from app.models.extension_monitoring_rule import ExtensionMonitoringRule
 from app.models.client_financial_metric import ClientFinancialMetric
 from app.models.journal_entry import JournalEntry
 from app.models.profile_flag_history import ProfileFlagHistory
+from app.models.engagement_template import EngagementTemplate
+from app.models.engagement_template_task import EngagementTemplateTask
+from app.models.client_engagement import ClientEngagement
 
 __all__ = [
     "User",
@@ -71,4 +74,7 @@ __all__ = [
     "ClientFinancialMetric",
     "JournalEntry",
     "ProfileFlagHistory",
+    "EngagementTemplate",
+    "EngagementTemplateTask",
+    "ClientEngagement",
 ]
