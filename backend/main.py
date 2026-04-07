@@ -39,6 +39,7 @@ from app.api.communications import router as communications_router
 from app.api.extension import router as extension_router
 from app.api.notifications import router as notifications_router
 from app.api.users import router as users_router
+from app.api.context import router as context_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -249,3 +250,4 @@ app.include_router(communications_router,      prefix="/api", tags=["communicati
 app.include_router(extension_router,           prefix="/api/extension", tags=["extension"])
 app.include_router(notifications_router,       prefix="/api", tags=["notifications"])
 app.include_router(users_router,               prefix="/api", tags=["users"])
+app.include_router(context_router,             prefix="/api", tags=["context"])
