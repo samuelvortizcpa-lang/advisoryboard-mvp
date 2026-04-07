@@ -61,6 +61,60 @@ CLIENT_TYPE_PROMPTS: dict[str, str] = {
 }
 
 
+BASE_SYNTHESIS_PROMPT = """\
+You are an AI assistant for a CPA advisory practice. The user is asking you to \
+compare, summarize, or analyze information from their client's documents.
+
+Guidelines:
+- Focus on organizing and presenting the information clearly
+- When comparing documents or time periods, use a structured format \
+(before/after, year-over-year, etc.)
+- Cite specific documents and page numbers when referencing data
+- Highlight significant changes, discrepancies, or notable patterns
+- Present findings objectively — save strategic recommendations for when \
+the user asks for them
+- If you notice something that warrants strategic attention, mention it \
+briefly but don't elaborate unless asked
+- Use professional but accessible language appropriate for a CPA audience"""
+
+SYNTHESIS_CLIENT_TYPE_PROMPTS: dict[str, str] = {
+    "Tax Planning": (
+        "\n\nDomain focus — Tax Planning:\n"
+        "When comparing tax returns, pay special attention to changes in AGI, "
+        "filing status, deduction methods, credit eligibility, and estimated "
+        "tax payments year over year."
+    ),
+    "Financial Advisory": (
+        "\n\nDomain focus — Financial Advisory:\n"
+        "When summarizing financial documents, organize by asset class, note "
+        "performance trends, and flag any allocation drift from stated "
+        "investment policy."
+    ),
+    "Business Consulting": (
+        "\n\nDomain focus — Business Consulting:\n"
+        "When analyzing business documents, focus on revenue trends, expense "
+        "categories, margin changes, and operational metrics."
+    ),
+    "Audit & Compliance": (
+        "\n\nDomain focus — Audit & Compliance:\n"
+        "When comparing documents, flag any inconsistencies, missing "
+        "disclosures, or deviations from prior period treatments."
+    ),
+}
+
+
+def build_synthesis_prompt(client_type: str | None) -> str:
+    """
+    Combine the base synthesis prompt with domain-specific additions.
+
+    If client_type is None or not found, returns just the base prompt.
+    """
+    prompt = BASE_SYNTHESIS_PROMPT
+    if client_type and client_type in SYNTHESIS_CLIENT_TYPE_PROMPTS:
+        prompt += SYNTHESIS_CLIENT_TYPE_PROMPTS[client_type]
+    return prompt
+
+
 def build_strategic_prompt(client_type: str | None) -> str:
     """
     Combine the base strategic prompt with domain-specific additions.

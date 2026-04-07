@@ -25,7 +25,7 @@ from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.services.prompt_templates import build_strategic_prompt
+from app.services.prompt_templates import build_strategic_prompt, build_synthesis_prompt
 from app.services.subscription_service import (
     check_opus_quota,
     check_sonnet_quota,
@@ -297,13 +297,13 @@ async def route_completion(
             logger.error("Sonnet quota check failed — allowing query", exc_info=True)
 
     if query_type == "synthesis" and settings.anthropic_api_key:
-        strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
+        synthesis_system = build_synthesis_prompt(client_type) + "\n\n" + system_prompt
         try:
             client = AsyncAnthropic(api_key=settings.anthropic_api_key)
             response = await client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=2000,
-                system=strategic_system,
+                system=synthesis_system,
                 messages=[{"role": "user", "content": question}],
                 temperature=0.2,
             )
@@ -486,14 +486,14 @@ async def route_completion_stream(
 
     # Synthesis queries: stream from Claude Sonnet if available
     if query_type == "synthesis" and settings.anthropic_api_key:
-        strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
+        synthesis_system = build_synthesis_prompt(client_type) + "\n\n" + system_prompt
         try:
             client = AsyncAnthropic(api_key=settings.anthropic_api_key)
             full_answer = ""
             async with client.messages.stream(
                 model="claude-sonnet-4-20250514",
                 max_tokens=2000,
-                system=strategic_system,
+                system=synthesis_system,
                 messages=[{"role": "user", "content": question}],
                 temperature=0.2,
             ) as stream:
