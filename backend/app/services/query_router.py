@@ -7,10 +7,11 @@ Classifies user questions into three tiers using GPT-4o-mini:
   - strategic  → Claude Opus 4.6 (deep reasoning & recommendations)
 
 Cascading fallback on quota exhaustion:
-  strategic → Sonnet → GPT-4o-mini
-  synthesis → GPT-4o-mini
+  strategic → Opus (quota) → Sonnet (quota) → GPT-4o-mini
+  synthesis → Sonnet (quota) → GPT-4o-mini
 
 Falls back to GPT-4o-mini if ANTHROPIC_API_KEY is not configured.
+Enforces total query limit before any model routing.
 """
 
 from __future__ import annotations
@@ -25,6 +26,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.services.prompt_templates import build_strategic_prompt
+from app.services.subscription_service import (
+    check_opus_quota,
+    check_sonnet_quota,
+    check_total_query_quota,
+    increment_usage,
+)
 from app.services.token_tracking_service import log_token_usage
 
 logger = logging.getLogger(__name__)
@@ -120,6 +127,27 @@ def _analysis_tier(model_used: str) -> str:
     return _TIER_MAP.get(model_used, "standard")
 
 
+def _build_result(
+    answer: str,
+    model_used: str,
+    query_type: str,
+    *,
+    quota_remaining: int | None = None,
+    quota_warning: str | None = None,
+    quota_warning_message: str | None = None,
+) -> dict[str, Any]:
+    """Build a standardized route_completion result dict."""
+    return {
+        "answer": answer,
+        "model_used": model_used,
+        "analysis_tier": _analysis_tier(model_used),
+        "query_type": query_type,
+        "quota_remaining": quota_remaining,
+        "quota_warning": quota_warning,
+        "quota_warning_message": quota_warning_message,
+    }
+
+
 async def route_completion(
     query_type: str,
     system_prompt: str,
@@ -133,10 +161,11 @@ async def route_completion(
     """
     Route to the appropriate model based on query_type with cascading fallback.
 
-    Cascade:
-      strategic → Opus (quota) → Sonnet (quota) → GPT-4o-mini
-      synthesis → Sonnet (quota) → GPT-4o-mini
-      factual   → GPT-4o-mini
+    1. Check total query quota — hard block if exceeded.
+    2. Apply classification cascade:
+       strategic → Opus (quota) → Sonnet (quota) → GPT-4o-mini
+       synthesis → Sonnet (quota) → GPT-4o-mini
+       factual   → GPT-4o-mini
 
     Returns dict with: answer, model_used, analysis_tier, query_type,
                         quota_remaining, quota_warning, quota_warning_message.
@@ -144,27 +173,52 @@ async def route_completion(
     global _anthropic_warned
     settings = get_settings()
 
+    # Track the original classification for logging
+    original_query_type = query_type
+
     quota_remaining: int | None = None
     quota_warning: str | None = None
     quota_warning_message: str | None = None
 
+    # ── GATE: Total query quota check ───────────────────────────────────
+    if db and user_id:
+        try:
+            total_quota = check_total_query_quota(db, user_id)
+            if not total_quota["allowed"]:
+                logger.info(
+                    "Total query limit reached for user %s (used=%d/%d)",
+                    user_id, total_quota["used"], total_quota["limit"],
+                )
+                return _build_result(
+                    answer=(
+                        "You've reached your monthly query limit. "
+                        "Please upgrade your plan for additional queries."
+                    ),
+                    model_used="none",
+                    query_type=query_type,
+                    quota_warning_message=(
+                        "You've reached your monthly query limit. "
+                        "Upgrade your plan for additional queries."
+                    ),
+                )
+        except Exception:
+            logger.error("Total quota check failed — allowing query", exc_info=True)
+
     # ── Strategic path: try Opus → Sonnet → GPT-4o-mini ─────────────────
     if query_type == "strategic" and db and user_id and settings.anthropic_api_key:
         try:
-            from app.services.subscription_service import check_opus_quota
             opus_quota = check_opus_quota(db, user_id)
             if not opus_quota["allowed"]:
                 logger.info(
                     "Strategic query: Opus quota exceeded for user %s (used=%d/%d), trying Sonnet",
                     user_id, opus_quota["used"], opus_quota["limit"],
                 )
+                # Will be overwritten if Sonnet also fails
                 quota_warning_message = (
-                    "Your premium analysis quota for this month has been reached. "
-                    "This response used advanced analysis."
+                    "Your premium analysis quota has been reached for this month. "
+                    "This response used advanced analysis instead."
                 )
-                # Fall through to synthesis path (Sonnet)
                 query_type = "synthesis"
-            # If allowed, fall through to Opus completion below
         except Exception:
             logger.error("Opus quota check failed — allowing query", exc_info=True)
 
@@ -199,15 +253,12 @@ async def route_completion(
                 except Exception:
                     logger.error("Failed to log Opus token usage", exc_info=True)
 
-            return {
-                "answer": answer,
-                "model_used": model_used,
-                "analysis_tier": _analysis_tier(model_used),
-                "query_type": "strategic",
-                "quota_remaining": quota_remaining,
-                "quota_warning": quota_warning,
-                "quota_warning_message": quota_warning_message,
-            }
+            return _build_result(
+                answer, model_used, "strategic",
+                quota_remaining=quota_remaining,
+                quota_warning=quota_warning,
+                quota_warning_message=quota_warning_message,
+            )
         except Exception:
             logger.exception("Claude Opus call failed — falling back to Sonnet")
             query_type = "synthesis"
@@ -215,31 +266,35 @@ async def route_completion(
     # ── Synthesis path: try Sonnet → GPT-4o-mini ────────────────────────
     if query_type == "synthesis" and db and user_id:
         try:
-            from app.services.subscription_service import check_quota
+            sonnet_quota = check_sonnet_quota(db, user_id)
+            quota_remaining = sonnet_quota["remaining"]
 
-            quota = check_quota(db, user_id)
-            quota_remaining = quota["remaining"]
-
-            if not quota["allowed"]:
+            if not sonnet_quota["allowed"]:
                 logger.info(
-                    "Synthesis/strategic query downgraded to factual for user %s (tier=%s, used=%d/%d)",
-                    user_id, quota["tier"], quota["used"], quota["limit"],
+                    "Sonnet quota exceeded for user %s (tier=%s, used=%d/%d)",
+                    user_id, sonnet_quota["tier"], sonnet_quota["used"], sonnet_quota["limit"],
                 )
-                if quota["limit"] == 0:
+                if sonnet_quota["limit"] == 0:
                     quota_warning_message = (
                         "Your plan does not include advanced analysis. "
                         "Upgrade to Professional for deeper insights."
                     )
+                elif original_query_type == "strategic":
+                    # Both Opus and Sonnet exhausted
+                    quota_warning_message = (
+                        "Your advanced and premium analysis quotas have been reached "
+                        "for this month. This response used standard analysis. "
+                        "Upgrade for more advanced analyses."
+                    )
                 else:
-                    if not quota_warning_message:
-                        quota_warning_message = (
-                            "Your advanced analysis quota for this month has been reached. "
-                            "This response used standard analysis."
-                        )
+                    quota_warning_message = (
+                        "Your advanced analysis quota has been reached for this month. "
+                        "This response used standard analysis."
+                    )
                 quota_remaining = 0
                 query_type = "factual"
         except Exception:
-            logger.error("Quota check failed — allowing query", exc_info=True)
+            logger.error("Sonnet quota check failed — allowing query", exc_info=True)
 
     if query_type == "synthesis" and settings.anthropic_api_key:
         strategic_system = build_strategic_prompt(client_type) + "\n\n" + system_prompt
@@ -264,7 +319,7 @@ async def route_completion(
                         db,
                         user_id=user_id,
                         client_id=client_id,
-                        query_type=query_type,
+                        query_type=original_query_type,
                         model="claude-sonnet-4-20250514",
                         prompt_tokens=usage.input_tokens if usage else 0,
                         completion_tokens=usage.output_tokens if usage else 0,
@@ -276,9 +331,8 @@ async def route_completion(
             # Increment usage and compute warning
             if db and user_id:
                 try:
-                    from app.services.subscription_service import increment_usage, check_quota
-                    increment_usage(db, user_id, "strategic")
-                    updated_quota = check_quota(db, user_id)
+                    increment_usage(db, user_id, original_query_type)
+                    updated_quota = check_sonnet_quota(db, user_id)
                     quota_remaining = updated_quota["remaining"]
                     if quota_remaining is not None and quota_remaining < 10:
                         quota_warning = (
@@ -289,15 +343,12 @@ async def route_completion(
                 except Exception:
                     logger.error("Failed to increment usage", exc_info=True)
 
-            return {
-                "answer": answer,
-                "model_used": model_used,
-                "analysis_tier": _analysis_tier(model_used),
-                "query_type": query_type,
-                "quota_remaining": quota_remaining,
-                "quota_warning": quota_warning,
-                "quota_warning_message": quota_warning_message,
-            }
+            return _build_result(
+                answer, model_used, original_query_type,
+                quota_remaining=quota_remaining,
+                quota_warning=quota_warning,
+                quota_warning_message=quota_warning_message,
+            )
         except Exception:
             logger.exception("Claude call failed — falling back to GPT-4o-mini")
             # Fall through to GPT-4o-mini below
@@ -332,7 +383,7 @@ async def route_completion(
                 db,
                 user_id=user_id,
                 client_id=client_id,
-                query_type=query_type,
+                query_type=original_query_type,
                 model="gpt-4o-mini",
                 prompt_tokens=usage.prompt_tokens if usage else 0,
                 completion_tokens=usage.completion_tokens if usage else 0,
@@ -341,15 +392,12 @@ async def route_completion(
         except Exception:
             logger.error("Failed to log GPT token usage", exc_info=True)
 
-    return {
-        "answer": answer,
-        "model_used": model_used,
-        "analysis_tier": _analysis_tier(model_used),
-        "query_type": query_type,
-        "quota_remaining": quota_remaining,
-        "quota_warning": quota_warning,
-        "quota_warning_message": quota_warning_message,
-    }
+    return _build_result(
+        answer, model_used, original_query_type,
+        quota_remaining=quota_remaining,
+        quota_warning=quota_warning,
+        quota_warning_message=quota_warning_message,
+    )
 
 
 async def route_completion_stream(
@@ -374,26 +422,64 @@ async def route_completion_stream(
     global _anthropic_warned
     settings = get_settings()
 
+    original_query_type = query_type
+
     quota_remaining: int | None = None
     quota_warning: str | None = None
     quota_warning_message: str | None = None
     model_used = "gpt-4o-mini"
 
+    # ── GATE: Total query quota check ───────────────────────────────────
+    if db and user_id:
+        try:
+            total_quota = check_total_query_quota(db, user_id)
+            if not total_quota["allowed"]:
+                logger.info(
+                    "Streaming: Total query limit reached for user %s (used=%d/%d)",
+                    user_id, total_quota["used"], total_quota["limit"],
+                )
+                error_msg = (
+                    "You've reached your monthly query limit. "
+                    "Please upgrade your plan for additional queries."
+                )
+                import json as _json
+                yield None, {
+                    "model_used": "none",
+                    "analysis_tier": "standard",
+                    "query_type": query_type,
+                    "quota_remaining": 0,
+                    "quota_warning": None,
+                    "quota_warning_message": (
+                        "You've reached your monthly query limit. "
+                        "Upgrade your plan for additional queries."
+                    ),
+                    "error": error_msg,
+                }
+                return
+        except Exception:
+            logger.error("Total quota check failed — allowing query", exc_info=True)
+
     # Strategic streaming: downgrade to synthesis (streaming doesn't support Opus)
     if query_type == "strategic":
         query_type = "synthesis"
 
-    # Check synthesis/strategic quota
+    # Check Sonnet quota for synthesis queries
     if query_type == "synthesis" and db and user_id:
         try:
-            from app.services.subscription_service import check_quota
-            quota = check_quota(db, user_id)
-            quota_remaining = quota["remaining"]
-            if not quota["allowed"]:
-                quota_warning_message = (
-                    "Your advanced analysis quota for this month has been reached. "
-                    "This response used standard analysis."
-                )
+            sonnet_quota = check_sonnet_quota(db, user_id)
+            quota_remaining = sonnet_quota["remaining"]
+            if not sonnet_quota["allowed"]:
+                if original_query_type == "strategic":
+                    quota_warning_message = (
+                        "Your advanced and premium analysis quotas have been reached "
+                        "for this month. This response used standard analysis. "
+                        "Upgrade for more advanced analyses."
+                    )
+                else:
+                    quota_warning_message = (
+                        "Your advanced analysis quota has been reached for this month. "
+                        "This response used standard analysis."
+                    )
                 query_type = "factual"
         except Exception:
             logger.error("Quota check failed — allowing query", exc_info=True)
@@ -421,9 +507,8 @@ async def route_completion_stream(
             # Increment usage
             if db and user_id:
                 try:
-                    from app.services.subscription_service import increment_usage, check_quota
-                    increment_usage(db, user_id, "strategic")
-                    updated_quota = check_quota(db, user_id)
+                    increment_usage(db, user_id, original_query_type)
+                    updated_quota = check_sonnet_quota(db, user_id)
                     quota_remaining = updated_quota["remaining"]
                     if quota_remaining is not None and quota_remaining < 10:
                         quota_warning = (
@@ -441,7 +526,8 @@ async def route_completion_stream(
                     usage = final_message.usage
                     log_token_usage(
                         db, user_id=user_id, client_id=client_id,
-                        query_type=query_type, model="claude-sonnet-4-20250514",
+                        query_type=original_query_type,
+                        model="claude-sonnet-4-20250514",
                         prompt_tokens=usage.input_tokens if usage else 0,
                         completion_tokens=usage.output_tokens if usage else 0,
                         endpoint="chat_stream",
@@ -452,7 +538,7 @@ async def route_completion_stream(
             yield None, {
                 "model_used": model_used,
                 "analysis_tier": _analysis_tier(model_used),
-                "query_type": query_type,
+                "query_type": original_query_type,
                 "quota_remaining": quota_remaining,
                 "quota_warning": quota_warning,
                 "quota_warning_message": quota_warning_message,
@@ -483,12 +569,12 @@ async def route_completion_stream(
 
     logger.info("Streaming query answered by GPT-4o-mini")
 
-    # Log token usage (approximate from content length since streaming doesn't give usage)
+    # Log token usage
     if db and user_id:
         try:
             log_token_usage(
                 db, user_id=user_id, client_id=client_id,
-                query_type=query_type, model="gpt-4o-mini",
+                query_type=original_query_type, model="gpt-4o-mini",
                 prompt_tokens=0, completion_tokens=0,
                 endpoint="chat_stream",
             )
@@ -498,7 +584,7 @@ async def route_completion_stream(
     yield None, {
         "model_used": model_used,
         "analysis_tier": _analysis_tier(model_used),
-        "query_type": query_type,
+        "query_type": original_query_type,
         "quota_remaining": quota_remaining,
         "quota_warning": quota_warning,
         "quota_warning_message": quota_warning_message,
