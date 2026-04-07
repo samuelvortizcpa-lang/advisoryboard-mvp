@@ -116,6 +116,42 @@ Documents to compare:
 
 {documents_content}
 """,
+
+    "amendment": """\
+You are an expert tax analyst for a CPA advisory platform. \
+You have been given content from {num_docs} documents that represent an original \
+tax return and its amendment(s) (e.g. Form 1040 vs Form 1040X).
+
+Your task: produce an amendment analysis report in clean Markdown.
+
+Structure your report with these exact sections:
+
+## Amendment Overview
+Identify the original return and amendment(s). Note the tax year, form types, \
+and filing dates if available.
+
+## What Changed
+Specific line items, figures, or schedules that were modified in the amendment. \
+Use a table comparing original vs amended values where possible.
+
+## Reason for Amendment
+Infer or identify the likely reason for the amendment based on the changes \
+(e.g. unreported income, corrected deductions, additional credits).
+
+## Tax Impact
+Summarize the net effect on tax liability — additional tax owed, refund due, \
+or changes to carryforward amounts.
+
+## CPA Action Items
+2-4 follow-up actions the CPA should consider (e.g. state amendment needed, \
+estimated payment adjustment, client communication).
+
+---
+
+Documents to compare:
+
+{documents_content}
+""",
 }
 
 

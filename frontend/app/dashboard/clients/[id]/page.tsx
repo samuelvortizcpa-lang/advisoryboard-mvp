@@ -1031,6 +1031,7 @@ function ClientDetailContent() {
                       <option value="summary">Summary</option>
                       <option value="changes">Changes</option>
                       <option value="financial">Financial</option>
+                      <option value="amendment">Amendment Changes</option>
                     </select>
 
                     <button

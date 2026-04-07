@@ -182,6 +182,8 @@ export interface Document {
   document_subtype: string | null;
   document_period: string | null;
   classification_confidence: number | null;
+  amends_subtype: string | null;
+  amendment_number: number | null;
   is_superseded: boolean;
   superseded_by: string | null;
 }
@@ -260,7 +262,7 @@ export function createClientTypesApi(getToken: GetToken, orgId?: string) {
 
 // ─── RAG types ────────────────────────────────────────────────────────────────
 
-export type ComparisonType = "summary" | "changes" | "financial";
+export type ComparisonType = "summary" | "changes" | "financial" | "amendment";
 
 export interface CompareDocumentMeta {
   id: string;

@@ -13,6 +13,7 @@ const TYPE_LABELS: Record<ComparisonType, string> = {
   summary: "Summary Comparison",
   changes: "Change Analysis",
   financial: "Financial Comparison",
+  amendment: "Amendment Changes",
 };
 
 export default function DocumentComparisonReport({
