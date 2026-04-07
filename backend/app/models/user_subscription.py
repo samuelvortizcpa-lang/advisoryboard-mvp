@@ -48,6 +48,14 @@ class UserSubscription(Base):
         Integer, nullable=False, default=0
     )
 
+    sonnet_queries_limit: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    sonnet_queries_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
     billing_period_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

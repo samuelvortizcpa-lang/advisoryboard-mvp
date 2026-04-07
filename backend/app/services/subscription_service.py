@@ -1,11 +1,11 @@
 """
-Subscription tier management and strategic query quota enforcement.
+Subscription tier management and query quota enforcement.
 
 Tiers:
-  - free:          50 queries/month, 5 clients, unlimited documents, no Opus
-  - starter:       factual only, no Claude access
-  - professional:  100 strategic queries/month, 10 opus queries/month
-  - firm:          500 strategic queries/month, 50 opus queries/month
+  - free:          50 total queries/month, 10 Sonnet, 0 Opus, 5 clients
+  - starter:       500 total queries/month, 50 Sonnet, 25 Opus, 25 clients
+  - professional:  500 total queries/month, 100 Sonnet, 50 Opus, 100 clients
+  - firm:          1000 total queries/month, 500 Sonnet, 100 Opus, unlimited clients
 """
 
 from __future__ import annotations
@@ -32,11 +32,13 @@ logger = logging.getLogger(__name__)
 
 TIER_DEFAULTS: dict[str, dict] = {
     "free": {
-        "strategic_queries_limit": 50,
-        "opus_queries_limit": 0,
-        "models_allowed": ["gpt-4o-mini"],
         "max_clients": 5,
         "max_documents": None,
+        "total_queries_limit": 50,
+        "sonnet_queries_limit": 10,
+        "opus_queries_limit": 0,
+        "strategic_queries_limit": 50,  # Legacy — kept for backward compat
+        "models_allowed": ["gpt-4o-mini"],
         "max_members": 1,
         "base_seats": 1,
         "extension_captures_per_day": 10,
@@ -46,11 +48,13 @@ TIER_DEFAULTS: dict[str, dict] = {
         "extension_monitoring": False,
     },
     "starter": {
-        "strategic_queries_limit": 0,
-        "opus_queries_limit": 0,
-        "models_allowed": ["gpt-4o-mini"],
         "max_clients": 25,
         "max_documents": None,
+        "total_queries_limit": 500,
+        "sonnet_queries_limit": 50,
+        "opus_queries_limit": 25,
+        "strategic_queries_limit": 500,
+        "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
         "max_members": 1,
         "base_seats": 1,
         "extension_captures_per_day": 50,
@@ -60,11 +64,13 @@ TIER_DEFAULTS: dict[str, dict] = {
         "extension_monitoring": True,
     },
     "professional": {
-        "strategic_queries_limit": 100,
-        "opus_queries_limit": 10,
-        "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
         "max_clients": 100,
         "max_documents": None,
+        "total_queries_limit": 500,
+        "sonnet_queries_limit": 100,
+        "opus_queries_limit": 50,
+        "strategic_queries_limit": 500,
+        "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
         "max_members": 3,
         "base_seats": 1,
         "extension_captures_per_day": 200,
@@ -74,11 +80,13 @@ TIER_DEFAULTS: dict[str, dict] = {
         "extension_monitoring": True,
     },
     "firm": {
-        "strategic_queries_limit": 500,
-        "opus_queries_limit": 50,
-        "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
         "max_clients": None,
         "max_documents": None,
+        "total_queries_limit": 1000,
+        "sonnet_queries_limit": 500,
+        "opus_queries_limit": 100,
+        "strategic_queries_limit": 1000,
+        "models_allowed": ["gpt-4o-mini", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
         "max_members": 15,
         "base_seats": 3,
         "addon_seat_price_monthly": 79,
@@ -133,6 +141,8 @@ def get_or_create_subscription(
             tier=_DEFAULT_TIER,
             strategic_queries_limit=defaults["strategic_queries_limit"],
             strategic_queries_used=0,
+            sonnet_queries_limit=defaults["sonnet_queries_limit"],
+            sonnet_queries_used=0,
             billing_period_start=now,
             billing_period_end=now + timedelta(days=30),
         )
@@ -153,6 +163,7 @@ def get_or_create_subscription(
     # Reset billing period if expired
     if sub.billing_period_end and now >= sub.billing_period_end:
         sub.strategic_queries_used = 0
+        sub.sonnet_queries_used = 0
         sub.billing_period_start = now
         sub.billing_period_end = now + timedelta(days=30)
         sub.updated_at = now
@@ -184,39 +195,83 @@ def update_org_seat_limit(org_id: UUID, new_tier: str, db: Session) -> None:
     logger.info("Updated org %s max_members to %d (tier=%s)", org_id, new_max, new_tier)
 
 
-def check_quota(db: Session, user_id: str, *, org_id: UUID | None = None) -> dict:
-    """
-    Check whether the user/org can make a strategic query.
+# ---------------------------------------------------------------------------
+# Query quota checks — token_usage-based counting
+# ---------------------------------------------------------------------------
 
-    When org_id is provided, all org members share the same quota pool.
-    Returns {allowed, tier, used, limit, remaining}.
+
+def _count_chat_usage(
+    db: Session,
+    sub: UserSubscription,
+    user_id: str,
+    org_id: UUID | None,
+    *,
+    model_filter: str | None = None,
+) -> int:
+    """
+    Count chat query rows in token_usage for the current billing period.
+
+    Args:
+        model_filter: If provided, only count rows where model ILIKE this pattern
+                      (e.g. '%sonnet%', '%opus%'). If None, count all chat rows.
+    """
+    q = db.query(func.count(TokenUsage.id)).filter(
+        TokenUsage.endpoint == "chat",
+        TokenUsage.created_at >= sub.billing_period_start,
+    )
+    if sub.billing_period_end:
+        q = q.filter(TokenUsage.created_at < sub.billing_period_end)
+
+    if model_filter:
+        q = q.filter(TokenUsage.model.ilike(model_filter))
+
+    if org_id is not None:
+        q = q.filter(
+            or_(TokenUsage.org_id == org_id, TokenUsage.user_id == user_id)
+        )
+    else:
+        q = q.filter(TokenUsage.user_id == user_id)
+
+    return q.scalar() or 0
+
+
+def check_total_query_quota(
+    db: Session, user_id: str, *, org_id: UUID | None = None,
+) -> dict:
+    """
+    Check whether the user/org can make any AI chat query this period.
+
+    Returns {allowed, used, limit, remaining}.
     """
     sub = get_or_create_subscription(db, user_id, org_id=org_id)
-    remaining = max(0, sub.strategic_queries_limit - sub.strategic_queries_used)
-    allowed = sub.strategic_queries_limit > 0 and sub.strategic_queries_used < sub.strategic_queries_limit
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+    limit = tier_config["total_queries_limit"]
+
+    used = _count_chat_usage(db, sub, user_id, org_id)
+    remaining = max(0, limit - used)
 
     return {
-        "allowed": allowed,
-        "tier": sub.tier,
-        "used": sub.strategic_queries_used,
-        "limit": sub.strategic_queries_limit,
+        "allowed": used < limit,
+        "used": used,
+        "limit": limit,
         "remaining": remaining,
     }
 
 
-def check_opus_quota(db: Session, user_id: str, *, org_id: UUID | None = None) -> dict:
+def check_sonnet_quota(
+    db: Session, user_id: str, *, org_id: UUID | None = None,
+) -> dict:
     """
-    Check whether the user/org can make an Opus query.
+    Check whether the user/org can make a Sonnet (advanced analysis) query.
 
-    Counts Opus usage from the token_usage table (no new DB columns needed).
-    When org_id is provided, counts across the whole org.
+    Counts Sonnet usage from the token_usage table.
     Returns {allowed, tier, used, limit, remaining}.
     """
     sub = get_or_create_subscription(db, user_id, org_id=org_id)
     tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
-    opus_limit = tier_config["opus_queries_limit"]
+    limit = tier_config["sonnet_queries_limit"]
 
-    if opus_limit == 0:
+    if limit == 0:
         return {
             "allowed": False,
             "tier": sub.tier,
@@ -225,26 +280,52 @@ def check_opus_quota(db: Session, user_id: str, *, org_id: UUID | None = None) -
             "remaining": 0,
         }
 
-    # Count Opus queries in the current billing period from token_usage
-    opus_query = db.query(func.count(TokenUsage.id)).filter(
-        TokenUsage.model == "claude-opus-4-20250514",
-        TokenUsage.created_at >= sub.billing_period_start,
-    )
-    if org_id is not None:
-        opus_query = opus_query.filter(
-            or_(TokenUsage.org_id == org_id, TokenUsage.user_id == user_id)
-        )
-    else:
-        opus_query = opus_query.filter(TokenUsage.user_id == user_id)
+    used = _count_chat_usage(db, sub, user_id, org_id, model_filter="%sonnet%")
+    remaining = max(0, limit - used)
 
-    opus_used = opus_query.scalar() or 0
-
-    remaining = max(0, opus_limit - opus_used)
     return {
-        "allowed": opus_used < opus_limit,
+        "allowed": used < limit,
         "tier": sub.tier,
-        "used": opus_used,
-        "limit": opus_limit,
+        "used": used,
+        "limit": limit,
+        "remaining": remaining,
+    }
+
+
+# Legacy alias — callers that still import check_quota get Sonnet quota check
+check_quota = check_sonnet_quota
+
+
+def check_opus_quota(
+    db: Session, user_id: str, *, org_id: UUID | None = None,
+) -> dict:
+    """
+    Check whether the user/org can make an Opus (premium analysis) query.
+
+    Counts Opus usage from the token_usage table.
+    Returns {allowed, tier, used, limit, remaining}.
+    """
+    sub = get_or_create_subscription(db, user_id, org_id=org_id)
+    tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
+    limit = tier_config["opus_queries_limit"]
+
+    if limit == 0:
+        return {
+            "allowed": False,
+            "tier": sub.tier,
+            "used": 0,
+            "limit": 0,
+            "remaining": 0,
+        }
+
+    used = _count_chat_usage(db, sub, user_id, org_id, model_filter="%opus%")
+    remaining = max(0, limit - used)
+
+    return {
+        "allowed": used < limit,
+        "tier": sub.tier,
+        "used": used,
+        "limit": limit,
         "remaining": remaining,
     }
 
@@ -325,8 +406,8 @@ def check_document_limit(db: Session, user_id: str, owner_id=None, org_id=None) 
 
 
 def increment_usage(db: Session, user_id: str, query_type: str, *, org_id: UUID | None = None) -> None:
-    """Increment strategic_queries_used if this was a strategic query."""
-    if query_type != "strategic":
+    """Increment strategic_queries_used if this was a strategic/synthesis query."""
+    if query_type not in ("strategic", "synthesis"):
         return
 
     try:

@@ -40,6 +40,9 @@ from app.services.subscription_service import (
     TIER_DEFAULTS,
     check_client_limit,
     check_document_limit,
+    check_opus_quota,
+    check_sonnet_quota,
+    check_total_query_quota,
     get_or_create_subscription,
     get_seat_info,
 )
@@ -113,6 +116,12 @@ async def subscription_info(
     client_info = check_client_limit(db, auth.user_id, org_id=auth.org_id)
     doc_info = check_document_limit(db, auth.user_id, org_id=auth.org_id)
 
+    # Quota checks (token_usage-based)
+    org_id = auth.org_id if hasattr(auth, "org_id") else None
+    total_q = check_total_query_quota(db, auth.user_id, org_id=org_id)
+    sonnet_q = check_sonnet_quota(db, auth.user_id, org_id=org_id)
+    opus_q = check_opus_quota(db, auth.user_id, org_id=org_id)
+
     # Seat info (org-aware)
     if auth.org_id:
         seat_data = get_seat_info(auth.org_id, db)
@@ -121,11 +130,24 @@ async def subscription_info(
 
     return {
         "tier": sub.tier,
+        # Legacy fields (kept for backward compat)
         "strategic_queries_limit": sub.strategic_queries_limit,
         "strategic_queries_used": sub.strategic_queries_used,
         "strategic_queries_remaining": remaining,
+        # New quota fields
+        "total_queries_used": total_q["used"],
+        "total_queries_limit": total_q["limit"],
+        "total_queries_remaining": total_q["remaining"],
+        "sonnet_queries_used": sonnet_q["used"],
+        "sonnet_queries_limit": sonnet_q["limit"],
+        "sonnet_queries_remaining": sonnet_q["remaining"],
+        "opus_queries_used": opus_q["used"],
+        "opus_queries_limit": opus_q["limit"],
+        "opus_queries_remaining": opus_q["remaining"],
+        # Billing period
         "billing_period_start": sub.billing_period_start.isoformat() if sub.billing_period_start else None,
         "billing_period_end": sub.billing_period_end.isoformat() if sub.billing_period_end else None,
+        # Limits
         "max_clients": tier_config["max_clients"],
         "current_clients": client_info["current"],
         "max_documents": tier_config["max_documents"],

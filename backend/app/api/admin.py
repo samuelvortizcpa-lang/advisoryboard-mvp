@@ -456,6 +456,7 @@ async def update_subscription(
     tier_config = TIER_DEFAULTS[body.tier]
     sub.tier = body.tier
     sub.strategic_queries_limit = tier_config["strategic_queries_limit"]
+    sub.sonnet_queries_limit = tier_config["sonnet_queries_limit"]
     sub.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(sub)
