@@ -7,7 +7,7 @@ import Script from 'next/script';
 const faqData = [
   {
     q: 'How does Callwen handle sensitive client data?',
-    a: 'All data is encrypted in transit (TLS 1.2+) and at rest (AES-256). Your documents are stored on SOC 2 Type II certified infrastructure in US-based data centers. We never use your data to train AI models. Our AI providers (OpenAI and Anthropic) process queries via their commercial APIs with zero data retention.',
+    a: 'All data is encrypted in transit (TLS 1.2+) and at rest (AES-256). Your documents are stored on SOC 2 Type II certified infrastructure in US-based data centers. We never use your data to train AI models. All AI queries are processed via commercial APIs with zero data retention.',
   },
   {
     q: 'What is IRC \u00a77216 and why does it matter?',
@@ -909,10 +909,11 @@ export default function LandingPage() {
                   <li>5 clients</li>
                   <li>Unlimited documents</li>
                   <li>50 AI queries/month</li>
-                  <li>10 extension captures/day</li>
-                  <li>Standard AI</li>
+                  <li>10 advanced analyses/month</li>
+                  <li>Source-cited answers</li>
+                  <li>All document types</li>
                 </ul>
-                <Link href="/sign-up" className="p-btn p-btn-ghost">Start free</Link>
+                <Link href="/sign-up" className="p-btn p-btn-ghost">Start free &rarr;</Link>
               </div>
               <div className="p-card">
                 <div className="p-tier">Starter</div>
@@ -921,10 +922,12 @@ export default function LandingPage() {
                 <div className="p-desc">Solo practitioners getting organized.</div>
                 <ul className="p-list">
                   <li>25 clients</li>
-                  <li>500 documents</li>
+                  <li>Unlimited documents</li>
                   <li>500 AI queries/month</li>
-                  <li>50 extension captures/day</li>
-                  <li>All integrations</li>
+                  <li>50 advanced analyses/month</li>
+                  <li>25 premium analyses/month</li>
+                  <li>Document comparison</li>
+                  <li>Email support</li>
                 </ul>
                 <Link href="/sign-up" className="p-btn p-btn-ghost">Start 14-day trial</Link>
               </div>
@@ -935,23 +938,27 @@ export default function LandingPage() {
                 <div className="p-desc">Growing firms with 10+ clients.</div>
                 <ul className="p-list">
                   <li>100 clients</li>
-                  <li>5,000 documents</li>
-                  <li>Advanced AI analysis</li>
-                  <li>200 extension captures/day</li>
-                  <li>Smart alerts + compliance</li>
+                  <li>Unlimited documents</li>
+                  <li>500 AI queries/month</li>
+                  <li>100 advanced analyses/month</li>
+                  <li>50 premium analyses/month</li>
+                  <li>Priority support</li>
+                  <li>Client briefs</li>
                 </ul>
                 <Link href="/sign-up" className="p-btn p-btn-primary">Start 14-day trial</Link>
               </div>
               <div className="p-card">
                 <div className="p-tier">Firm</div>
                 <div className="p-price">$349 <span className="mo">/mo</span></div>
-                <div className="p-desc">$349 base (3 seats) + $79/seat.</div>
+                <div className="p-desc">3 seats included + $79/mo per seat.</div>
                 <ul className="p-list">
-                  <li>Unlimited everything</li>
-                  <li>Unlimited extension captures</li>
-                  <li>Premium AI suite</li>
-                  <li>Dedicated onboarding</li>
-                  <li>Client allocation</li>
+                  <li>Unlimited clients &amp; documents</li>
+                  <li>1,000 AI queries/month</li>
+                  <li>500 advanced analyses/month</li>
+                  <li>100 premium analyses/month</li>
+                  <li>Multi-user team access</li>
+                  <li>Admin controls &amp; audit log</li>
+                  <li>Dedicated support</li>
                 </ul>
                 <Link href="/sign-up" className="p-btn p-btn-ghost">Contact us</Link>
               </div>
