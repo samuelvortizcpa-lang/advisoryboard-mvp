@@ -30,6 +30,8 @@ from app.models.client_communication import ClientCommunication
 from app.models.client_financial_metric import ClientFinancialMetric
 from app.models.client_strategy_status import ClientStrategyStatus
 from app.models.document import Document
+from app.models.journal_entry import JournalEntry
+from app.models.profile_flag_history import ProfileFlagHistory
 from app.models.tax_strategy import TaxStrategy
 
 logger = logging.getLogger(__name__)
@@ -165,6 +167,11 @@ async def assemble_context(
         ctx.strategy_status = _fetch_strategy_status(
             db, client_id, [current_year, current_year - 1],
         )
+        # Include profile flag history for strategy context
+        flag_history = _fetch_profile_flag_history(db, client_id)
+        if flag_history:
+            profile = ctx.client_profile
+            profile["profile_flag_history"] = flag_history
 
     else:  # GENERAL
         ctx.action_items = _fetch_action_items(db, client_id, limit=10)
@@ -182,7 +189,34 @@ async def assemble_context(
             db, client_id, current_year,
         )
 
-    # TODO: Feature 3 — populate ctx.journal_entries
+    # Populate journal entries based on purpose
+    if purpose == ContextPurpose.CHAT:
+        ctx.journal_entries = _fetch_journal_entries(
+            db, client_id, limit=10, include_pinned=True,
+        )
+    elif purpose == ContextPurpose.EMAIL_DRAFT:
+        ctx.journal_entries = _fetch_journal_entries(
+            db, client_id, limit=5, include_pinned=True,
+        )
+    elif purpose == ContextPurpose.QUARTERLY_ESTIMATE:
+        # Entries since last quarterly estimate email
+        last_estimate_date = _find_last_quarterly_estimate_date(
+            ctx.communication_history,
+        )
+        ctx.journal_entries = _fetch_journal_entries(
+            db, client_id, since=last_estimate_date, include_pinned=True,
+        )
+    elif purpose == ContextPurpose.BRIEF:
+        ctx.journal_entries = _fetch_journal_entries(
+            db, client_id, limit=20, include_pinned=True,
+        )
+    elif purpose == ContextPurpose.STRATEGY_SUGGEST:
+        ctx.journal_entries = _fetch_journal_entries(
+            db, client_id, months=12,
+            categories=["income", "deductions", "business", "investment", "property"],
+            include_pinned=False,
+        )
+
     # TODO: Feature 4 — populate ctx.engagement_calendar
 
     # 3. Trim to budget -------------------------------------------------------
@@ -421,6 +455,125 @@ async def _fetch_rag_chunks(
     ]
 
 
+def _fetch_journal_entries(
+    db: Session,
+    client_id: UUID,
+    *,
+    limit: int | None = None,
+    include_pinned: bool = True,
+    since: datetime | None = None,
+    months: int | None = None,
+    categories: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch journal entries with flexible filtering."""
+    from dateutil.relativedelta import relativedelta
+
+    results: list[dict[str, Any]] = []
+    seen_ids: set[UUID] = set()
+
+    # Always fetch pinned entries first (if requested)
+    if include_pinned:
+        pinned = (
+            db.query(JournalEntry)
+            .filter(
+                JournalEntry.client_id == client_id,
+                JournalEntry.is_pinned == True,  # noqa: E712
+            )
+            .order_by(JournalEntry.created_at.desc())
+            .all()
+        )
+        for e in pinned:
+            results.append(_journal_to_dict(e, pinned=True))
+            seen_ids.add(e.id)
+
+    # Build main query
+    q = (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.client_id == client_id,
+        )
+        .order_by(JournalEntry.created_at.desc())
+    )
+
+    if since is not None:
+        q = q.filter(JournalEntry.created_at >= since)
+    elif months is not None:
+        cutoff = datetime.now() - relativedelta(months=months)
+        q = q.filter(JournalEntry.created_at >= cutoff)
+
+    if categories:
+        q = q.filter(JournalEntry.category.in_(categories))
+
+    if limit is not None:
+        # Fetch extra to account for pinned entries we already have
+        q = q.limit(limit + len(seen_ids))
+
+    rows = q.all()
+    for e in rows:
+        if e.id not in seen_ids:
+            results.append(_journal_to_dict(e, pinned=False))
+            seen_ids.add(e.id)
+        if limit is not None and len(results) >= limit + (len(seen_ids) - len(results)):
+            break
+
+    return results if results else None  # type: ignore[return-value]
+
+
+def _journal_to_dict(entry: JournalEntry, *, pinned: bool) -> dict[str, Any]:
+    """Convert a journal entry to a context dict."""
+    d: dict[str, Any] = {
+        "date": entry.created_at.strftime("%Y-%m-%d") if entry.created_at else "",
+        "type": entry.entry_type,
+        "title": entry.title,
+        "content": (entry.content or "")[:200] if entry.content else None,
+        "category": entry.category,
+        "pinned": pinned or entry.is_pinned,
+    }
+    if entry.effective_date:
+        d["effective_date"] = entry.effective_date.isoformat()
+    return d
+
+
+def _find_last_quarterly_estimate_date(
+    communication_history: list[dict[str, Any]],
+) -> datetime | None:
+    """Find the date of the last quarterly estimate email from communication history."""
+    for comm in communication_history:
+        subject = (comm.get("subject") or "").lower()
+        if any(kw in subject for kw in ("quarterly estimate", "estimated tax", "q1 ", "q2 ", "q3 ", "q4 ")):
+            sent = comm.get("sent_at")
+            if sent:
+                try:
+                    return datetime.fromisoformat(sent)
+                except (ValueError, TypeError):
+                    pass
+    return None
+
+
+def _fetch_profile_flag_history(
+    db: Session,
+    client_id: UUID,
+) -> list[dict[str, Any]]:
+    """Fetch profile flag change history for strategy context."""
+    rows = (
+        db.query(ProfileFlagHistory)
+        .filter(ProfileFlagHistory.client_id == client_id)
+        .order_by(ProfileFlagHistory.changed_at.desc())
+        .limit(20)
+        .all()
+    )
+    return [
+        {
+            "flag": r.flag_name,
+            "old": r.old_value,
+            "new": r.new_value,
+            "date": r.changed_at.strftime("%Y-%m-%d") if r.changed_at else "",
+            "source": r.source,
+        }
+        for r in rows
+    ] if rows else []
+
+
 # ---------------------------------------------------------------------------
 # Token estimation & budget trimming
 # ---------------------------------------------------------------------------
@@ -459,6 +612,8 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
             parts.append(json.dumps(ctx.action_items, default=str))
         if ctx.strategy_status:
             parts.append(json.dumps(ctx.strategy_status, default=str))
+        if ctx.journal_entries:
+            parts.append(json.dumps(ctx.journal_entries, default=str))
         if ctx.communication_history:
             parts.append(json.dumps(ctx.communication_history, default=str))
         if ctx.documents_summary:
@@ -469,6 +624,7 @@ def _trim_to_budget(ctx: ClientContext, budget: int) -> None:
     trimmable = [
         "documents_summary",
         "communication_history",
+        "journal_entries",
         "strategy_status",
         "action_items",
         "financial_metrics",
@@ -533,6 +689,15 @@ def format_context_for_prompt(
 
     if p.get("custom_instructions"):
         profile_lines.append(f"\nCustom AI instructions: {p['custom_instructions']}")
+
+    if p.get("profile_flag_history"):
+        profile_lines.append("\nProfile flag changes:")
+        for fh in p["profile_flag_history"]:
+            old = "on" if fh.get("old") else "off"
+            new = "on" if fh.get("new") else "off"
+            profile_lines.append(
+                f"  [{fh.get('date', '')}] {fh['flag']}: {old} → {new} ({fh.get('source', 'unknown')})"
+            )
 
     sections.append("\n".join(profile_lines))
 
@@ -642,6 +807,22 @@ def format_context_for_prompt(
                     line += f" | {s['notes']}"
                 strat_lines.append(line)
         sections.append("\n".join(strat_lines))
+
+    # --- Client journal -----------------------------------------------------
+    if ctx.journal_entries:
+        journal_lines = ["=== CLIENT JOURNAL ==="]
+        for entry in ctx.journal_entries:
+            date_str = entry.get("date", "")
+            entry_type = entry.get("type", "").replace("_", " ")
+            title = entry.get("title", "")
+            content = entry.get("content")
+
+            prefix = "[PINNED] " if entry.get("pinned") else ""
+            line = f"{prefix}[{date_str}] [{entry_type}] {title}"
+            if content:
+                line += f": {content}"
+            journal_lines.append(line)
+        sections.append("\n".join(journal_lines))
 
     # --- Documents summary --------------------------------------------------
     if ctx.documents_summary:
