@@ -245,6 +245,20 @@ async def extract_financial_metrics(
     except Exception:
         logger.warning("Profile flag suggestion check failed (non-fatal)", exc_info=True)
 
+    # Run contradiction detection against existing metrics (best-effort)
+    try:
+        from app.services.contradiction_service import check_metric_contradictions
+
+        check_metric_contradictions(
+            client_id=client_id,
+            user_id="system",
+            tax_year=tax_year,
+            new_metrics=raw_metrics,
+            db=db,
+        )
+    except Exception:
+        logger.warning("Contradiction detection failed (non-fatal)", exc_info=True)
+
     return results
 
 
