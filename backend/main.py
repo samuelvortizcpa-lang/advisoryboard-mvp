@@ -43,6 +43,7 @@ from app.api.context import router as context_router
 from app.api.financials import router as financials_router
 from app.api.journal import router as journal_router
 from app.api.engagements import router as engagements_router
+from app.api.practice_book import router as practice_book_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -263,3 +264,4 @@ app.include_router(context_router,             prefix="/api", tags=["context"])
 app.include_router(financials_router,          prefix="/api", tags=["financials"])
 app.include_router(journal_router,             prefix="/api", tags=["journal"])
 app.include_router(engagements_router,         prefix="/api", tags=["engagements"])
+app.include_router(practice_book_router,       prefix="/api", tags=["practice-book"])
