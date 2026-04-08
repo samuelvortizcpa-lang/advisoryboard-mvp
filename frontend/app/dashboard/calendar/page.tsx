@@ -286,14 +286,14 @@ export default function CalendarPage() {
             <button
               onClick={goToPrev}
               aria-label="Previous month"
-              className="rounded-l-md border border-gray-200 bg-white p-1.5 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+              className="rounded-l-md border border-gray-200 bg-white p-2.5 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
             >
               <ChevronLeftIcon />
             </button>
             <button
               onClick={goToNext}
               aria-label="Next month"
-              className="rounded-r-md border-y border-r border-gray-200 bg-white p-1.5 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+              className="rounded-r-md border-y border-r border-gray-200 bg-white p-2.5 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
             >
               <ChevronRightIcon />
             </button>
