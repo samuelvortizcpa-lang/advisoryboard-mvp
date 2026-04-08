@@ -498,9 +498,9 @@ export default function LandingPage() {
         <section className="splash">
           <div className="hero-split">
             <div className="hero-left">
-              <div className="hero-badge"><span className="pulse" /> AI-Powered Document Intelligence</div>
-              <h1>Your documents,<br /><em>finally</em> answering<br />your questions.</h1>
-              <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask anything. Get cited answers with confidence scores in seconds.</p>
+              <div className="hero-badge"><span className="pulse" /> AI Advisory Intelligence Platform</div>
+              <h1>The AI that <em>knows</em><br />your clients as well<br />as you do.</h1>
+              <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask any question. Get cited answers in seconds. Surface strategies you missed.</p>
               <div className="hero-buttons">
                 <Link href="/sign-up" className="btn btn-primary">
                   Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
@@ -544,68 +544,69 @@ export default function LandingPage() {
           <div className="scroll-hint">Explore</div>
         </section>
 
-        {/* Trust badges */}
+        {/* Capability metrics strip */}
         <div className="trust-badges-section" data-reveal>
-          <p className="trust-badges-label">Built on standards CPAs trust</p>
-          <div className="trust-badges-row">
-            <span className="trust-badge">
-              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="4" y="8" width="30" height="24" rx="3" stroke="#c9944a" strokeWidth="1.2" fill="none" />
-                <line x1="4" y1="14" x2="34" y2="14" stroke="#c9944a" strokeWidth="0.8" fill="none" />
-                <text x="19" y="12" textAnchor="middle" fontFamily="'Cormorant Garamond', Georgia, serif" fontSize="7" fontWeight="600" fill="#c9944a">AICPA</text>
-                <path d="M14 22l3 3 7-7" stroke="#c9944a" strokeWidth="1.5" fill="none" />
-              </svg>
-              <span className="trust-badge-label">AICPA Standards Aligned</span>
-            </span>
-            <span className="trust-badge">
-              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 3L33 10V19C33 27.5 26.5 33.5 19 36C11.5 33.5 5 27.5 5 19V10L19 3Z" stroke="#c9944a" strokeWidth="1.2" fill="rgba(201,148,74,0.06)" />
-                <text x="19" y="17" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="6" fontWeight="500" fill="#c9944a">SOC 2</text>
-                <text x="19" y="24" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="5" fontWeight="400" fill="#8a8680">TYPE II</text>
-              </svg>
-              <span className="trust-badge-label">SOC 2 Compliant Infrastructure</span>
-            </span>
-            <span className="trust-badge">
-              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="5" width="20" height="28" rx="2" stroke="#c9944a" strokeWidth="1.2" fill="none" />
-                <text x="19" y="10" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="4.5" fontWeight="500" fill="#c9944a">§7216</text>
-                <line x1="14" y1="14" x2="24" y2="14" stroke="#c9944a" strokeWidth="0.8" opacity="0.5" fill="none" />
-                <line x1="14" y1="18" x2="24" y2="18" stroke="#c9944a" strokeWidth="0.8" opacity="0.5" fill="none" />
-                <line x1="14" y1="22" x2="21" y2="22" stroke="#c9944a" strokeWidth="0.8" opacity="0.5" fill="none" />
-                <path d="M22 25l2.5 2.5 5-5" stroke="#c9944a" strokeWidth="1.3" fill="none" />
-              </svg>
-              <span className="trust-badge-label">IRC §7216 Consent Built-In</span>
-            </span>
-            <span className="trust-badge">
-              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="8" y="16" width="22" height="17" rx="3" stroke="#c9944a" strokeWidth="1.2" fill="rgba(201,148,74,0.06)" />
-                <path d="M14 16V11C14 7.5 16.2 5 19 5C21.8 5 24 7.5 24 11V16" stroke="#c9944a" strokeWidth="1.2" fill="none" />
-                <circle cx="19" cy="24" r="2.5" fill="#c9944a" fillOpacity="0.7" />
-                <line x1="19" y1="26.5" x2="19" y2="29" stroke="#c9944a" strokeWidth="1.2" fill="none" />
-              </svg>
-              <span className="trust-badge-label">AES-256 Encryption</span>
-            </span>
-            <span className="trust-badge">
-              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="19" cy="19" r="14" stroke="#c9944a" strokeWidth="1.2" fill="none" />
-                <ellipse cx="19" cy="19" rx="7" ry="14" stroke="#c9944a" strokeWidth="0.8" fill="none" />
-                <line x1="5" y1="12" x2="33" y2="12" stroke="#c9944a" strokeWidth="0.6" opacity="0.4" fill="none" />
-                <line x1="5" y1="19" x2="33" y2="19" stroke="#c9944a" strokeWidth="0.6" opacity="0.4" fill="none" />
-                <line x1="5" y1="26" x2="33" y2="26" stroke="#c9944a" strokeWidth="0.6" opacity="0.4" fill="none" />
-                <circle cx="15" cy="16" r="3.5" stroke="#c9944a" strokeWidth="1" fill="rgba(201,148,74,0.1)" />
-                <text x="15" y="18" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="5" fontWeight="500" fill="#c9944a">US</text>
-              </svg>
-              <span className="trust-badge-label">US-Only Data Centers</span>
-            </span>
-            <span className="trust-badge">
-              <svg viewBox="0 0 38 38" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="19" cy="19" r="13" stroke="#c9944a" strokeWidth="1.2" fill="none" />
-                <path d="M19 10V19L25 22" stroke="#c9944a" strokeWidth="1.2" fill="none" />
-                <line x1="10" y1="10" x2="28" y2="28" stroke="#c9944a" strokeWidth="1.2" opacity="0.6" fill="none" />
-                <text x="19" y="36" textAnchor="middle" fontFamily="'Outfit', sans-serif" fontSize="4" fontWeight="400" fill="#8a8680">0 retention</text>
-              </svg>
-              <span className="trust-badge-label">Zero AI Data Retention</span>
-            </span>
+          <div className="metrics-row">
+            <div className="metric-item">
+              <span className="metric-number">63</span>
+              <span className="metric-label">Financial Metrics Extracted</span>
+            </div>
+            <span className="metric-divider" />
+            <div className="metric-item">
+              <span className="metric-number">15+</span>
+              <span className="metric-label">Tax Strategies Tracked</span>
+            </div>
+            <span className="metric-divider" />
+            <div className="metric-item">
+              <span className="metric-number">38</span>
+              <span className="metric-label">Automated Deadlines</span>
+            </div>
+            <span className="metric-divider" />
+            <div className="metric-item">
+              <span className="metric-number">{'\u00a7'}7216</span>
+              <span className="metric-label">Compliant</span>
+            </div>
+          </div>
+        </div>
+
+        {/* How it works */}
+        <div className="workflow-section" data-reveal>
+          <div className="workflow-inner">
+            <h2 className="workflow-heading">How Callwen works</h2>
+            <div className="workflow-grid">
+              <div className="workflow-step">
+                <div className="workflow-num">01</div>
+                <div className="workflow-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                </div>
+                <h3>Upload</h3>
+                <p>Drop in tax returns, recordings, emails, or any client file. Callwen auto-classifies 12+ document types and extracts 63 financial metrics.</p>
+              </div>
+              <div className="workflow-step">
+                <div className="workflow-num">02</div>
+                <div className="workflow-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
+                </div>
+                <h3>Ask</h3>
+                <p>Ask anything in plain English. Get cited answers sourced from every document in the client&apos;s history — not just the last one.</p>
+              </div>
+              <div className="workflow-step">
+                <div className="workflow-num">03</div>
+                <div className="workflow-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"/></svg>
+                </div>
+                <h3>Discover</h3>
+                <p>Callwen surfaces tax strategies you might have missed, flags data contradictions, and tracks financial trends across years.</p>
+              </div>
+              <div className="workflow-step">
+                <div className="workflow-num">04</div>
+                <div className="workflow-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <h3>Act</h3>
+                <p>Auto-generate deadlines, send client check-ins, draft quarterly estimate emails, and export a complete practice book.</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -614,14 +615,14 @@ export default function LandingPage() {
           <div className="section left" data-reveal>
             <div className="number">01</div>
             <div className="content">
-              <h2>Every document,<br /><em>one place</em></h2>
-              <p>Tax returns, engagement letters, meeting recordings, emails. Drop them in and they&apos;re indexed on the spot. Callwen reads PDFs, audio, video, and spreadsheets so you never have to dig through folders again.</p>
-              <span className="tag">Upload · Index · Organize</span>
+              <h2>Every document,<br /><em>instantly searchable</em></h2>
+              <p>Upload tax returns, meeting recordings, emails, and financial statements. Callwen auto-classifies 12+ document types, extracts structured financial data, and makes everything queryable with AI — complete with source citations and confidence scores.</p>
+              <span className="tag">Upload · Classify · Query</span>
             </div>
             <div className="section-visual section-visual-img" aria-hidden="true">
               <img
                 src="/images/feature-01-documents.png"
-                alt="Callwen client management interface showing organized client list with document counts and engagement types"
+                alt="Callwen document intelligence interface showing organized client documents with AI chat"
                 style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top left', borderRadius: '12px' }}
               />
             </div>
@@ -630,64 +631,175 @@ export default function LandingPage() {
           <div className="section right" data-reveal>
             <div className="number">02</div>
             <div className="content">
-              <h2>Ask questions,<br />get <em>real answers</em></h2>
-              <p>Not generic summaries. Callwen gives you real answers with citations, confidence scores, and page references. When you tell a client &quot;the answer is on page 4,&quot; you know it&apos;s on page 4.</p>
-              <span className="tag">AI · Source citations · Confidence</span>
+              <h2>Walk into every meeting<br /><em>prepared</em></h2>
+              <p>Send automated check-ins before client meetings. Clients complete them in minutes — no login required. Their responses feed directly into your AI, so every question you ask already knows what&apos;s keeping your client up at night.</p>
+              <span className="tag">Check-ins · No login · AI-fed</span>
             </div>
-            <div className="section-visual section-visual-img" aria-hidden="true">
-              <img
-                src="/images/feature-02-ai-chat.png"
-                alt="AI-powered Q&A showing a tax compensation breakdown with source citations"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', borderRadius: '12px' }}
-              />
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-checkin">
+                <div className="vis-checkin-header">Quarterly Check-in</div>
+                <div className="vis-checkin-rating">
+                  <span className="vis-star filled">{'\u2605'}</span>
+                  <span className="vis-star filled">{'\u2605'}</span>
+                  <span className="vis-star filled">{'\u2605'}</span>
+                  <span className="vis-star">{'\u2606'}</span>
+                  <span className="vis-star">{'\u2606'}</span>
+                </div>
+                <div className="vis-checkin-quote">&ldquo;Concerned about the new lease terms affecting our deductions...&rdquo;</div>
+                <div className="vis-checkin-badge">Completed</div>
+              </div>
             </div>
           </div>
 
           <div className="section left" data-reveal>
             <div className="number">03</div>
             <div className="content">
-              <h2>7216 compliance,<br /><em>built in</em></h2>
-              <p>Tax documents are auto-detected. Consent forms with mandatory IRS language are generated in one click. E-signatures, expiration tracking, and smart alerts.</p>
-              <span className="tag">IRC {'\u00a7'}7216 · Auto-detection · E-sign</span>
+              <h2>Strategies you&apos;d miss,<br /><em>surfaced automatically</em></h2>
+              <p>Track 15+ tax strategies per client with implementation status and estimated dollar impact. Year-over-year comparison shows what&apos;s working. AI proactively suggests strategies based on the full document history.</p>
+              <span className="tag">Strategies · Dollar impact · YoY</span>
             </div>
-            <div className="section-visual section-visual-img section-visual-consent" aria-hidden="true">
-              <img
-                src="/images/feature-03-consent.png"
-                alt="IRC §7216 consent tracking showing obtained status with expiration date"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', borderRadius: '12px' }}
-              />
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-strategies">
+                <div className="vis-strategy-row">
+                  <span className="vis-strat-name">QBI Deduction</span>
+                  <span className="vis-strat-status implemented">{'\u2713'} Implemented</span>
+                  <span className="vis-strat-impact">$12,400 saved</span>
+                </div>
+                <div className="vis-strategy-row">
+                  <span className="vis-strat-name">Cost Segregation</span>
+                  <span className="vis-strat-status recommended">Recommended</span>
+                  <span className="vis-strat-impact">~$8,200 potential</span>
+                </div>
+                <div className="vis-strategy-row">
+                  <span className="vis-strat-name">R&amp;D Credit</span>
+                  <span className="vis-strat-status recommended">Recommended</span>
+                  <span className="vis-strat-impact">~$5,100 potential</span>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="section right" data-reveal>
             <div className="number">04</div>
             <div className="content">
-              <h2>Your firm,<br /><em>one workspace</em></h2>
-              <p>Assign team members to clients. Share documents without sharing logins. Role-based access means associates see what they need, and partners see everything.</p>
-              <span className="tag">Teams · Client allocation · Roles</span>
+              <h2>Your practice,<br /><em>ready to scale or sell</em></h2>
+              <p>The Practice Book packages everything — financial trends, strategy history, communication logs, engagement health scores — into a professional export. Eliminate key-man risk and demonstrate advisory value to buyers, partners, or your future self.</p>
+              <span className="tag">Practice Book · Health scores · Export</span>
             </div>
             <div className="section-visual" aria-hidden="true">
-              <div className="vis-team">
-                <div className="team-avatar">SV</div>
-                <div className="team-avatar">JM</div>
-                <div className="team-avatar">KL</div>
+              <div className="vis-health">
+                <div className="vis-health-gauge">
+                  <svg viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#5bb8af" strokeWidth="8" strokeDasharray="274" strokeDashoffset="36" strokeLinecap="round" transform="rotate(-90 60 60)" />
+                    <text x="60" y="55" textAnchor="middle" fill="#f0ede6" fontSize="28" fontWeight="600" fontFamily="var(--serif)">87</text>
+                    <text x="60" y="72" textAnchor="middle" fill="#8a8680" fontSize="10" fontFamily="var(--sans)">/100</text>
+                  </svg>
+                </div>
+                <div className="vis-health-metrics">
+                  <div className="vis-health-row"><span className="vis-health-label">Clients</span><span className="vis-health-val">42</span></div>
+                  <div className="vis-health-row"><span className="vis-health-label">Avg Health</span><span className="vis-health-val">87</span></div>
+                  <div className="vis-health-row"><span className="vis-health-label">Transition Ready</span><span className="vis-health-val">94%</span></div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="section left" data-reveal id="extension">
+          <div className="section left" data-reveal>
             <div className="number">05</div>
             <div className="content">
-              <h2>Capture anything,<br /><em>from anywhere</em></h2>
-              <p>The Callwen browser extension lives in your sidebar. Select text from an email, screenshot a chart, or right-click a PDF link. Two clicks and it&apos;s in your client&apos;s file. Auto-matching knows which client you&apos;re working on, and Quick Query lets you ask questions without leaving the page.</p>
-              <span className="tag">Chrome Extension · Auto-match · Quick Query</span>
+              <h2>Never miss a deadline.<br /><em>Never chase a task.</em></h2>
+              <p>Assign engagement templates and Callwen generates every quarterly estimate reminder, every return deadline, every document request. Threaded email drafts reference prior conversations and open items automatically.</p>
+              <span className="tag">Deadlines · Reminders · Threaded emails</span>
             </div>
-            <div className="section-visual section-visual-img section-visual-ext" aria-hidden="true">
-              <img
-                src="/images/feature-05-extension.png"
-                alt="Callwen browser extension showing document capture with client auto-matching"
-                style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '12px' }}
-              />
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-deadlines">
+                <div className="vis-deadline-row">
+                  <span className="vis-deadline-dot amber" />
+                  <span className="vis-deadline-task">Q2 Estimated Payment</span>
+                  <span className="vis-deadline-date">Jun 15</span>
+                </div>
+                <div className="vis-deadline-row">
+                  <span className="vis-deadline-dot green" />
+                  <span className="vis-deadline-task">1040 Extension</span>
+                  <span className="vis-deadline-date">Oct 15</span>
+                </div>
+                <div className="vis-deadline-row">
+                  <span className="vis-deadline-dot gray" />
+                  <span className="vis-deadline-task">Year-End Review</span>
+                  <span className="vis-deadline-date">Dec 1</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="section right" data-reveal id="extension">
+            <div className="number">06</div>
+            <div className="content">
+              <h2>Context that<br /><em>compounds over time</em></h2>
+              <p>Callwen remembers every conversation, detects contradictions across documents, and logs circumstance changes automatically. The longer you use it, the smarter it gets — like institutional memory that never leaves the firm.</p>
+              <span className="tag">Memory · Contradictions · Sessions</span>
+            </div>
+            <div className="section-visual" aria-hidden="true">
+              <div className="vis-memory">
+                <div className="vis-memory-session">
+                  <span className="vis-memory-icon">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7.5 8.25h5M7.5 11.25h3.5M17.5 10c0 4.14-3.36 7.5-7.5 7.5a7.47 7.47 0 01-3.87-1.07L2.5 17.5l1.07-3.63A7.47 7.47 0 012.5 10c0-4.14 3.36-7.5 7.5-7.5s7.5 3.36 7.5 7.5z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </span>
+                  <div>
+                    <div className="vis-memory-title">Discussed QBI eligibility</div>
+                    <div className="vis-memory-meta">3 days ago · 2 prior sessions</div>
+                  </div>
+                </div>
+                <div className="vis-memory-alert">
+                  <span className="vis-memory-warn">!</span>
+                  1 data conflict detected
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Integrations */}
+        <div className="integrations-section" data-reveal>
+          <div className="integrations-inner">
+            <p className="overline">Integrations</p>
+            <h2>Connects to the tools<br /><em>you already use</em></h2>
+            <p className="integrations-subtitle">One-click connections. No IT department needed.</p>
+            <div className="integrations-grid">
+              <div className="integration-card">
+                <div className="integration-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-8.97 5.7a1.94 1.94 0 01-2.06 0L2 7"/></svg>
+                </div>
+                <h3>Email</h3>
+                <p className="integration-names">Gmail &middot; Outlook</p>
+                <p className="integration-desc">Auto-sync client emails and index every conversation for search.</p>
+              </div>
+              <div className="integration-card">
+                <div className="integration-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                </div>
+                <h3>Meetings</h3>
+                <p className="integration-names">Zoom &middot; Fathom</p>
+                <p className="integration-desc">Import recordings and transcripts. Every meeting becomes searchable knowledge.</p>
+              </div>
+              <div className="integration-card">
+                <div className="integration-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21a9 9 0 100-18 9 9 0 000 18z"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></svg>
+                </div>
+                <h3>Browser</h3>
+                <p className="integration-names">Chrome Extension</p>
+                <p className="integration-desc">Access client intelligence from any tab. Ask questions without leaving your workflow.</p>
+              </div>
+              <div className="integration-card coming-soon">
+                <div className="integration-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                </div>
+                <h3>Coming Soon</h3>
+                <p className="integration-names">QuickBooks &middot; Calendar Sync</p>
+                <p className="integration-desc">Direct accounting data import and calendar-aware deadline management.</p>
+                <span className="integration-soon-badge">Coming Q3 2026</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1135,6 +1247,87 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .trust-badge svg { width: 38px; height: 38px; }
 .trust-badge-label { font-family: var(--sans); font-size: 0.75rem; font-weight: 400; color: #8a8680; letter-spacing: 0.04em; line-height: 1.35; max-width: 110px; text-align: center; }
 
+/* Metrics strip */
+.metrics-row { display: flex; justify-content: center; align-items: center; gap: 0; max-width: 960px; margin: 0 auto; flex-wrap: wrap; }
+.metric-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 40px; }
+.metric-number { font-family: var(--serif); font-size: 2.2rem; font-weight: 600; color: var(--accent); line-height: 1; }
+.metric-label { font-size: 0.72rem; font-weight: 400; color: var(--white-dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.metric-divider { width: 1px; height: 40px; background: rgba(201,148,74,0.15); flex-shrink: 0; }
+
+/* Workflow section */
+.workflow-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.workflow-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
+.workflow-heading { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; color: var(--white); }
+.workflow-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
+.workflow-step { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 2.5rem 1.5rem; text-align: center; }
+.workflow-num { font-family: var(--serif); font-size: 1.4rem; font-weight: 600; color: var(--accent); opacity: 0.5; margin-bottom: 1rem; }
+.workflow-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--teal-dim); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; }
+.workflow-icon svg { width: 22px; height: 22px; stroke: var(--teal); }
+.workflow-step h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 500; color: var(--white); margin-bottom: 0.6rem; }
+.workflow-step p { font-size: 0.8rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
+
+/* Feature visual mockups */
+.vis-checkin { padding: 1.5rem; display: flex; flex-direction: column; gap: 12px; height: 100%; justify-content: center; }
+.vis-checkin-header { font-size: 0.85rem; font-weight: 500; color: var(--white); }
+.vis-checkin-rating { display: flex; gap: 2px; }
+.vis-star { font-size: 1.2rem; color: rgba(255,255,255,0.12); }
+.vis-star.filled { color: #e8b06a; }
+.vis-checkin-quote { font-size: 0.78rem; font-style: italic; color: var(--white-dim); line-height: 1.6; }
+.vis-checkin-badge { display: inline-block; align-self: flex-start; font-size: 0.65rem; font-weight: 500; padding: 3px 10px; border-radius: 99px; background: var(--teal-dim); color: var(--teal); }
+
+.vis-strategies { padding: 1.2rem; display: flex; flex-direction: column; gap: 0; height: 100%; justify-content: center; }
+.vis-strategy-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); gap: 8px; }
+.vis-strategy-row:last-child { border-bottom: none; }
+.vis-strat-name { font-size: 0.78rem; font-weight: 400; color: var(--white); flex: 1; }
+.vis-strat-status { font-size: 0.65rem; font-weight: 500; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.vis-strat-status.implemented { background: var(--teal-dim); color: var(--teal); }
+.vis-strat-status.recommended { background: rgba(201,148,74,0.12); color: var(--accent-light); }
+.vis-strat-impact { font-size: 0.72rem; color: var(--white-dim); text-align: right; white-space: nowrap; }
+
+.vis-health { padding: 1.5rem; display: flex; align-items: center; gap: 1.5rem; height: 100%; }
+.vis-health-gauge { flex-shrink: 0; }
+.vis-health-gauge svg { width: 100px; height: 100px; }
+.vis-health-metrics { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.vis-health-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.vis-health-row:last-child { border-bottom: none; }
+.vis-health-label { font-size: 0.72rem; color: var(--white-dim); }
+.vis-health-val { font-size: 0.78rem; font-weight: 500; color: var(--white); }
+
+.vis-deadlines { padding: 1.5rem; display: flex; flex-direction: column; gap: 0; height: 100%; justify-content: center; }
+.vis-deadline-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.vis-deadline-row:last-child { border-bottom: none; }
+.vis-deadline-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.vis-deadline-dot.amber { background: #e8b06a; }
+.vis-deadline-dot.green { background: #5bb8af; }
+.vis-deadline-dot.gray { background: #6a6662; }
+.vis-deadline-task { flex: 1; font-size: 0.8rem; color: var(--white); font-weight: 400; }
+.vis-deadline-date { font-size: 0.72rem; color: var(--white-dim); white-space: nowrap; }
+
+.vis-memory { padding: 1.5rem; display: flex; flex-direction: column; gap: 12px; height: 100%; justify-content: center; }
+.vis-memory-session { display: flex; align-items: flex-start; gap: 10px; }
+.vis-memory-icon { flex-shrink: 0; width: 28px; height: 28px; border-radius: 6px; background: var(--teal-dim); display: flex; align-items: center; justify-content: center; }
+.vis-memory-icon svg { width: 16px; height: 16px; stroke: var(--teal); }
+.vis-memory-title { font-size: 0.82rem; font-weight: 400; color: var(--white); margin-bottom: 2px; }
+.vis-memory-meta { font-size: 0.68rem; color: var(--white-faint); }
+.vis-memory-alert { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 6px; background: rgba(232,176,106,0.08); border: 1px solid rgba(232,176,106,0.15); font-size: 0.72rem; color: var(--accent-light); }
+.vis-memory-warn { width: 18px; height: 18px; border-radius: 50%; background: rgba(232,176,106,0.15); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: var(--accent-light); flex-shrink: 0; }
+
+/* Integrations section */
+.integrations-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.integrations-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
+.integrations-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.integrations-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; line-height: 1.15; }
+.integrations-section h2 em { font-style: italic; color: var(--accent-light); }
+.integrations-subtitle { font-size: 0.92rem; color: var(--white-dim); margin-bottom: 3rem; font-weight: 400; }
+.integrations-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
+.integration-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 2.5rem 1.5rem; text-align: center; position: relative; }
+.integration-card.coming-soon { opacity: 0.6; }
+.integration-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--accent-glow); border: 1px solid rgba(201,148,74,0.12); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.2rem; }
+.integration-icon svg { width: 22px; height: 22px; stroke: var(--accent-light); }
+.integration-card h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 500; color: var(--white); margin-bottom: 0.4rem; }
+.integration-names { font-size: 0.72rem; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 0.8rem; font-weight: 400; }
+.integration-desc { font-size: 0.78rem; line-height: 1.65; color: var(--white-dim); font-weight: 400; }
+.integration-soon-badge { display: inline-block; margin-top: 0.8rem; font-size: 0.62rem; font-weight: 500; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,0.04); color: var(--white-faint); letter-spacing: 0.06em; }
 
 [data-reveal] { opacity: 0; transform: translateY(30px); transition: opacity 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1); }
 [data-reveal].visible { opacity: 1; transform: translateY(0); }
@@ -1329,6 +1522,11 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .section-visual { width: 100%; max-width: 360px; }
   .section-visual-img { max-width: 480px; height: auto; }
   .section-visual-ext { width: 260px; max-width: 80%; height: auto; margin: 0 auto; }
+  .metrics-row { gap: 0; }
+  .metric-item { padding: 0 24px; }
+  .metric-number { font-size: 1.6rem; }
+  .workflow-grid { grid-template-columns: repeat(2,1fr); }
+  .integrations-grid { grid-template-columns: repeat(2,1fr); }
   .impact-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
   .carousel-slide { min-width: 100%; }
@@ -1347,6 +1545,10 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
 @media (max-width:600px) {
   .price-grid { grid-template-columns: 1fr; }
   .hero-buttons { flex-direction: column; align-items: center; }
+  .metrics-row { flex-direction: column; gap: 20px; }
+  .metric-divider { width: 40px; height: 1px; }
+  .workflow-grid { grid-template-columns: 1fr; }
+  .integrations-grid { grid-template-columns: 1fr 1fr; }
   .trust-badges-row { gap: 32px 24px; max-width: 320px; }
   .trust-badge svg { width: 32px; height: 32px; }
   .trust-badge-label { font-size: 0.6rem; max-width: 90px; }
