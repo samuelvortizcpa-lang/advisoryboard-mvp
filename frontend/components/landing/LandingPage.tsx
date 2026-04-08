@@ -1173,9 +1173,10 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .carousel-arrow:hover { background: rgba(255,255,255,0.08); border-color: rgba(201,148,74,0.3); }
 .carousel-arrow svg { width: 20px; height: 20px; color: var(--white-dim); }
 .carousel-dots { display: flex; justify-content: center; gap: 8px; margin-top: 2rem; }
-.carousel-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: transparent; cursor: pointer; transition: all 0.25s; padding: 0; }
-.carousel-dot.active { background: var(--accent); border-color: var(--accent); }
-.carousel-dot:hover { border-color: var(--accent); }
+.carousel-dot { width: 44px; height: 44px; border-radius: 50%; border: none; background: transparent; cursor: pointer; transition: all 0.25s; padding: 0; position: relative; }
+.carousel-dot::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: transparent; transition: all 0.25s; }
+.carousel-dot.active::after { background: var(--accent); border-color: var(--accent); }
+.carousel-dot:hover::after { border-color: var(--accent); }
 .testimonial-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.04); padding: 2rem; border-radius: 12px; text-align: left; height: 100%; display: flex; flex-direction: column; }
 .testimonial-quote { font-size: 0.95rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; font-style: italic; flex: 1; }
 .testimonial-author { display: flex; align-items: center; gap: 12px; margin-top: 1.5rem; }
