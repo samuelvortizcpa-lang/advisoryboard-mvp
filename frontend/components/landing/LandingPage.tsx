@@ -4,34 +4,90 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
 
-const faqData = [
+const faqCategories = [
   {
-    q: 'How does Callwen handle sensitive client data?',
-    a: 'All data is encrypted in transit (TLS 1.2+) and at rest (AES-256). Your documents are stored on SOC 2 Type II certified infrastructure in US-based data centers. We never use your data to train AI models. All AI queries are processed via commercial APIs with zero data retention.',
+    label: 'Platform & Features',
+    items: [
+      {
+        q: 'How is Callwen different from meeting tools like Brieff or Jump AI?',
+        a: 'Meeting tools like Brieff and Jump AI excel at structuring conversations and capturing notes \u2014 and they\u2019re great at what they do. Callwen operates at a different layer. We analyze your full client document corpus \u2014 tax returns, financial statements, meeting recordings, emails, client check-ins \u2014 and make it all queryable with AI. When you ask Callwen a question, you get answers sourced from years of client history, not just the last meeting. Think of it this way: meeting tools help you run a better conversation. Callwen ensures you have the right information to make that conversation count. Many firms use both \u2014 one for the workflow, one for the knowledge.',
+      },
+      {
+        q: 'What kinds of questions can I ask Callwen?',
+        a: 'Anything you\u2019d ask a colleague who memorized every client document. For example: \u201cWhat was John\u2019s AGI trend over the last 3 years?\u201d or \u201cWhat strategies are we missing for this S-Corp client?\u201d or \u201cWhat did my client say was keeping them up at night in their last check-in?\u201d or \u201cAre there any contradictions between the 2024 and 2023 returns?\u201d Callwen pulls answers from every document, check-in, conversation, and financial metric in the system \u2014 with source citations so you can verify.',
+      },
+      {
+        q: 'What document types does Callwen support?',
+        a: 'Callwen processes PDFs, scanned documents (via OCR), audio and video recordings (with automatic transcription), spreadsheets, and email files. It auto-classifies 12+ tax document types including Form 1040, W-2, K-1, 1099, 1120-S, 1065, 1041, and more. It also extracts 63 structured financial metrics from supported forms \u2014 so you can ask about specific numbers, not just general content.',
+      },
+      {
+        q: 'How does the Tax Strategy Matrix work?',
+        a: 'Callwen tracks 15+ common tax strategies per client \u2014 from QBI deductions to cost segregation studies to retirement plan contributions. Each strategy has an implementation status, estimated dollar impact, and year-over-year comparison. The AI can also auto-suggest applicable strategies based on a client\u2019s uploaded documents and financial profile.',
+      },
+      {
+        q: 'What are Client Check-ins?',
+        a: 'Check-ins are customizable questionnaires you send to clients before meetings \u2014 via email, no login required. Clients answer questions about how their business is going, what\u2019s changed, and what they want to discuss. Their responses feed directly into Callwen\u2019s AI, so every feature automatically has richer context about each client. Think of it as capturing the information that never makes it into a tax return.',
+      },
+    ],
   },
   {
-    q: 'What is IRC \u00a77216 and why does it matter?',
-    a: 'IRC Section 7216 requires written client consent before a tax preparer can disclose or use tax return information for purposes beyond the original engagement. Callwen has built-in consent tracking with e-signature capture, expiration alerts, and audit trails, so you stay compliant without spreadsheets.',
+    label: 'Getting Started',
+    items: [
+      {
+        q: 'How long does it take to get set up?',
+        a: 'Most users are up and running in under 5 minutes. Sign up, upload your first document, and start asking questions immediately. There\u2019s a guided onboarding wizard that walks you through creating your first client, uploading documents, and using the AI chat. No IT department needed.',
+      },
+      {
+        q: 'Can I use Callwen with my existing tools?',
+        a: 'Yes. Callwen integrates with Gmail, Outlook, Zoom, and Fathom for meeting recordings, and has a Chrome extension for capturing web content directly into client files. It complements your existing CRM, practice management software, and tax preparation tools \u2014 it doesn\u2019t replace them.',
+      },
+      {
+        q: 'Can my whole team use Callwen?',
+        a: 'Absolutely. Callwen supports multi-user organizations with role-based access, client assignments, and shared document libraries. The Firm tier includes 3 seats with additional seats at $79/month. Team members see only the clients assigned to them unless given broader access.',
+      },
+    ],
   },
   {
-    q: 'What types of documents can I upload?',
-    a: 'Tax returns (1040, 1120, 1065, 1120-S), W-2s, K-1s, engagement letters, meeting recordings (audio/video), email threads, financial statements, and any PDF, Word, Excel, or text file. Callwen auto-classifies tax documents and extracts text from all formats.',
+    label: 'Pricing & Plans',
+    items: [
+      {
+        q: 'Is there a free plan?',
+        a: 'Yes. The free tier includes 5 clients, unlimited document uploads, 50 AI queries per month, and 5 client check-ins per month. No credit card required. It\u2019s a fully functional version of the product \u2014 not a limited demo.',
+      },
+      {
+        q: 'What\u2019s the difference between Standard, Advanced, and Premium AI analysis?',
+        a: 'Standard analysis handles straightforward document lookups \u2014 \u201cWhat was this client\u2019s W-2 income?\u201d Advanced analysis handles comparisons and synthesis across multiple documents. Premium analysis provides strategic recommendations and tax planning insights. All tiers include all three levels \u2014 the difference is how many advanced and premium queries are included per month.',
+      },
+      {
+        q: 'Can I change or cancel my plan?',
+        a: 'Yes. All plans are month-to-month with no long-term contracts. You can upgrade, downgrade, or cancel at any time from your account settings. Annual plans offer a 20% discount and can also be cancelled.',
+      },
+      {
+        q: 'Do you offer a trial?',
+        a: 'The free tier is essentially an unlimited trial \u2014 5 clients, no time limit, no credit card. Use it as long as you want. When you\u2019re ready for more clients or more AI queries, upgrade to a paid plan.',
+      },
+    ],
   },
   {
-    q: 'How accurate are the AI answers?',
-    a: 'Every AI response includes a confidence score and source citations pointing to the specific document and page. You can verify any answer by clicking the source reference. Callwen automatically selects the right level of analysis for each question — from fast document lookups to advanced and premium analyses — to balance speed and accuracy.',
-  },
-  {
-    q: 'Can my team share a workspace?',
-    a: 'Yes. The Firm plan includes 3 seats with additional seats at $79/month each. Team members share a unified client knowledge base with role-based access controls. Admins can assign specific clients to specific team members.',
-  },
-  {
-    q: 'How long does setup take?',
-    a: 'Under two minutes. Sign up, upload your first documents, and start asking questions. There is no onboarding call required, no data migration, and no IT department needed. Connect Gmail or Outlook in one click to auto-sync client emails.',
-  },
-  {
-    q: 'Can I cancel anytime?',
-    a: 'Yes. No contracts, no cancellation fees. Cancel from your account settings and your subscription ends at the end of the current billing period. You can export all your data at any time.',
+    label: 'Security & Compliance',
+    items: [
+      {
+        q: 'How secure is my data?',
+        a: 'All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Client documents are stored in US-based data centers via Supabase. All AI processing uses commercial APIs with zero data retention policies \u2014 your client data is never used to train AI models and is never stored by AI providers.',
+      },
+      {
+        q: 'What is IRC Section 7216 and why does it matter?',
+        a: 'Section 7216 of the Internal Revenue Code requires CPAs to obtain written taxpayer consent before disclosing or using tax return information with third-party services \u2014 including AI tools. Most AI platforms ignore this entirely. Callwen has built-in tiered consent tracking with e-signature workflow, so you can document compliance for every client before uploading their tax documents.',
+      },
+      {
+        q: 'Who can see my clients\u2019 data?',
+        a: 'Only authorized users in your organization. Callwen uses organization-scoped data isolation \u2014 your data is completely separate from every other firm on the platform. Within your org, you can control access at the client level through team assignments.',
+      },
+      {
+        q: 'Does Callwen use my data to train AI models?',
+        a: 'No. Your data is used exclusively to serve your queries. It is never shared with other customers, never used for model training, and never stored beyond what\u2019s needed to deliver your results. Our AI providers (used via API) have zero data retention agreements in place.',
+      },
+    ],
   },
 ];
 
@@ -43,7 +99,8 @@ export default function LandingPage() {
   // State for interactive elements
   const [menuOpen, setMenuOpen] = useState(false);
   const [annualBilling, setAnnualBilling] = useState(false);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [openFaq, setOpenFaq] = useState<string | null>(null);
+  const [faqFilter, setFaqFilter] = useState<string | null>(null);
   const [showCookieBanner, setShowCookieBanner] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const carouselPaused = useRef(false);
@@ -804,57 +861,48 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Cost Comparison Table */}
-        <div className="cost-section" data-reveal>
-          <div className="cost-inner">
-            <p className="overline">The real cost of &ldquo;free&rdquo; tools</p>
-            <h2>Replace your tool stack</h2>
-            <p className="cost-subtitle">CPAs cobble together 4–6 separate tools. Callwen replaces them all.</p>
+        {/* Comparison: Meeting Tools vs Callwen */}
+        <div className="compare-section" data-reveal>
+          <div className="compare-inner">
+            <p className="overline">Why Callwen</p>
+            <h2>What meeting tools <em>can&apos;t</em> do</h2>
+            <p className="compare-subtitle">Meeting tools structure conversations. Callwen delivers the knowledge that makes them count.</p>
 
-            <div className="cost-table-wrap">
-              <table className="cost-table">
+            <div className="compare-table-wrap">
+              <table className="compare-table">
                 <thead>
                   <tr>
-                    <th className="cost-th tool-col">Tool</th>
-                    <th className="cost-th price-col">Typical cost</th>
-                    <th className="cost-th callwen-col">
+                    <th className="compare-th other-col">Meeting &amp; Note Tools</th>
+                    <th className="compare-th callwen-col">
                       <span className="callwen-badge">Callwen</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    { tool: 'Document management (SharePoint / Google Drive)', cost: '$12/user/mo' },
-                    { tool: 'AI search & chat (ChatGPT Team / Copilot)', cost: '$25/user/mo' },
-                    { tool: 'E-signature & consent (DocuSign / PandaDoc)', cost: '$25/user/mo' },
-                    { tool: 'Meeting transcription (Otter / Fireflies)', cost: '$17/user/mo' },
-                    { tool: 'Email sync CRM (Front / HubSpot)', cost: '$29/user/mo' },
-                    { tool: 'Tax research (Checkpoint / CCH)', cost: '$150+/mo' },
+                    { other: 'Captures meeting transcripts', callwen: 'Analyzes your entire document history \u2014 tax returns, recordings, emails, check-ins' },
+                    { other: 'AI summaries of last conversation', callwen: 'AI answers from every document, cross-referenced with financial data' },
+                    { other: 'No document intelligence', callwen: '12+ document types auto-classified, 63 financial metrics extracted' },
+                    { other: 'No tax compliance features', callwen: 'Built-in IRC \u00a77216 consent tracking with e-signature' },
+                    { other: 'Context resets every meeting', callwen: 'Session memory + client journal \u2014 context that compounds over years' },
+                    { other: 'No strategy analysis', callwen: 'Tax Strategy Matrix with 15+ strategies, impact tracking, and practice book export' },
                   ].map((row, i) => (
-                    <tr key={i} className="cost-row">
-                      <td className="cost-td tool-col">{row.tool}</td>
-                      <td className="cost-td price-col">{row.cost}</td>
-                      <td className="cost-td callwen-col">
-                        <svg className="cost-check" viewBox="0 0 20 20" fill="none">
-                          <path d="M5 10l3.5 3.5L15 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
+                    <tr key={i} className="compare-row">
+                      <td className="compare-td other-col">
+                        <svg className="compare-x" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                        {row.other}
+                      </td>
+                      <td className="compare-td callwen-col">
+                        <svg className="compare-check" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        {row.callwen}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr className="cost-total-row">
-                    <td className="cost-td tool-col cost-total-label">Total without Callwen</td>
-                    <td className="cost-td price-col cost-total-price">$258+<span className="cost-per">/user/mo</span></td>
-                    <td className="cost-td callwen-col">
-                      <span className="cost-callwen-price">From $99<span className="cost-per">/mo</span></span>
-                    </td>
-                  </tr>
-                </tfoot>
               </table>
             </div>
 
-            <a href="#pricing" className="cost-cta">See pricing plans &rarr;</a>
+            <a href="#pricing" className="compare-cta">See pricing plans &rarr;</a>
           </div>
         </div>
 
@@ -883,10 +931,32 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {/* Who It's For */}
+        <div className="audience-section" data-reveal>
+          <div className="audience-inner">
+            <p className="overline">Who it&apos;s for</p>
+            <h2>Built for every<br /><em>advisory practice</em></h2>
+            <div className="audience-grid">
+              <div className="audience-card audience-gold">
+                <h3>Solo Practitioners</h3>
+                <p>Stop drowning in client files. Callwen gives you back the hours you spend searching for information — so you can spend them advising.</p>
+              </div>
+              <div className="audience-card audience-teal">
+                <h3>Growing Firms</h3>
+                <p>Give every team member the same depth of client knowledge. Automated deadlines, shared context, and practice book exports keep everyone aligned.</p>
+              </div>
+              <div className="audience-card audience-cream">
+                <h3>Advisory-Focused Practices</h3>
+                <p>Tax strategy tracking, client check-ins, and engagement health scoring — the tools you need to prove and grow your advisory value.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Testimonial Carousel */}
         <div className="testimonials-section" data-reveal>
           <p className="overline">What CPAs are saying</p>
-          <h2>Trusted by practitioners</h2>
+          <h2>What CPAs are saying</h2>
           <div
             className="carousel-container"
             onMouseEnter={() => { carouselPaused.current = true; }}
@@ -1081,17 +1151,31 @@ export default function LandingPage() {
         {/* FAQ */}
         <div className="faq-section">
           <p className="overline" data-reveal>FAQ</p>
-          <h2 data-reveal>Common questions</h2>
+          <h2 data-reveal>Frequently Asked Questions</h2>
+          <div className="faq-filters" data-reveal>
+            <button className={`faq-filter${faqFilter === null ? ' active' : ''}`} onClick={() => setFaqFilter(null)}>All</button>
+            {faqCategories.map((cat) => (
+              <button key={cat.label} className={`faq-filter${faqFilter === cat.label ? ' active' : ''}`} onClick={() => setFaqFilter(cat.label)}>{cat.label}</button>
+            ))}
+          </div>
           <div className="faq-list" data-reveal>
-            {faqData.map((item, i) => (
-              <div key={i} className={`faq-item${openFaq === i ? ' open' : ''}`}>
-                <button className="faq-q" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
-                  <span>{item.q}</span>
-                  <span className="faq-icon">{openFaq === i ? '\u00d7' : '+'}</span>
-                </button>
-                {openFaq === i && (
-                  <div className="faq-a">{item.a}</div>
-                )}
+            {faqCategories.filter((cat) => !faqFilter || cat.label === faqFilter).map((cat) => (
+              <div key={cat.label} className="faq-category">
+                <div className="faq-category-label">{cat.label}</div>
+                {cat.items.map((item, i) => {
+                  const key = `${cat.label}-${i}`;
+                  return (
+                    <div key={key} className={`faq-item${openFaq === key ? ' open' : ''}`}>
+                      <button className="faq-q" onClick={() => setOpenFaq(openFaq === key ? null : key)}>
+                        <span>{item.q}</span>
+                        <span className="faq-icon">{openFaq === key ? '\u00d7' : '+'}</span>
+                      </button>
+                      {openFaq === key && (
+                        <div className="faq-a">{item.a}</div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -1102,7 +1186,8 @@ export default function LandingPage() {
           <p className="overline" data-reveal>Ready?</p>
           <h2 data-reveal>Stop searching.<br />Start <em>advising.</em></h2>
           <div className="finale-rule" data-reveal />
-          <p data-reveal>Free tier includes 5 clients and unlimited documents. No credit card required. Set up in under two minutes.</p>
+          <p className="finale-subtitle" data-reveal>Document intelligence. Tax strategy. Client check-ins. Practice valuation. All in one platform, built by a CPA who got tired of digging through client files.</p>
+          <p data-reveal>Free tier includes 5 clients and unlimited documents. No credit card required.</p>
           <Link href="/sign-up" className="cta-btn" data-reveal>
             Get started for free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
           </Link>
@@ -1389,30 +1474,44 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .security-card h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 500; color: var(--white); margin-bottom: 0.6rem; }
 .security-card p { font-size: 0.82rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
 
-/* Cost Comparison */
-.cost-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
-.cost-inner { max-width: 820px; margin: 0 auto; text-align: center; }
-.cost-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.cost-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; }
-.cost-subtitle { font-size: 0.92rem; color: var(--white-dim); margin-bottom: 3rem; font-weight: 400; }
-.cost-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 2.5rem; }
-.cost-table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); }
-.cost-th { padding: 1.2rem 1.5rem; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); background: rgba(24,28,37,0.9); text-align: left; font-weight: 500; }
-.cost-th.callwen-col { text-align: center; }
+/* Comparison: Meeting Tools vs Callwen */
+.compare-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.compare-inner { max-width: 900px; margin: 0 auto; text-align: center; }
+.compare-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.compare-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; }
+.compare-section h2 em { font-style: italic; color: var(--accent-light); }
+.compare-subtitle { font-size: 0.92rem; color: var(--white-dim); margin-bottom: 3rem; font-weight: 400; }
+.compare-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 2.5rem; }
+.compare-table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); }
+.compare-th { padding: 1.2rem 1.5rem; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); background: rgba(24,28,37,0.9); text-align: left; font-weight: 500; }
+.compare-th.callwen-col { text-align: left; }
 .callwen-badge { display: inline-block; background: var(--accent); color: var(--bg-deep); font-size: 0.65rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; letter-spacing: 0.1em; }
-.cost-row { border-bottom: 1px solid rgba(255,255,255,0.03); }
-.cost-td { padding: 1rem 1.5rem; font-size: 0.85rem; }
-.cost-td.tool-col { color: var(--white-dim); text-align: left; font-weight: 400; }
-.cost-td.price-col { color: var(--white-faint); text-align: left; font-weight: 400; white-space: nowrap; }
-.cost-td.callwen-col { text-align: center; }
-.cost-check { width: 20px; height: 20px; color: var(--accent); display: inline-block; vertical-align: middle; }
-.cost-total-row { background: rgba(201,148,74,0.06); border-top: 1px solid rgba(201,148,74,0.15); }
-.cost-total-label { font-weight: 600; color: var(--white); }
-.cost-total-price { font-weight: 600; color: var(--white); white-space: nowrap; }
-.cost-callwen-price { font-family: var(--serif); font-size: 1.1rem; font-weight: 600; color: var(--accent); }
-.cost-per { font-size: 0.72rem; font-weight: 400; color: var(--white-dim); font-family: var(--sans); }
-.cost-cta { display: inline-block; font-size: 0.88rem; font-weight: 500; color: var(--accent); text-decoration: none; transition: color 0.2s; }
-.cost-cta:hover { color: var(--accent-light); }
+.compare-row { border-bottom: 1px solid rgba(255,255,255,0.03); }
+.compare-td { padding: 1rem 1.5rem; font-size: 0.82rem; line-height: 1.6; vertical-align: top; }
+.compare-td.other-col { color: var(--white-faint); font-weight: 400; width: 40%; }
+.compare-td.callwen-col { color: var(--white-dim); font-weight: 400; }
+.compare-x { width: 14px; height: 14px; color: #e05252; display: inline-block; vertical-align: middle; margin-right: 8px; flex-shrink: 0; }
+.compare-check { width: 14px; height: 14px; color: var(--teal); display: inline-block; vertical-align: middle; margin-right: 8px; flex-shrink: 0; }
+.compare-cta { display: inline-block; font-size: 0.88rem; font-weight: 500; color: var(--accent); text-decoration: none; transition: color 0.2s; }
+.compare-cta:hover { color: var(--accent-light); }
+
+/* Audience / Who It's For */
+.audience-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.audience-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
+.audience-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.audience-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; line-height: 1.15; }
+.audience-section h2 em { font-style: italic; color: var(--accent-light); }
+.audience-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
+.audience-card { background: var(--bg-card); padding: 2.5rem 2rem; text-align: left; transition: all 0.3s ease; }
+.audience-card:hover { background: rgba(36,40,52,0.95); }
+.audience-card h3 { font-family: var(--sans); font-size: 1rem; font-weight: 500; margin-bottom: 0.8rem; }
+.audience-card p { font-size: 0.85rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
+.audience-gold h3 { color: var(--accent-light); }
+.audience-gold { border-top: 2px solid rgba(201,148,74,0.3); }
+.audience-teal h3 { color: var(--teal); }
+.audience-teal { border-top: 2px solid rgba(91,184,175,0.3); }
+.audience-cream h3 { color: var(--white); }
+.audience-cream { border-top: 2px solid rgba(240,237,230,0.15); }
 
 /* Impact Cards */
 .impact-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
@@ -1458,20 +1557,27 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 /* FAQ */
 .faq-section { padding: 6rem 2rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.04); }
 .faq-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.faq-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
-.faq-list { max-width: 700px; margin: 0 auto; text-align: left; }
+.faq-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 2rem; }
+.faq-filters { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 3rem; }
+.faq-filter { padding: 8px 18px; border-radius: 99px; font-family: var(--sans); font-size: 0.78rem; font-weight: 400; border: 1px solid rgba(255,255,255,0.08); background: transparent; color: var(--white-dim); cursor: pointer; transition: all 0.25s; }
+.faq-filter:hover { border-color: rgba(201,148,74,0.3); color: var(--white); }
+.faq-filter.active { background: var(--accent); color: var(--bg-deep); border-color: var(--accent); font-weight: 500; }
+.faq-list { max-width: 740px; margin: 0 auto; text-align: left; }
+.faq-category { margin-bottom: 2rem; }
+.faq-category-label { font-size: 0.68rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(201,148,74,0.12); }
 .faq-item { border-bottom: 1px solid rgba(255,255,255,0.05); }
-.faq-q { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 1.5rem 0; cursor: pointer; background: none; border: none; font-family: var(--sans); font-size: 1rem; font-weight: 400; color: var(--white); transition: color 0.25s; text-align: left; }
+.faq-q { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 1.2rem 0; cursor: pointer; background: none; border: none; font-family: var(--sans); font-size: 0.95rem; font-weight: 400; color: var(--white); transition: color 0.25s; text-align: left; }
 .faq-q:hover { color: var(--accent-light); }
 .faq-icon { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; margin-left: 1rem; transition: transform 0.3s; }
-.faq-a { padding: 0 0 1.5rem; font-size: 0.9rem; line-height: 1.8; color: var(--white-dim); font-weight: 400; }
+.faq-a { padding: 0 0 1.5rem; font-size: 0.88rem; line-height: 1.8; color: var(--white-dim); font-weight: 400; }
 
 .finale { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem; }
 .finale .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
 .finale h2 { font-family: var(--serif); font-size: clamp(2.5rem,6vw,4.5rem); font-weight: 400; line-height: 1.1; margin-bottom: 1.5rem; color: var(--white); }
 .finale-rule { width: 50px; height: 1px; background: var(--accent); margin: 0 auto 1.5rem; opacity: 0.6; }
 .finale h2 em { font-style: italic; color: var(--accent-light); }
-.finale p { max-width: 480px; margin: 0 auto; font-size: 1.05rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
+.finale-subtitle { max-width: 560px; margin: 0 auto 1rem; font-size: 1.05rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
+.finale p { max-width: 480px; margin: 0 auto; font-size: 0.95rem; line-height: 1.7; color: var(--white-faint); font-weight: 400; }
 .finale .cta-btn { display: inline-flex; align-items: center; gap: 10px; margin-top: 2.5rem; padding: 16px 36px; font-family: var(--sans); font-size: 0.9rem; font-weight: 500; color: var(--bg-deep); background: var(--accent); border: none; border-radius: 8px; cursor: pointer; text-decoration: none; transition: all 0.3s ease; }
 .finale .cta-btn:hover { background: var(--accent-light); transform: translateY(-2px); box-shadow: 0 12px 48px rgba(201,148,74,0.25); }
 .finale .cta-btn svg { width: 16px; height: 16px; }
@@ -1527,6 +1633,10 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .metric-number { font-size: 1.6rem; }
   .workflow-grid { grid-template-columns: repeat(2,1fr); }
   .integrations-grid { grid-template-columns: repeat(2,1fr); }
+  .audience-grid { grid-template-columns: 1fr; }
+  .compare-td { font-size: 0.78rem; padding: 0.8rem 1rem; }
+  .faq-filters { gap: 6px; }
+  .faq-filter { padding: 6px 14px; font-size: 0.72rem; }
   .impact-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
   .carousel-slide { min-width: 100%; }
@@ -1549,6 +1659,7 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .metric-divider { width: 40px; height: 1px; }
   .workflow-grid { grid-template-columns: 1fr; }
   .integrations-grid { grid-template-columns: 1fr 1fr; }
+  .faq-filters { display: none; }
   .trust-badges-row { gap: 32px 24px; max-width: 320px; }
   .trust-badge svg { width: 32px; height: 32px; }
   .trust-badge-label { font-size: 0.6rem; max-width: 90px; }
