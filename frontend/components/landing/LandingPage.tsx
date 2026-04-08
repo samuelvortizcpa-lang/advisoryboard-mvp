@@ -1082,7 +1082,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .nav-links { display: flex; align-items: center; gap: 2rem; }
 .nav-links a { font-size: 0.85rem; font-weight: 400; color: var(--white-dim); text-decoration: none; letter-spacing: 0.04em; transition: color 0.25s; padding: 12px 0; }
 .nav-links a:hover { color: var(--white); }
-.nav-cta { padding: 10px 24px !important; background: var(--accent) !important; color: var(--bg-deep) !important; font-weight: 500 !important; border-radius: 6px; transition: all 0.25s !important; }
+.nav-cta { padding: 12px 24px !important; background: var(--accent) !important; color: var(--bg-deep) !important; font-weight: 500 !important; border-radius: 6px; transition: all 0.25s !important; }
 .nav-cta:hover { background: var(--accent-light) !important; transform: translateY(-1px); }
 
 /* Hamburger menu */
@@ -1133,7 +1133,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .trust-badge { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.7; transition: opacity 0.3s ease; cursor: default; }
 .trust-badge:hover { opacity: 1; }
 .trust-badge svg { width: 38px; height: 38px; }
-.trust-badge-label { font-family: var(--sans); font-size: 0.65rem; font-weight: 400; color: #8a8680; letter-spacing: 0.04em; line-height: 1.35; max-width: 110px; text-align: center; }
+.trust-badge-label { font-family: var(--sans); font-size: 0.75rem; font-weight: 400; color: #8a8680; letter-spacing: 0.04em; line-height: 1.35; max-width: 110px; text-align: center; }
 
 
 [data-reveal] { opacity: 0; transform: translateY(30px); transition: opacity 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1); }
@@ -1240,7 +1240,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 /* Billing toggle */
 .billing-toggle { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 1.5rem; }
 .toggle-pill { display: inline-flex; border-radius: 99px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); padding: 3px; }
-.toggle-opt { padding: 8px 20px; border-radius: 99px; font-family: var(--sans); font-size: 0.8rem; font-weight: 500; border: none; cursor: pointer; transition: all 0.25s; background: transparent; color: var(--white-dim); }
+.toggle-opt { padding: 12px 20px; border-radius: 99px; font-family: var(--sans); font-size: 0.8rem; font-weight: 500; border: none; cursor: pointer; transition: all 0.25s; background: transparent; color: var(--white-dim); }
 .toggle-opt.active { background: var(--accent); color: var(--bg-deep); }
 .save-badge { display: inline-block; font-size: 0.7rem; background: var(--teal-dim); color: var(--teal); padding: 3px 10px; border-radius: 99px; font-weight: 500; }
 
