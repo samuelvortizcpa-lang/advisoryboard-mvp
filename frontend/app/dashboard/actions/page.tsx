@@ -22,7 +22,7 @@ function isOverdue(item: ActionItem): boolean {
 }
 
 function formatDueDate(iso: string | null): { label: string; className: string } {
-  if (!iso) return { label: "—", className: "text-gray-300" };
+  if (!iso) return { label: "—", className: "text-gray-400" };
   const due = new Date(iso);
   const today = new Date(new Date().toDateString());
   const diffDays = Math.round((due.getTime() - today.getTime()) / 86_400_000);
@@ -390,7 +390,7 @@ export default function ActionsPage() {
                           {item.priority}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-300">—</span>
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
 
@@ -401,7 +401,7 @@ export default function ActionsPage() {
 
                     {/* Assigned */}
                     <td className="px-4 py-3.5 text-sm text-gray-600">
-                      {item.assigned_to_name || <span className="text-gray-300">—</span>}
+                      {item.assigned_to_name || <span className="text-gray-400">—</span>}
                     </td>
 
                     {/* Status */}
