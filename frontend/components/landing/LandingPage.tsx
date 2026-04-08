@@ -504,7 +504,6 @@ export default function LandingPage() {
   // Pricing helpers
   const starterPrice = annualBilling ? 79 : 99;
   const proPrice = annualBilling ? 119 : 149;
-  const firmPrice = annualBilling ? 279 : 349;
 
   return (
     <>
@@ -843,7 +842,7 @@ export default function LandingPage() {
 
         {/* Mid-page CTA */}
         <div className="mid-cta" data-reveal>
-          <h2>Ready to try it?</h2>
+          <h2>Ready to see what your documents know?</h2>
           <Link href="/sign-up" className="btn btn-primary">
             Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
           </Link>
@@ -1031,22 +1030,8 @@ export default function LandingPage() {
               <div className="security-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
               </div>
-              <h3>Enterprise-Grade Security</h3>
-              <p>AES-256 encryption at rest, TLS 1.3 in transit, SOC 2 aligned infrastructure.</p>
-            </div>
-            <div className="security-card">
-              <div className="security-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M2 12h20M12 2c2.5 2.5 4 6 4 10s-1.5 7.5-4 10c-2.5-2.5-4-6-4-10s1.5-7.5 4-10z"/></svg>
-              </div>
-              <h3>US Data Centers</h3>
-              <p>All client data stored in US-based servers. No data leaves the country.</p>
-            </div>
-            <div className="security-card">
-              <div className="security-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
-              </div>
-              <h3>{'\u00a7'}7216 Consent Tracking</h3>
-              <p>Built-in IRC Section 7216 consent management with e-signature workflow.</p>
+              <h3>Data Encryption</h3>
+              <p>AES-256 encryption at rest, TLS 1.3 in transit. Your data is protected end to end.</p>
             </div>
             <div className="security-card">
               <div className="security-icon">
@@ -1057,10 +1042,24 @@ export default function LandingPage() {
             </div>
             <div className="security-card">
               <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M2 12h20M12 2c2.5 2.5 4 6 4 10s-1.5 7.5-4 10c-2.5-2.5-4-6-4-10s1.5-7.5 4-10z"/></svg>
+              </div>
+              <h3>US Data Centers</h3>
+              <p>All client data stored in US-based servers. SOC 2 aligned infrastructure.</p>
+            </div>
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+              </div>
+              <h3>{'\u00a7'}7216 Consent Tracking</h3>
+              <p>Built-in IRC Section 7216 consent management with e-signature workflow.</p>
+            </div>
+            <div className="security-card">
+              <div className="security-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
               </div>
-              <h3>Organization Isolation</h3>
-              <p>Complete data separation between firms. Role-based access within your team.</p>
+              <h3>Role-Based Access</h3>
+              <p>Complete data separation between firms. Control who sees what at the client level.</p>
             </div>
             <div className="security-card">
               <div className="security-icon">
@@ -1139,8 +1138,7 @@ export default function LandingPage() {
               </div>
               <div className="p-card">
                 <div className="p-tier">Firm</div>
-                <div className="p-price">${firmPrice} <span className="mo">/mo</span></div>
-                {annualBilling && <div className="p-billed">billed $3,348/year</div>}
+                <div className="p-price">$349 <span className="mo">/mo</span></div>
                 <div className="p-desc">3 seats included + $79/mo per seat.</div>
                 <ul className="p-list">
                   <li>Unlimited clients &amp; documents</li>
@@ -1151,7 +1149,7 @@ export default function LandingPage() {
                   <li>Admin controls &amp; audit log</li>
                   <li>Dedicated support</li>
                 </ul>
-                <Link href="/sign-up" className="p-btn p-btn-ghost">Get started &rarr;</Link>
+                <a href="mailto:support@callwen.com" className="p-btn p-btn-ghost">Contact us</a>
               </div>
             </div>
           </div>
