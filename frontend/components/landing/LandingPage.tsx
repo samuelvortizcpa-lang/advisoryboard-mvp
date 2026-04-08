@@ -1080,7 +1080,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .nav-logo { font-family: var(--serif); font-size: 1.5rem; font-weight: 600; color: var(--white); }
 .nav-logo span { color: var(--accent); }
 .nav-links { display: flex; align-items: center; gap: 2rem; }
-.nav-links a { font-size: 0.85rem; font-weight: 400; color: var(--white-dim); text-decoration: none; letter-spacing: 0.04em; transition: color 0.25s; }
+.nav-links a { font-size: 0.85rem; font-weight: 400; color: var(--white-dim); text-decoration: none; letter-spacing: 0.04em; transition: color 0.25s; padding: 12px 0; }
 .nav-links a:hover { color: var(--white); }
 .nav-cta { padding: 10px 24px !important; background: var(--accent) !important; color: var(--bg-deep) !important; font-weight: 500 !important; border-radius: 6px; transition: all 0.25s !important; }
 .nav-cta:hover { background: var(--accent-light) !important; transform: translateY(-1px); }
