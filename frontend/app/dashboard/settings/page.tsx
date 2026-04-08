@@ -269,9 +269,14 @@ export default function SettingsPage() {
             </div>
           </div>
         ) : (
-          <p className="mt-6 text-sm text-gray-400">
-            Unable to load notification preferences.
-          </p>
+          <div className="mt-6 rounded-lg border border-gray-100 bg-gray-50 px-4 py-5 text-center">
+            <p className="text-sm text-gray-500">
+              Notification preferences will appear here once configured.
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              Email notifications for task assignments, completions, and deadline reminders.
+            </p>
+          </div>
         )}
       </div>
     </div>

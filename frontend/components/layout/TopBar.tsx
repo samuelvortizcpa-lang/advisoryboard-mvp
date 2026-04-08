@@ -57,9 +57,44 @@ function getBreadcrumbs(
   if (pathname === "/dashboard/calendar") {
     return [{ label: "Calendar" }];
   }
+  // /dashboard/practice-book
+  if (pathname === "/dashboard/practice-book") {
+    return [{ label: "Practice Book" }];
+  }
+  // /dashboard/strategy-dashboard
+  if (pathname === "/dashboard/strategy-dashboard") {
+    return [{ label: "Strategies" }];
+  }
+  // /dashboard/settings sub-pages
+  if (pathname.startsWith("/dashboard/settings/")) {
+    const sub = pathname.split("/dashboard/settings/")[1];
+    const settingsLabels: Record<string, string> = {
+      integrations: "Email Sync",
+      engagements: "Engagements",
+      extension: "Extension",
+      usage: "Usage Analytics",
+      organization: "Organization",
+      subscriptions: "Subscriptions",
+    };
+    const label = settingsLabels[sub] || sub;
+    return [
+      { label: "Settings", href: "/dashboard/settings" },
+      { label },
+    ];
+  }
   // /dashboard/settings
   if (pathname === "/dashboard/settings") {
     return [{ label: "Settings" }];
+  }
+  // /dashboard/strategies, /dashboard/engagements, /dashboard/email-sync, /dashboard/organization
+  const topLevelLabels: Record<string, string> = {
+    "/dashboard/strategies": "Strategies",
+    "/dashboard/engagements": "Engagements",
+    "/dashboard/email-sync": "Email Sync",
+    "/dashboard/organization": "Organization",
+  };
+  if (topLevelLabels[pathname]) {
+    return [{ label: topLevelLabels[pathname] }];
   }
   // /dashboard (and anything else)
   return [{ label: "Overview" }];
