@@ -18,12 +18,24 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Callwen",
+    default: "Callwen — AI Advisory Intelligence for CPA Firms",
     template: "%s — Callwen",
   },
-  description: "AI Document Intelligence for CPA Firms",
+  description: "Upload tax returns, meeting recordings, and client files. Ask questions across your entire document history. Get source-cited answers, tax strategy suggestions, and automated deadlines. Built by a CPA, for CPAs.",
   icons: {
     icon: "/icon.svg",
+  },
+  openGraph: {
+    title: "Callwen — The AI that knows your clients as well as you do.",
+    description: "AI-powered document intelligence for CPAs. Upload documents, ask questions, surface strategies. Free for 5 clients.",
+    type: "website",
+    url: "https://callwen.com",
+    siteName: "Callwen",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Callwen — AI Advisory Intelligence for CPA Firms",
+    description: "AI-powered document intelligence for CPAs. Upload documents, ask questions, surface strategies. Free for 5 clients.",
   },
 };
 

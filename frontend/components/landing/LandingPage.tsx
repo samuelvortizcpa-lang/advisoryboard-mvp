@@ -1023,43 +1023,43 @@ export default function LandingPage() {
               <div className="security-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
               </div>
-              <h3>SOC 2 Type II Infrastructure</h3>
-              <p>Hosted on certified infrastructure with continuous monitoring, access controls, and annual third-party audits.</p>
-            </div>
-            <div className="security-card">
-              <div className="security-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-              </div>
-              <h3>AES-256 Encryption</h3>
-              <p>All data encrypted at rest and in transit. TLS 1.2+ for every connection. Your files are never stored unencrypted.</p>
-            </div>
-            <div className="security-card">
-              <div className="security-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
-              </div>
-              <h3>IRC {'\u00a7'}7216 Compliant</h3>
-              <p>Built-in consent management with IRS-mandated language, e-signatures, expiration tracking, and full audit trails.</p>
+              <h3>Enterprise-Grade Security</h3>
+              <p>AES-256 encryption at rest, TLS 1.3 in transit, SOC 2 aligned infrastructure.</p>
             </div>
             <div className="security-card">
               <div className="security-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M2 12h20M12 2c2.5 2.5 4 6 4 10s-1.5 7.5-4 10c-2.5-2.5-4-6-4-10s1.5-7.5 4-10z"/></svg>
               </div>
-              <h3>US-Based Data Centers</h3>
-              <p>All client data stored exclusively in US data centers. No offshore processing. No cross-border data transfers.</p>
+              <h3>US Data Centers</h3>
+              <p>All client data stored in US-based servers. No data leaves the country.</p>
+            </div>
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 6L9 17l-5-5"/><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+              </div>
+              <h3>{'\u00a7'}7216 Consent Tracking</h3>
+              <p>Built-in IRC Section 7216 consent management with e-signature workflow.</p>
             </div>
             <div className="security-card">
               <div className="security-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 15v2m0 0a2 2 0 100-4 2 2 0 000 4z"/><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
               </div>
-              <h3>Zero Data Retention AI</h3>
-              <p>AI providers process queries via commercial APIs with zero data retention. Your data is never used to train models.</p>
+              <h3>Zero AI Data Retention</h3>
+              <p>AI providers process your queries but never store your data. Zero retention agreements in place.</p>
+            </div>
+            <div className="security-card">
+              <div className="security-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+              </div>
+              <h3>Organization Isolation</h3>
+              <p>Complete data separation between firms. Role-based access within your team.</p>
             </div>
             <div className="security-card">
               <div className="security-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6M9 16h6M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7z"/><path d="M13 2v7h7"/></svg>
               </div>
-              <h3>AICPA Aligned</h3>
-              <p>Designed around AICPA professional standards for technology use in accounting practice. Audit-ready from day one.</p>
+              <h3>Audit Logging</h3>
+              <p>Every document access, AI query, and admin action is logged for compliance review.</p>
             </div>
           </div>
         </div>
