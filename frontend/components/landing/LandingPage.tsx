@@ -1306,17 +1306,17 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
 .foot-logo { font-family: var(--serif); font-size: 1.5rem; font-weight: 600; color: var(--white); margin-bottom: 1rem; }
 .foot-logo span { color: var(--accent); }
 .foot-tagline { font-size: 0.82rem; color: var(--white-dim); max-width: 250px; line-height: 1.6; margin-bottom: 1rem; }
-.foot-email { font-size: 0.8rem; color: var(--white-faint); text-decoration: none; transition: color 0.2s; }
+.foot-email { font-size: 0.8rem; color: #9a9590; text-decoration: none; transition: color 0.2s; }
 .foot-email:hover { color: var(--white-dim); }
 .foot-col { display: flex; flex-direction: column; gap: 0.6rem; }
-.foot-col h4 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--white); margin-bottom: 0.4rem; font-weight: 500; }
-.foot-col a { font-size: 0.82rem; color: var(--white-faint); text-decoration: none; transition: color 0.2s; }
+.foot-col h4 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--white); margin-bottom: 0.4rem; font-weight: 500; }
+.foot-col a { font-size: 0.82rem; color: #9a9590; text-decoration: none; transition: color 0.2s; }
 .foot-col a:hover { color: var(--white-dim); }
 .foot-soon { font-size: 0.82rem; color: var(--white-faint); opacity: 0.4; cursor: default; }
 .foot-bottom { display: flex; align-items: center; justify-content: space-between; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.05); }
-.foot-copy { font-size: 0.75rem; color: var(--white-faint); }
+.foot-copy { font-size: 0.75rem; color: #9a9590; }
 .foot-social { display: flex; gap: 1rem; }
-.foot-social a { color: var(--white-faint); transition: color 0.2s; }
+.foot-social a { color: #9a9590; transition: color 0.2s; }
 .foot-social a:hover { color: var(--white-dim); }
 .foot-social svg { width: 18px; height: 18px; }
 
