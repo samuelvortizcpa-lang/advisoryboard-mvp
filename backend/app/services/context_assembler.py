@@ -32,6 +32,8 @@ from app.models.client_strategy_status import ClientStrategyStatus
 from app.models.document import Document
 from app.models.client_engagement import ClientEngagement
 from app.models.engagement_template import EngagementTemplate
+from app.models.checkin_response import CheckinResponse
+from app.models.checkin_template import CheckinTemplate
 from app.models.journal_entry import JournalEntry
 from app.models.profile_flag_history import ProfileFlagHistory
 from app.models.tax_strategy import TaxStrategy
@@ -96,6 +98,7 @@ class ClientContext:
     action_items: list[dict[str, Any]] = field(default_factory=list)
     communication_history: list[dict[str, Any]] = field(default_factory=list)
     journal_entries: list[dict[str, Any]] | None = None  # TODO: Feature 3
+    checkin_responses: list[dict[str, Any]] | None = None
     strategy_status: dict[str, Any] | None = None
     engagement_calendar: list[dict[str, Any]] | None = None  # TODO: Feature 4
     session_history: list[dict[str, Any]] = field(default_factory=list)
@@ -225,6 +228,10 @@ async def assemble_context(
             categories=["income", "deductions", "business", "investment", "property"],
             include_pinned=False,
         )
+
+    # Populate recent check-in responses for all non-GENERAL purposes
+    if purpose != ContextPurpose.GENERAL:
+        ctx.checkin_responses = _fetch_checkin_responses(db, client_id, limit=3)
 
     # Populate engagement calendar for purposes that benefit from deadline awareness
     if purpose in (
@@ -562,6 +569,40 @@ def _journal_to_dict(entry: JournalEntry, *, pinned: bool) -> dict[str, Any]:
     if entry.effective_date:
         d["effective_date"] = entry.effective_date.isoformat()
     return d
+
+
+def _fetch_checkin_responses(
+    db: Session,
+    client_id: UUID,
+    *,
+    limit: int = 3,
+) -> list[dict[str, Any]] | None:
+    """Fetch the most recent completed check-in responses for context."""
+    rows = (
+        db.query(CheckinResponse, CheckinTemplate.name)
+        .join(CheckinTemplate, CheckinResponse.template_id == CheckinTemplate.id)
+        .filter(
+            CheckinResponse.client_id == client_id,
+            CheckinResponse.status == "completed",
+        )
+        .order_by(CheckinResponse.completed_at.desc())
+        .limit(limit)
+        .all()
+    )
+    if not rows:
+        return None
+
+    results: list[dict[str, Any]] = []
+    for checkin, template_name in rows:
+        results.append({
+            "template_name": template_name,
+            "completed_at": (
+                checkin.completed_at.strftime("%b %d, %Y")
+                if checkin.completed_at else ""
+            ),
+            "response_text": checkin.response_text or "",
+        })
+    return results
 
 
 def _find_last_quarterly_estimate_date(
@@ -1178,6 +1219,18 @@ def format_context_for_prompt(
                 line += f": {content}"
             journal_lines.append(line)
         sections.append("\n".join(journal_lines))
+
+    # --- Recent check-in responses ------------------------------------------
+    if ctx.checkin_responses:
+        checkin_lines = ["=== RECENT CLIENT CHECK-INS ==="]
+        for entry in ctx.checkin_responses:
+            checkin_lines.append(
+                f"\n### {entry.get('template_name', 'Check-in')} — {entry.get('completed_at', '')}"
+            )
+            response_text = entry.get("response_text", "")
+            if response_text:
+                checkin_lines.append(response_text)
+        sections.append("\n".join(checkin_lines))
 
     # --- Engagement calendar ------------------------------------------------
     if ctx.engagement_calendar:

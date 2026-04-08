@@ -17,9 +17,12 @@ from app.models.action_item import ActionItem
 from app.models.client import Client
 from app.models.client_communication import ClientCommunication
 from app.models.document import Document
+from app.models.checkin_response import CheckinResponse
+from app.models.checkin_template import CheckinTemplate
 from app.models.chat_session import ChatSession
 from app.schemas.timeline import (
     ActionItemTimelineItem,
+    CheckinTimelineItem,
     CommunicationTimelineItem,
     DocumentTimelineItem,
     SessionTimelineItem,
@@ -52,6 +55,7 @@ async def get_client_timeline(
     include_action_items = not types or "action_item" in types
     include_communications = not types or "communication" in types
     include_sessions = not types or "session" in types
+    include_checkins = not types or "checkin" in types
 
     items: List[TimelineItem] = []
 
@@ -169,6 +173,44 @@ async def get_client_timeline(
                     icon_hint="chat",
                 )
             )
+
+    # Fetch check-ins
+    if include_checkins:
+        ci_query = (
+            db.query(CheckinResponse, CheckinTemplate.name)
+            .join(CheckinTemplate, CheckinResponse.template_id == CheckinTemplate.id)
+            .filter(CheckinResponse.client_id == client_id)
+            .order_by(CheckinResponse.sent_at.desc())
+        )
+        if start_date:
+            ci_query = ci_query.filter(CheckinResponse.sent_at >= start_date)
+        if end_date:
+            ci_query = ci_query.filter(CheckinResponse.sent_at <= end_date)
+        for ci, template_name in ci_query.limit(fetch_limit).all():
+            if ci.status == "completed" and ci.completed_at:
+                items.append(
+                    CheckinTimelineItem(
+                        type="checkin",
+                        id=ci.id,
+                        date=ci.completed_at,
+                        title=f"Check-in completed: {template_name}",
+                        subtitle=f"{ci.sent_to_name or ci.sent_to_email} responded",
+                        icon_hint="check-circle",
+                        status="completed",
+                    )
+                )
+            else:
+                items.append(
+                    CheckinTimelineItem(
+                        type="checkin",
+                        id=ci.id,
+                        date=ci.sent_at,
+                        title=f"Check-in sent: {template_name}",
+                        subtitle=f"Sent to {ci.sent_to_email}",
+                        icon_hint="mail",
+                        status=ci.status,
+                    )
+                )
 
     # Sort newest first and apply pagination
     items.sort(key=lambda x: x.date, reverse=True)

@@ -54,8 +54,21 @@ class SessionTimelineItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CheckinTimelineItem(BaseModel):
+    type: Literal["checkin"] = "checkin"
+    id: UUID
+    date: datetime
+    title: str
+    subtitle: str
+    icon_hint: str = "mail"
+    color: str = "#5bb8af"
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
 TimelineItem = Annotated[
-    Union[DocumentTimelineItem, ActionItemTimelineItem, CommunicationTimelineItem, SessionTimelineItem],
+    Union[DocumentTimelineItem, ActionItemTimelineItem, CommunicationTimelineItem, SessionTimelineItem, CheckinTimelineItem],
     Field(discriminator="type"),
 ]
 

@@ -38,6 +38,8 @@ from app.models.client import Client
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page_image import DocumentPageImage
+from app.models.checkin_response import CheckinResponse
+from app.models.checkin_template import CheckinTemplate
 from app.services import storage_service
 from app.services.chunking import chunk_text, get_chunk_params
 from app.services.context_assembler import (
@@ -862,7 +864,51 @@ async def answer_question(
                         phrase,
                     )
 
-    if not chunk_results:
+    # ------------------------------------------------------------------
+    # Check-in response embedding search
+    # ------------------------------------------------------------------
+    checkin_context_parts: list[str] = []
+    try:
+        # Reuse the first embedding (original query) from search_chunks
+        query_embedding = embeddings[0] if "embeddings" in dir() else None
+        if query_embedding is None:
+            _oai = _openai()
+            _embed_resp = await _oai.embeddings.create(
+                model=EMBEDDING_MODEL,
+                input=[question.replace("\n", " ")],
+            )
+            query_embedding = _embed_resp.data[0].embedding
+
+        ci_distance = CheckinResponse.response_embedding.cosine_distance(
+            query_embedding
+        ).label("ci_distance")
+        ci_rows = (
+            db.query(CheckinResponse, CheckinTemplate.name, ci_distance)
+            .join(CheckinTemplate, CheckinResponse.template_id == CheckinTemplate.id)
+            .filter(
+                CheckinResponse.client_id == client_id,
+                CheckinResponse.status == "completed",
+                CheckinResponse.response_embedding.isnot(None),
+            )
+            .order_by(ci_distance)
+            .limit(3)
+            .all()
+        )
+        for ci, template_name, distance in ci_rows:
+            confidence = (1 - distance / 2) * 100
+            if confidence >= 50:
+                completed = ci.completed_at.strftime("%Y-%m-%d") if ci.completed_at else "unknown"
+                checkin_context_parts.append(
+                    f"[Check-in: {template_name} — {completed}]\n{ci.response_text}"
+                )
+                logger.info(
+                    "Check-in match: %s (%.1f%%) completed %s",
+                    template_name, confidence, completed,
+                )
+    except Exception:
+        logger.warning("Check-in embedding search failed; continuing without", exc_info=True)
+
+    if not chunk_results and not checkin_context_parts:
         return {
             "answer": (
                 "I couldn't find any processed documents for this client. "
@@ -873,7 +919,7 @@ async def answer_question(
             "sources": [],
         }
 
-    all_scores = [score for _, score in chunk_results]
+    all_scores = [score for _, score in chunk_results] if chunk_results else [50.0]
     best_score = max(all_scores)
     confidence_tier = _compute_confidence_tier(all_scores)
 
@@ -926,6 +972,10 @@ async def answer_question(
                 doc_meta += " | SUPERSEDED"
 
         context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
+
+    # Append check-in response context
+    if checkin_context_parts:
+        context_parts.extend(checkin_context_parts)
 
     context = "\n\n---\n\n".join(context_parts)
 
@@ -1263,12 +1313,47 @@ async def answer_question_stream(
                     kw_score = 92.0 if phrase in {e.lower() for e in _expansion_terms} else 90.0
                     chunk_results.append((kw_chunk, kw_score))
 
-    if not chunk_results:
+    # Check-in response embedding search (streaming)
+    checkin_context_parts: list[str] = []
+    try:
+        _oai = _openai()
+        _embed_resp = await _oai.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=[question.replace("\n", " ")],
+        )
+        _q_embedding = _embed_resp.data[0].embedding
+
+        ci_distance = CheckinResponse.response_embedding.cosine_distance(
+            _q_embedding
+        ).label("ci_distance")
+        ci_rows = (
+            db.query(CheckinResponse, CheckinTemplate.name, ci_distance)
+            .join(CheckinTemplate, CheckinResponse.template_id == CheckinTemplate.id)
+            .filter(
+                CheckinResponse.client_id == client_id,
+                CheckinResponse.status == "completed",
+                CheckinResponse.response_embedding.isnot(None),
+            )
+            .order_by(ci_distance)
+            .limit(3)
+            .all()
+        )
+        for ci, template_name, distance in ci_rows:
+            confidence = (1 - distance / 2) * 100
+            if confidence >= 50:
+                completed = ci.completed_at.strftime("%Y-%m-%d") if ci.completed_at else "unknown"
+                checkin_context_parts.append(
+                    f"[Check-in: {template_name} — {completed}]\n{ci.response_text}"
+                )
+    except Exception:
+        logger.warning("Check-in embedding search failed (stream); continuing without", exc_info=True)
+
+    if not chunk_results and not checkin_context_parts:
         yield 'data: {"type":"token","content":"I couldn\'t find any processed documents for this client."}\n\n'
         yield 'data: {"type":"done","sources":[],"confidence_tier":"low","confidence_score":0.0,"model_used":"none","query_type":"factual"}\n\n'
         return
 
-    all_scores = [score for _, score in chunk_results]
+    all_scores = [score for _, score in chunk_results] if chunk_results else [50.0]
     best_score = max(all_scores)
     confidence_tier = _compute_confidence_tier(all_scores)
 
@@ -1281,6 +1366,9 @@ async def answer_question_stream(
         if doc and doc.document_type:
             doc_meta += f" | Type: {doc.document_type}"
         context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
+
+    if checkin_context_parts:
+        context_parts.extend(checkin_context_parts)
 
     context = "\n\n---\n\n".join(context_parts)
 

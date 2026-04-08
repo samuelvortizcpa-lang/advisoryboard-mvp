@@ -476,6 +476,68 @@ def _compute_alerts_uncached(
             "created_at": c.created_at.isoformat(),
         })
 
+    # ── Q13: Check-in completed in last 24 hours ─────────────────────
+    from app.models.checkin_response import CheckinResponse
+    from app.models.checkin_template import CheckinTemplate
+
+    twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+    completed_checkins = (
+        db.query(CheckinResponse, CheckinTemplate.name)
+        .join(CheckinTemplate, CheckinResponse.template_id == CheckinTemplate.id)
+        .filter(
+            CheckinResponse.client_id.in_(client_ids),
+            CheckinResponse.status == "completed",
+            CheckinResponse.completed_at >= twenty_four_hours_ago,
+        )
+        .all()
+    )
+    for ci, template_name in completed_checkins:
+        if ("checkin_completed", ci.id) in dismissed:
+            continue
+        cname = client_names.get(ci.client_id, "Unknown")
+        respondent = ci.sent_to_name or "Client"
+        alerts.append({
+            "id": str(ci.id),
+            "type": "checkin_completed",
+            "severity": "info",
+            "client_id": str(ci.client_id),
+            "client_name": cname,
+            "message": f"{respondent} completed their {template_name} check-in",
+            "related_id": str(ci.id),
+            "created_at": ci.completed_at.isoformat() if ci.completed_at else now.isoformat(),
+        })
+
+    # ── Q14: Check-in expiring within 48 hours ─────────────────────
+    forty_eight_hours = datetime.now(timezone.utc) + timedelta(hours=48)
+    expiring_checkins = (
+        db.query(CheckinResponse, CheckinTemplate.name, Client.name)
+        .join(CheckinTemplate, CheckinResponse.template_id == CheckinTemplate.id)
+        .join(Client, CheckinResponse.client_id == Client.id)
+        .filter(
+            CheckinResponse.client_id.in_(client_ids),
+            CheckinResponse.status == "pending",
+            CheckinResponse.expires_at >= now,
+            CheckinResponse.expires_at <= forty_eight_hours,
+        )
+        .all()
+    )
+    for ci, template_name, ci_client_name in expiring_checkins:
+        if ("checkin_expiring", ci.id) in dismissed:
+            continue
+        hours_left = int((ci.expires_at.replace(tzinfo=timezone.utc) - now).total_seconds() / 3600)
+        if hours_left < 0:
+            hours_left = 0
+        alerts.append({
+            "id": str(ci.id),
+            "type": "checkin_expiring",
+            "severity": "warning",
+            "client_id": str(ci.client_id),
+            "client_name": ci_client_name or "Unknown",
+            "message": f"Check-in for {ci_client_name or 'client'} expires in {hours_left} hours",
+            "related_id": str(ci.id),
+            "created_at": ci.expires_at.isoformat(),
+        })
+
     # Sort: critical first, then warning, then info; within same severity by date
     alerts.sort(key=lambda a: (SEVERITY_ORDER.get(a["severity"], 99), a["created_at"]))
 
