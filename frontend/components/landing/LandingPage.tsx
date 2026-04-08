@@ -504,6 +504,7 @@ export default function LandingPage() {
   // Pricing helpers
   const starterPrice = annualBilling ? 79 : 99;
   const proPrice = annualBilling ? 119 : 149;
+  const firmPrice = annualBilling ? 279 : 349;
 
   return (
     <>
@@ -665,6 +666,31 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {/* Business Value / Impact Cards */}
+        <div className="impact-section" data-reveal>
+          <div className="impact-inner">
+            <p className="overline">Built for how CPAs actually work</p>
+            <h2>Measurable impact from day one</h2>
+            <div className="impact-grid">
+              <div className="impact-card">
+                <div className="impact-number">5+</div>
+                <div className="impact-unit">hours saved per week</div>
+                <p className="impact-desc">Stop hunting through folders, inboxes, and portals. Ask a question, get a cited answer in seconds.</p>
+              </div>
+              <div className="impact-card">
+                <div className="impact-number">100%</div>
+                <div className="impact-unit">{'\u00a7'}7216 audit-ready</div>
+                <p className="impact-desc">Every consent is tracked, timestamped, and exportable. No spreadsheets, no missed expirations.</p>
+              </div>
+              <div className="impact-card">
+                <div className="impact-number">1-click</div>
+                <div className="impact-unit">client briefing</div>
+                <p className="impact-desc">Walk into every meeting with a full financial snapshot. Documents, emails, and action items in one place.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Feature sections */}
         <div className="sections" id="features">
           <div className="section left" data-reveal>
@@ -815,6 +841,15 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {/* Mid-page CTA */}
+        <div className="mid-cta" data-reveal>
+          <h2>Ready to try it?</h2>
+          <Link href="/sign-up" className="btn btn-primary">
+            Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </Link>
+          <p className="mid-cta-note">Free for 5 clients. No credit card required.</p>
+        </div>
+
         {/* Integrations */}
         <div className="integrations-section" data-reveal>
           <div className="integrations-inner">
@@ -904,31 +939,6 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Business Value / Impact Cards */}
-        <div className="impact-section" data-reveal>
-          <div className="impact-inner">
-            <p className="overline">Built for how CPAs actually work</p>
-            <h2>Measurable impact from day one</h2>
-            <div className="impact-grid">
-              <div className="impact-card">
-                <div className="impact-number">5+</div>
-                <div className="impact-unit">hours saved per week</div>
-                <p className="impact-desc">Stop hunting through folders, inboxes, and portals. Ask a question, get a cited answer in seconds.</p>
-              </div>
-              <div className="impact-card">
-                <div className="impact-number">100%</div>
-                <div className="impact-unit">§7216 audit-ready</div>
-                <p className="impact-desc">Every consent is tracked, timestamped, and exportable. No spreadsheets, no missed expirations.</p>
-              </div>
-              <div className="impact-card">
-                <div className="impact-number">1-click</div>
-                <div className="impact-unit">client briefing</div>
-                <p className="impact-desc">Walk into every meeting with a full financial snapshot. Documents, emails, and action items all in one place.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Who It's For */}
         <div className="audience-section" data-reveal>
           <div className="audience-inner">
@@ -953,7 +963,7 @@ export default function LandingPage() {
 
         {/* Testimonial Carousel */}
         <div className="testimonials-section" data-reveal>
-          <p className="overline">What CPAs are saying</p>
+          <p className="overline">Testimonials</p>
           <h2>What CPAs are saying</h2>
           <div
             className="carousel-container"
@@ -1129,7 +1139,8 @@ export default function LandingPage() {
               </div>
               <div className="p-card">
                 <div className="p-tier">Firm</div>
-                <div className="p-price">$349 <span className="mo">/mo</span></div>
+                <div className="p-price">${firmPrice} <span className="mo">/mo</span></div>
+                {annualBilling && <div className="p-billed">billed $3,348/year</div>}
                 <div className="p-desc">3 seats included + $79/mo per seat.</div>
                 <ul className="p-list">
                   <li>Unlimited clients &amp; documents</li>
@@ -1140,7 +1151,7 @@ export default function LandingPage() {
                   <li>Admin controls &amp; audit log</li>
                   <li>Dedicated support</li>
                 </ul>
-                <Link href="/sign-up" className="p-btn p-btn-ghost">Contact us</Link>
+                <Link href="/sign-up" className="p-btn p-btn-ghost">Get started &rarr;</Link>
               </div>
             </div>
           </div>
@@ -1206,13 +1217,10 @@ export default function LandingPage() {
                 <a href="#features">Features</a>
                 <a href="#pricing">Pricing</a>
                 <a href="#features">Integrations</a>
-                <a href="#comparison">Security</a>
+                <a href="#pricing">Security</a>
               </div>
               <div className="foot-col">
                 <h4>Company</h4>
-                <a href="#features">About</a>
-                <span className="foot-soon">Blog</span>
-                <span className="foot-soon">Careers</span>
                 <a href="mailto:support@callwen.com">Contact</a>
               </div>
               <div className="foot-col">
@@ -1264,7 +1272,7 @@ const landingCSS = `
   --sans: 'Outfit', -apple-system, sans-serif;
 }
 html { scroll-behavior: smooth; }
-body { background: var(--bg-deep); color: var(--white); font-family: var(--sans); font-weight: 300; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+body { background: var(--bg-deep); color: var(--white); font-family: var(--sans); font-weight: 400; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
 ::selection { background: var(--accent); color: var(--bg-deep); }
 #three-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
 .page-content { position: relative; z-index: 1; }
@@ -1323,7 +1331,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 
 /* Trust badges */
 .trust-badges-section { padding: 48px 2rem 56px; text-align: center; border-top: 1px solid rgba(201,148,74,0.06); border-bottom: 1px solid rgba(201,148,74,0.06); background: rgba(12,14,19,0.5); }
-.trust-badges-label { font-family: var(--sans); font-size: 0.68rem; font-weight: 500; letter-spacing: 0.25em; text-transform: uppercase; color: #c9944a; margin-bottom: 36px; }
+.trust-badges-label { font-family: var(--sans); font-size: 0.75rem; font-weight: 500; letter-spacing: 0.25em; text-transform: uppercase; color: #c9944a; margin-bottom: 36px; }
 .trust-badges-row { display: flex; justify-content: center; align-items: flex-start; gap: 48px; flex-wrap: wrap; max-width: 960px; margin: 0 auto; }
 .trust-badge { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.7; transition: opacity 0.3s ease; cursor: default; }
 .trust-badge:hover { opacity: 1; }
@@ -1334,13 +1342,13 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .metrics-row { display: flex; justify-content: center; align-items: center; gap: 0; max-width: 960px; margin: 0 auto; flex-wrap: wrap; }
 .metric-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 40px; }
 .metric-number { font-family: var(--serif); font-size: 2.2rem; font-weight: 600; color: var(--accent); line-height: 1; }
-.metric-label { font-size: 0.72rem; font-weight: 400; color: var(--white-dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.metric-label { font-size: 0.75rem; font-weight: 400; color: var(--white-dim); letter-spacing: 0.06em; text-transform: uppercase; }
 .metric-divider { width: 1px; height: 40px; background: rgba(201,148,74,0.15); flex-shrink: 0; }
 
 /* Workflow section */
 .workflow-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
 .workflow-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
-.workflow-heading { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; color: var(--white); }
+.workflow-heading { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; color: var(--white); text-wrap: balance; }
 .workflow-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
 .workflow-step { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 2.5rem 1.5rem; text-align: center; }
 .workflow-num { font-family: var(--serif); font-size: 1.4rem; font-weight: 600; color: var(--accent); opacity: 0.5; margin-bottom: 1rem; }
@@ -1356,16 +1364,16 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .vis-star { font-size: 1.2rem; color: rgba(255,255,255,0.12); }
 .vis-star.filled { color: #e8b06a; }
 .vis-checkin-quote { font-size: 0.78rem; font-style: italic; color: var(--white-dim); line-height: 1.6; }
-.vis-checkin-badge { display: inline-block; align-self: flex-start; font-size: 0.65rem; font-weight: 500; padding: 3px 10px; border-radius: 99px; background: var(--teal-dim); color: var(--teal); }
+.vis-checkin-badge { display: inline-block; align-self: flex-start; font-size: 0.75rem; font-weight: 500; padding: 3px 10px; border-radius: 99px; background: var(--teal-dim); color: var(--teal); }
 
 .vis-strategies { padding: 1.2rem; display: flex; flex-direction: column; gap: 0; height: 100%; justify-content: center; }
 .vis-strategy-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); gap: 8px; }
 .vis-strategy-row:last-child { border-bottom: none; }
 .vis-strat-name { font-size: 0.78rem; font-weight: 400; color: var(--white); flex: 1; }
-.vis-strat-status { font-size: 0.65rem; font-weight: 500; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.vis-strat-status { font-size: 0.75rem; font-weight: 500; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
 .vis-strat-status.implemented { background: var(--teal-dim); color: var(--teal); }
 .vis-strat-status.recommended { background: rgba(201,148,74,0.12); color: var(--accent-light); }
-.vis-strat-impact { font-size: 0.72rem; color: var(--white-dim); text-align: right; white-space: nowrap; }
+.vis-strat-impact { font-size: 0.75rem; color: var(--white-dim); text-align: right; white-space: nowrap; }
 
 .vis-health { padding: 1.5rem; display: flex; align-items: center; gap: 1.5rem; height: 100%; }
 .vis-health-gauge { flex-shrink: 0; }
@@ -1373,7 +1381,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .vis-health-metrics { display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .vis-health-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
 .vis-health-row:last-child { border-bottom: none; }
-.vis-health-label { font-size: 0.72rem; color: var(--white-dim); }
+.vis-health-label { font-size: 0.75rem; color: var(--white-dim); }
 .vis-health-val { font-size: 0.78rem; font-weight: 500; color: var(--white); }
 
 .vis-deadlines { padding: 1.5rem; display: flex; flex-direction: column; gap: 0; height: 100%; justify-content: center; }
@@ -1384,22 +1392,28 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .vis-deadline-dot.green { background: #5bb8af; }
 .vis-deadline-dot.gray { background: #6a6662; }
 .vis-deadline-task { flex: 1; font-size: 0.8rem; color: var(--white); font-weight: 400; }
-.vis-deadline-date { font-size: 0.72rem; color: var(--white-dim); white-space: nowrap; }
+.vis-deadline-date { font-size: 0.75rem; color: var(--white-dim); white-space: nowrap; }
 
 .vis-memory { padding: 1.5rem; display: flex; flex-direction: column; gap: 12px; height: 100%; justify-content: center; }
 .vis-memory-session { display: flex; align-items: flex-start; gap: 10px; }
 .vis-memory-icon { flex-shrink: 0; width: 28px; height: 28px; border-radius: 6px; background: var(--teal-dim); display: flex; align-items: center; justify-content: center; }
 .vis-memory-icon svg { width: 16px; height: 16px; stroke: var(--teal); }
 .vis-memory-title { font-size: 0.82rem; font-weight: 400; color: var(--white); margin-bottom: 2px; }
-.vis-memory-meta { font-size: 0.68rem; color: var(--white-faint); }
-.vis-memory-alert { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 6px; background: rgba(232,176,106,0.08); border: 1px solid rgba(232,176,106,0.15); font-size: 0.72rem; color: var(--accent-light); }
-.vis-memory-warn { width: 18px; height: 18px; border-radius: 50%; background: rgba(232,176,106,0.15); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: var(--accent-light); flex-shrink: 0; }
+.vis-memory-meta { font-size: 0.75rem; color: var(--white-faint); }
+.vis-memory-alert { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 6px; background: rgba(232,176,106,0.08); border: 1px solid rgba(232,176,106,0.15); font-size: 0.75rem; color: var(--accent-light); }
+.vis-memory-warn { width: 18px; height: 18px; border-radius: 50%; background: rgba(232,176,106,0.15); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--accent-light); flex-shrink: 0; }
+
+/* Mid-page CTA */
+.mid-cta { padding: 4rem 2rem; text-align: center; }
+.mid-cta h2 { font-family: var(--serif); font-size: clamp(1.8rem,3.5vw,2.5rem); font-weight: 400; margin-bottom: 1.5rem; color: var(--white); text-wrap: balance; }
+.mid-cta .btn { margin-bottom: 1rem; }
+.mid-cta-note { font-size: 0.85rem; color: var(--white-faint); }
 
 /* Integrations section */
 .integrations-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
 .integrations-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
-.integrations-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.integrations-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; line-height: 1.15; }
+.integrations-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.integrations-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; line-height: 1.15; text-wrap: balance; }
 .integrations-section h2 em { font-style: italic; color: var(--accent-light); }
 .integrations-subtitle { font-size: 0.92rem; color: var(--white-dim); margin-bottom: 3rem; font-weight: 400; }
 .integrations-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
@@ -1408,22 +1422,22 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .integration-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--accent-glow); border: 1px solid rgba(201,148,74,0.12); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.2rem; }
 .integration-icon svg { width: 22px; height: 22px; stroke: var(--accent-light); }
 .integration-card h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 500; color: var(--white); margin-bottom: 0.4rem; }
-.integration-names { font-size: 0.72rem; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 0.8rem; font-weight: 400; }
+.integration-names { font-size: 0.75rem; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 0.8rem; font-weight: 400; }
 .integration-desc { font-size: 0.78rem; line-height: 1.65; color: var(--white-dim); font-weight: 400; }
-.integration-soon-badge { display: inline-block; margin-top: 0.8rem; font-size: 0.62rem; font-weight: 500; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,0.04); color: var(--white-faint); letter-spacing: 0.06em; }
+.integration-soon-badge { display: inline-block; margin-top: 0.8rem; font-size: 0.75rem; font-weight: 500; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,0.04); color: var(--white-faint); letter-spacing: 0.06em; }
 
 [data-reveal] { opacity: 0; transform: translateY(30px); transition: opacity 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1); }
 [data-reveal].visible { opacity: 1; transform: translateY(0); }
 
 .sections { max-width: 1200px; margin: 0 auto; }
-.section { min-height: 100vh; display: flex; align-items: center; justify-content: flex-start; gap: 4rem; padding: 6rem 2rem; }
+.section { display: flex; align-items: center; justify-content: flex-start; gap: 4rem; padding: 5rem 2rem; }
 .section.right { flex-direction: row-reverse; text-align: right; }
 .section .number { font-family: var(--serif); font-size: clamp(5rem,10vw,9rem); font-weight: 700; color: var(--accent); opacity: 0.12; line-height: 1; flex-shrink: 0; }
 .section .content { max-width: 560px; }
-.section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3.2rem); font-weight: 400; margin-bottom: 1.5rem; line-height: 1.1; }
+.section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3.2rem); font-weight: 400; margin-bottom: 1.5rem; line-height: 1.1; text-wrap: balance; }
 .section h2 em { font-style: italic; color: var(--accent-light); }
 .section p { font-size: clamp(0.95rem,1.5vw,1.1rem); line-height: 1.8; color: var(--white-dim); font-weight: 400; }
-.section .tag { display: inline-block; margin-top: 1.5rem; font-size: 0.68rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--teal); border: 1px solid var(--teal-dim); padding: 0.5em 1.2em; border-radius: 3px; }
+.section .tag { display: inline-block; margin-top: 1.5rem; font-size: 0.75rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--teal); border: 1px solid var(--teal-dim); padding: 0.5em 1.2em; border-radius: 3px; }
 
 .section-visual { flex-shrink: 0; width: 340px; height: 230px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.04); background: rgba(18,21,28,0.7); backdrop-filter: blur(12px); position: relative; overflow: hidden; }
 .section-visual::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(201,148,74,0.04) 0%, transparent 60%); }
@@ -1439,8 +1453,8 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 
 /* Testimonial Carousel */
 .testimonials-section { padding: 6rem 2rem; text-align: center; }
-.testimonials-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.testimonials-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
+.testimonials-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.testimonials-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; text-wrap: balance; }
 .carousel-container { position: relative; max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 1rem; }
 .carousel-track-wrapper { overflow: hidden; flex: 1; }
 .carousel-track { display: flex; transition: transform 0.5s cubic-bezier(0.4,0,0.2,1); }
@@ -1462,8 +1476,8 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 
 /* Security & Compliance */
 .security-section { padding: 6rem 2rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.03); }
-.security-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.security-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; line-height: 1.15; }
+.security-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.security-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; line-height: 1.15; text-wrap: balance; }
 .security-section h2 em { font-style: italic; color: var(--accent-light); }
 .security-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; max-width: 1100px; margin: 0 auto; }
 .security-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 2.5rem 2rem; text-align: left; }
@@ -1475,15 +1489,15 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 /* Comparison: Meeting Tools vs Callwen */
 .compare-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
 .compare-inner { max-width: 900px; margin: 0 auto; text-align: center; }
-.compare-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.compare-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; }
+.compare-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.compare-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; text-wrap: balance; }
 .compare-section h2 em { font-style: italic; color: var(--accent-light); }
 .compare-subtitle { font-size: 0.92rem; color: var(--white-dim); margin-bottom: 3rem; font-weight: 400; }
 .compare-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 2.5rem; }
 .compare-table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); }
 .compare-th { padding: 1.2rem 1.5rem; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); background: rgba(24,28,37,0.9); text-align: left; font-weight: 500; }
 .compare-th.callwen-col { text-align: left; }
-.callwen-badge { display: inline-block; background: var(--accent); color: var(--bg-deep); font-size: 0.65rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; letter-spacing: 0.1em; }
+.callwen-badge { display: inline-block; background: var(--accent); color: var(--bg-deep); font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; letter-spacing: 0.1em; }
 .compare-row { border-bottom: 1px solid rgba(255,255,255,0.03); }
 .compare-td { padding: 1rem 1.5rem; font-size: 0.82rem; line-height: 1.6; vertical-align: top; }
 .compare-td.other-col { color: var(--white-faint); font-weight: 400; width: 40%; }
@@ -1496,8 +1510,8 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 /* Audience / Who It's For */
 .audience-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
 .audience-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
-.audience-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.audience-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; line-height: 1.15; }
+.audience-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.audience-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; line-height: 1.15; text-wrap: balance; }
 .audience-section h2 em { font-style: italic; color: var(--accent-light); }
 .audience-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
 .audience-card { background: var(--bg-card); padding: 2.5rem 2rem; text-align: left; transition: all 0.3s ease; }
@@ -1514,8 +1528,8 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 /* Impact Cards */
 .impact-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
 .impact-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
-.impact-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.impact-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
+.impact-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.impact-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; text-wrap: balance; }
 .impact-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
 .impact-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 3rem 2rem; text-align: center; }
 .impact-number { font-family: var(--serif); font-size: 3rem; font-weight: 600; color: var(--accent); line-height: 1; margin-bottom: 0.4rem; }
@@ -1524,8 +1538,8 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 
 .pricing { padding: 8rem 2rem; }
 .pricing-inner { max-width: 1100px; margin: 0 auto; text-align: center; }
-.pricing .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.pricing h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; }
+.pricing .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.pricing h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; text-wrap: balance; }
 
 /* Billing toggle */
 .billing-toggle { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 1.5rem; }
@@ -1537,11 +1551,11 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .price-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
 .p-card { background: rgba(18,21,28,0.85); backdrop-filter: blur(8px); padding: 2.5rem 2rem; text-align: left; display: flex; flex-direction: column; position: relative; }
 .p-card.featured { background: rgba(24,28,37,0.9); border-top: 2px solid var(--accent); }
-.p-card.featured::before { content: 'Most popular'; position: absolute; top: -2px; left: 50%; transform: translate(-50%,-100%); font-size: 0.65rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--bg-deep); background: var(--accent); padding: 4px 14px; border-radius: 4px 4px 0 0; }
+.p-card.featured::before { content: 'Most popular'; position: absolute; top: -2px; left: 50%; transform: translate(-50%,-100%); font-size: 0.75rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--bg-deep); background: var(--accent); padding: 4px 14px; border-radius: 4px 4px 0 0; }
 .p-tier { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-dim); margin-bottom: 1rem; }
 .p-price { font-family: var(--serif); font-size: 2.8rem; font-weight: 600; margin-bottom: 0.3rem; }
 .p-price .mo { font-size: 0.9rem; font-weight: 300; color: var(--white-dim); font-family: var(--sans); }
-.p-billed { font-size: 0.72rem; color: var(--teal); margin-bottom: 0.3rem; font-weight: 400; }
+.p-billed { font-size: 0.75rem; color: var(--teal); margin-bottom: 0.3rem; font-weight: 400; }
 .p-desc { font-size: 0.82rem; color: var(--white-dim); margin-bottom: 1.8rem; line-height: 1.5; }
 .p-list { list-style: none; margin-bottom: 2rem; flex: 1; }
 .p-list li { font-size: 0.82rem; color: #ccc7bf; padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.03); position: relative; padding-left: 1.2rem; }
@@ -1554,15 +1568,15 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 
 /* FAQ */
 .faq-section { padding: 6rem 2rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.04); }
-.faq-section .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
-.faq-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 2rem; }
-.faq-filters { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 3rem; }
+.faq-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
+.faq-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 2rem; text-wrap: balance; }
+.faq-filters { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 3rem; -webkit-overflow-scrolling: touch; }
 .faq-filter { padding: 8px 18px; border-radius: 99px; font-family: var(--sans); font-size: 0.78rem; font-weight: 400; border: 1px solid rgba(255,255,255,0.08); background: transparent; color: var(--white-dim); cursor: pointer; transition: all 0.25s; }
 .faq-filter:hover { border-color: rgba(201,148,74,0.3); color: var(--white); }
 .faq-filter.active { background: var(--accent); color: var(--bg-deep); border-color: var(--accent); font-weight: 500; }
 .faq-list { max-width: 740px; margin: 0 auto; text-align: left; }
 .faq-category { margin-bottom: 2rem; }
-.faq-category-label { font-size: 0.68rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(201,148,74,0.12); }
+.faq-category-label { font-size: 0.75rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(201,148,74,0.12); }
 .faq-item { border-bottom: 1px solid rgba(255,255,255,0.05); }
 .faq-q { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 1.2rem 0; cursor: pointer; background: none; border: none; font-family: var(--sans); font-size: 0.95rem; font-weight: 400; color: var(--white); transition: color 0.25s; text-align: left; }
 .faq-q:hover { color: var(--accent-light); }
@@ -1570,7 +1584,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .faq-a { padding: 0 0 1.5rem; font-size: 0.88rem; line-height: 1.8; color: var(--white-dim); font-weight: 400; }
 
 .finale { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem; }
-.finale .overline { font-size: 0.7rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
+.finale .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
 .finale h2 { font-family: var(--serif); font-size: clamp(2.5rem,6vw,4.5rem); font-weight: 400; line-height: 1.1; margin-bottom: 1.5rem; color: var(--white); }
 .finale-rule { width: 50px; height: 1px; background: var(--accent); margin: 0 auto 1.5rem; opacity: 0.6; }
 .finale h2 em { font-style: italic; color: var(--accent-light); }
@@ -1634,7 +1648,7 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .audience-grid { grid-template-columns: 1fr; }
   .compare-td { font-size: 0.78rem; padding: 0.8rem 1rem; }
   .faq-filters { gap: 6px; }
-  .faq-filter { padding: 6px 14px; font-size: 0.72rem; }
+  .faq-filter { padding: 6px 14px; font-size: 0.75rem; }
   .impact-grid { grid-template-columns: 1fr; }
   .price-grid { grid-template-columns: 1fr 1fr; }
   .carousel-slide { min-width: 100%; }
@@ -1652,15 +1666,17 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
 }
 @media (max-width:600px) {
   .price-grid { grid-template-columns: 1fr; }
-  .hero-buttons { flex-direction: column; align-items: center; }
+  .hero-buttons { flex-wrap: wrap; justify-content: center; }
+  .hero-buttons .btn { flex-shrink: 0; }
   .metrics-row { flex-direction: column; gap: 20px; }
   .metric-divider { width: 40px; height: 1px; }
   .workflow-grid { grid-template-columns: 1fr; }
-  .integrations-grid { grid-template-columns: 1fr 1fr; }
-  .faq-filters { display: none; }
+  .integrations-grid { grid-template-columns: 1fr; }
+  .faq-filters { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
+  .faq-filter { white-space: nowrap; flex-shrink: 0; }
   .trust-badges-row { gap: 32px 24px; max-width: 320px; }
   .trust-badge svg { width: 32px; height: 32px; }
-  .trust-badge-label { font-size: 0.6rem; max-width: 90px; }
+  .trust-badge-label { font-size: 0.75rem; max-width: 90px; }
   .security-grid { grid-template-columns: 1fr; }
   .cookie-inner { flex-direction: column; gap: 1rem; }
   .cookie-buttons { justify-content: flex-end; }
