@@ -20,6 +20,7 @@ import {
   createIntegrationsApi,
   createOrganizationsApi,
   createContradictionsApi,
+  createCheckinsApi,
 } from "@/lib/api";
 
 /**
@@ -50,6 +51,7 @@ export function useApi() {
       integrations: createIntegrationsApi(getToken, orgId),
       organizations: createOrganizationsApi(getToken, orgId),
       contradictions: createContradictionsApi(getToken, orgId),
+      checkins: createCheckinsApi(getToken, orgId),
     }),
     [getToken, orgId]
   );

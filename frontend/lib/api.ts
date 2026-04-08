@@ -2861,6 +2861,106 @@ export function createContradictionsApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Check-in types ─────────────────────────────────────────────────────────
+
+export interface CheckinQuestion {
+  id: string;
+  text: string;
+  type: string; // text, textarea, rating, select, multiselect
+  options?: string[] | null;
+}
+
+export interface CheckinTemplate {
+  id: string;
+  org_id: string | null;
+  created_by: string | null;
+  name: string;
+  description: string | null;
+  questions: CheckinQuestion[];
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CheckinSendRequest {
+  template_id: string;
+  client_email: string;
+  client_name?: string | null;
+}
+
+export interface CheckinResponse {
+  id: string;
+  client_id: string;
+  template_id: string;
+  template_name: string;
+  sent_by: string;
+  sent_to_email: string;
+  sent_to_name: string | null;
+  access_token: string;
+  status: string; // pending, completed, expired
+  responses: { question_id: string; answer: unknown }[] | null;
+  response_text: string | null;
+  completed_at: string | null;
+  expires_at: string;
+  sent_at: string;
+  created_at: string;
+}
+
+export interface CheckinDetail extends Omit<CheckinResponse, "responses"> {
+  questions: {
+    id: string;
+    text: string;
+    type: string;
+    options?: string[] | null;
+    answer: unknown;
+  }[];
+}
+
+// ─── Check-ins API factory ──────────────────────────────────────────────────
+
+export function createCheckinsApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    getTemplates() {
+      return f<CheckinTemplate[]>("/checkins/templates");
+    },
+
+    createTemplate(data: { name: string; description?: string; questions: CheckinQuestion[] }) {
+      return f<CheckinTemplate>("/checkins/templates", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateTemplate(id: string, data: Partial<{ name: string; description: string; questions: CheckinQuestion[]; is_active: boolean }>) {
+      return f<CheckinTemplate>(`/checkins/templates/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteTemplate(id: string) {
+      return f<void>(`/checkins/templates/${id}`, { method: "DELETE" });
+    },
+
+    sendCheckin(clientId: string, data: CheckinSendRequest) {
+      return f<CheckinResponse>(`/clients/${clientId}/checkins/send`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    getClientCheckins(clientId: string) {
+      return f<CheckinResponse[]>(`/clients/${clientId}/checkins`);
+    },
+
+    getCheckinDetail(id: string) {
+      return f<CheckinDetail>(`/checkins/${id}`);
+    },
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.
