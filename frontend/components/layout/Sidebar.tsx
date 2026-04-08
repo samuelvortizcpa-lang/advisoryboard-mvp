@@ -33,7 +33,13 @@ const SETTINGS_NAV = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function Sidebar() {
+export default function Sidebar({
+  mobileOpen,
+  onClose,
+}: {
+  mobileOpen: boolean;
+  onClose: () => void;
+}) {
   const pathname = usePathname();
   const { getToken } = useAuth();
   const { user } = useUser();
@@ -64,10 +70,18 @@ export default function Sidebar() {
     "User";
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 flex w-56 flex-col bg-gray-50 p-3 dark:bg-gray-900">
-      {/* ── Logo ────────────────────────────────────────────────────────── */}
+    <aside
+      className={[
+        "fixed inset-y-0 left-0 flex w-56 flex-col bg-gray-50 p-3 dark:bg-gray-900 transition-transform duration-200 ease-out",
+        // Desktop: always visible, normal z-index
+        "md:translate-x-0 md:z-20",
+        // Mobile: slide in/out, higher z-index to sit above backdrop
+        mobileOpen ? "translate-x-0 z-50" : "-translate-x-full z-50",
+      ].join(" ")}
+    >
+      {/* ── Logo + mobile close ────────────────────────────────────────── */}
       <div className="flex items-center gap-2.5 pb-4 border-b border-gray-200 dark:border-gray-800">
-        <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
+        <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2.5" onClick={onClose}>
           {!isPersonalOrg && activeOrg ? (
             <>
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gray-900 dark:bg-gray-100">
@@ -88,6 +102,15 @@ export default function Sidebar() {
             </>
           )}
         </Link>
+        <button
+          onClick={onClose}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:text-gray-600 md:hidden"
+          aria-label="Close sidebar"
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
       {/* ── Primary navigation ──────────────────────────────────────────── */}
@@ -98,6 +121,7 @@ export default function Sidebar() {
             item={item}
             pathname={pathname}
             badge={item.label === "Clients" && myClientCount != null ? myClientCount : undefined}
+            onNavigate={onClose}
           />
         ))}
 
@@ -106,7 +130,7 @@ export default function Sidebar() {
           Settings
         </p>
         {SETTINGS_NAV.filter((item) => !item.adminOnly || isPersonalOrg || isAdmin).map((item) => (
-          <NavItem key={item.href} item={item} pathname={pathname} />
+          <NavItem key={item.href} item={item} pathname={pathname} onNavigate={onClose} />
         ))}
       </nav>
 
@@ -139,10 +163,12 @@ function NavItem({
   item,
   pathname,
   badge,
+  onNavigate,
 }: {
   item: { href: string; label: string; Icon: () => React.JSX.Element; exact?: boolean };
   pathname: string;
   badge?: number;
+  onNavigate?: () => void;
 }) {
   const { href, label, Icon } = item;
   const isActive = item.exact
@@ -154,6 +180,7 @@ function NavItem({
   return (
     <Link
       href={href}
+      onClick={onNavigate}
       className={[
         "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
         isActive

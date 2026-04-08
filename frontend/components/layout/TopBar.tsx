@@ -102,7 +102,7 @@ function getBreadcrumbs(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function TopBar() {
+export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
   const pathname = usePathname();
   const { getToken } = useAuth();
 
@@ -137,9 +137,20 @@ export default function TopBar() {
   const crumbs = getBreadcrumbs(pathname, clientName);
 
   return (
-    <header className="fixed left-56 right-0 top-0 z-20 flex h-[56px] items-center justify-between border-b border-gray-200 bg-white px-6">
+    <header className="fixed left-0 md:left-56 right-0 top-0 z-20 flex h-[56px] items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6">
+      {/* Hamburger — mobile only */}
+      <button
+        onClick={onMenuClick}
+        className="mr-3 flex h-9 w-9 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+        aria-label="Open sidebar"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+        </svg>
+      </button>
+
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm" aria-label="breadcrumb">
+      <nav className="flex items-center gap-1.5 text-sm flex-1" aria-label="breadcrumb">
         {crumbs.map((crumb, i) => (
           <span key={i} className="flex items-center gap-1.5">
             {i > 0 && (
