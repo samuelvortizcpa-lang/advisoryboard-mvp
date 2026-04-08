@@ -159,11 +159,13 @@ def _close_session_sync(session: ChatSession, db: Session) -> None:
     """Mark session inactive. Summary generation is best-effort."""
     session.is_active = False
     db.flush()
-    # Schedule async summary in a fire-and-forget task
+    # Schedule async summary in a fire-and-forget task.
+    # Pass only the session ID — the async task creates its own DB session
+    # to avoid DetachedInstanceError if the caller's session closes first.
     import asyncio
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(_generate_session_summary(session.id, db))
+        loop.create_task(_generate_session_summary_standalone(session.id))
     except RuntimeError:
         # No running loop — skip async summary (will be generated later)
         logger.info("No event loop for summary generation; session %s closed without summary", session.id)
@@ -176,6 +178,25 @@ async def close_session(session_id: UUID, db: Session) -> None:
         return
     session.is_active = False
     await _generate_session_summary(session_id, db)
+
+
+async def _generate_session_summary_standalone(session_id: UUID) -> None:
+    """Fire-and-forget wrapper that creates its own DB session.
+
+    Used by _close_session_sync to avoid passing the caller's SQLAlchemy
+    session to an async task (which risks DetachedInstanceError).
+    """
+    from app.core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        await _generate_session_summary(session_id, db)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Standalone summary generation failed for session %s", session_id)
+    finally:
+        db.close()
 
 
 async def _generate_session_summary(session_id: UUID, db: Session) -> None:

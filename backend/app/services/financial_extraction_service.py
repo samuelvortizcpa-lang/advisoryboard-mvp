@@ -465,16 +465,23 @@ Return a JSON array where each element has:
 Document text:
 {text}"""
 
-    client = AsyncOpenAI(api_key=get_settings().openai_api_key)
-    response = await client.chat.completions.create(
-        model=EXTRACTION_MODEL,
-        messages=[
-            {"role": "system", "content": _EXTRACTION_SYSTEM},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.0,
-        max_tokens=2000,
-    )
+    try:
+        client = AsyncOpenAI(api_key=get_settings().openai_api_key)
+        response = await client.chat.completions.create(
+            model=EXTRACTION_MODEL,
+            messages=[
+                {"role": "system", "content": _EXTRACTION_SYSTEM},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.0,
+            max_tokens=2000,
+        )
+    except Exception:
+        logger.error(
+            "Financial extraction API call failed for form_source=%s form_key=%s",
+            form_source, form_key, exc_info=True,
+        )
+        return []
 
     raw = response.choices[0].message.content or "[]"
 

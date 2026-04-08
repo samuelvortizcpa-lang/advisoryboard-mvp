@@ -253,6 +253,13 @@ async def route_completion(
                 except Exception:
                     logger.error("Failed to log Opus token usage", exc_info=True)
 
+            # Increment usage for Opus path
+            if db and user_id:
+                try:
+                    increment_usage(db, user_id, original_query_type)
+                except Exception:
+                    logger.error("Failed to increment usage for strategic query", exc_info=True)
+
             return _build_result(
                 answer, model_used, "strategic",
                 quota_remaining=quota_remaining,
@@ -361,43 +368,61 @@ async def route_completion(
         _anthropic_warned = True
 
     # ── Factual queries (or fallback) ───────────────────────────────────
-    oai = AsyncOpenAI(api_key=settings.openai_api_key)
-    response = await oai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question},
-        ],
-        temperature=0.1,
-        max_tokens=1_500,
-    )
-    answer = response.choices[0].message.content or "No answer generated."
-    model_used = "gpt-4o-mini"
-    logger.info("Query answered by GPT-4o-mini")
+    try:
+        oai = AsyncOpenAI(api_key=settings.openai_api_key)
+        response = await oai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": question},
+            ],
+            temperature=0.1,
+            max_tokens=1_500,
+        )
+        answer = response.choices[0].message.content or "No answer generated."
+        model_used = "gpt-4o-mini"
+        logger.info("Query answered by GPT-4o-mini")
 
-    # Log OpenAI token usage
-    if db and user_id:
-        try:
-            usage = response.usage
-            log_token_usage(
-                db,
-                user_id=user_id,
-                client_id=client_id,
-                query_type=original_query_type,
-                model="gpt-4o-mini",
-                prompt_tokens=usage.prompt_tokens if usage else 0,
-                completion_tokens=usage.completion_tokens if usage else 0,
-                endpoint="chat",
-            )
-        except Exception:
-            logger.error("Failed to log GPT token usage", exc_info=True)
+        # Log OpenAI token usage
+        if db and user_id:
+            try:
+                usage = response.usage
+                log_token_usage(
+                    db,
+                    user_id=user_id,
+                    client_id=client_id,
+                    query_type=original_query_type,
+                    model="gpt-4o-mini",
+                    prompt_tokens=usage.prompt_tokens if usage else 0,
+                    completion_tokens=usage.completion_tokens if usage else 0,
+                    endpoint="chat",
+                )
+            except Exception:
+                logger.error("Failed to log GPT token usage", exc_info=True)
 
-    return _build_result(
-        answer, model_used, original_query_type,
-        quota_remaining=quota_remaining,
-        quota_warning=quota_warning,
-        quota_warning_message=quota_warning_message,
-    )
+        # Increment usage for factual/fallback path
+        if db and user_id:
+            try:
+                increment_usage(db, user_id, original_query_type)
+            except Exception:
+                logger.error("Failed to increment usage for factual query", exc_info=True)
+
+        return _build_result(
+            answer, model_used, original_query_type,
+            quota_remaining=quota_remaining,
+            quota_warning=quota_warning,
+            quota_warning_message=quota_warning_message,
+        )
+    except Exception:
+        logger.exception("GPT-4o-mini call failed — all models unavailable")
+        return _build_result(
+            "I'm temporarily unable to process your question. Please try again in a moment.",
+            "none",
+            original_query_type,
+            quota_remaining=quota_remaining,
+            quota_warning=quota_warning,
+            quota_warning_message=quota_warning_message,
+        )
 
 
 async def route_completion_stream(
