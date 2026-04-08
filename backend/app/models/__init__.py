@@ -39,6 +39,8 @@ from app.models.engagement_template import EngagementTemplate
 from app.models.engagement_template_task import EngagementTemplateTask
 from app.models.client_engagement import ClientEngagement
 from app.models.data_contradiction import DataContradiction
+from app.models.checkin_template import CheckinTemplate
+from app.models.checkin_response import CheckinResponse
 
 __all__ = [
     "User",
@@ -82,4 +84,6 @@ __all__ = [
     "EngagementTemplateTask",
     "ClientEngagement",
     "DataContradiction",
+    "CheckinTemplate",
+    "CheckinResponse",
 ]
