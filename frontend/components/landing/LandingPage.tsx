@@ -10,23 +10,23 @@ const faqCategories = [
     items: [
       {
         q: 'How is Callwen different from meeting tools like Brieff or Jump AI?',
-        a: 'Meeting tools like Brieff and Jump AI excel at structuring conversations and capturing notes \u2014 and they\u2019re great at what they do. Callwen operates at a different layer. We analyze your full client document corpus \u2014 tax returns, financial statements, meeting recordings, emails, client check-ins \u2014 and make it all queryable with AI. When you ask Callwen a question, you get answers sourced from years of client history, not just the last meeting. Think of it this way: meeting tools help you run a better conversation. Callwen ensures you have the right information to make that conversation count. Many firms use both \u2014 one for the workflow, one for the knowledge.',
+        a: 'Meeting tools are great at structuring conversations and capturing notes. Callwen does something different. It analyzes your full document history (tax returns, financials, recordings, emails, check-ins) and makes all of it queryable with AI. When you ask a question, you get answers from years of client history, not just the last meeting. Many firms use both.',
       },
       {
-        q: 'What kinds of questions can I ask Callwen?',
-        a: 'Anything you\u2019d ask a colleague who memorized every client document. For example: \u201cWhat was John\u2019s AGI trend over the last 3 years?\u201d or \u201cWhat strategies are we missing for this S-Corp client?\u201d or \u201cWhat did my client say was keeping them up at night in their last check-in?\u201d or \u201cAre there any contradictions between the 2024 and 2023 returns?\u201d Callwen pulls answers from every document, check-in, conversation, and financial metric in the system \u2014 with source citations so you can verify.',
+        q: 'What kinds of questions can I ask?',
+        a: 'Anything you\'d ask a colleague who memorized every client document. "What was John\'s AGI trend over the last 3 years?" or "What strategies are we missing for this S-Corp?" or "Are there contradictions between the 2024 and 2023 returns?" Every answer includes source citations so you can verify.',
       },
       {
         q: 'What document types does Callwen support?',
-        a: 'Callwen processes PDFs, scanned documents (via OCR), audio and video recordings (with automatic transcription), spreadsheets, and email files. It auto-classifies 12+ tax document types including Form 1040, W-2, K-1, 1099, 1120-S, 1065, 1041, and more. It also extracts 63 structured financial metrics from supported forms \u2014 so you can ask about specific numbers, not just general content.',
+        a: 'PDFs, scanned documents (OCR), audio and video recordings (auto-transcribed), spreadsheets, and email files. It auto-classifies 12+ tax document types including 1040, W-2, K-1, 1099, 1120-S, 1065, and 1041. It also extracts 63 financial metrics from supported forms.',
       },
       {
         q: 'How does the Tax Strategy Matrix work?',
-        a: 'Callwen tracks 15+ common tax strategies per client \u2014 from QBI deductions to cost segregation studies to retirement plan contributions. Each strategy has an implementation status, estimated dollar impact, and year-over-year comparison. The AI can also auto-suggest applicable strategies based on a client\u2019s uploaded documents and financial profile.',
+        a: 'It tracks 15+ tax strategies per client, from QBI deductions to cost segregation to retirement contributions. You can see implementation status, estimated dollar impact, and year-over-year comparisons. The AI also suggests strategies based on a client\'s documents.',
       },
       {
         q: 'What are Client Check-ins?',
-        a: 'Check-ins are customizable questionnaires you send to clients before meetings \u2014 via email, no login required. Clients answer questions about how their business is going, what\u2019s changed, and what they want to discuss. Their responses feed directly into Callwen\u2019s AI, so every feature automatically has richer context about each client. Think of it as capturing the information that never makes it into a tax return.',
+        a: 'Short questionnaires you send to clients before meetings via email. No login required. Clients answer questions about what\'s changed and what they want to discuss. Their responses feed into the AI, so you walk in already knowing what\'s on their mind.',
       },
     ],
   },
@@ -35,15 +35,15 @@ const faqCategories = [
     items: [
       {
         q: 'How long does it take to get set up?',
-        a: 'Most users are up and running in under 5 minutes. Sign up, upload your first document, and start asking questions immediately. There\u2019s a guided onboarding wizard that walks you through creating your first client, uploading documents, and using the AI chat. No IT department needed.',
+        a: 'Under 5 minutes. Sign up, upload your first document, and start asking questions. No IT department needed.',
       },
       {
         q: 'Can I use Callwen with my existing tools?',
-        a: 'Yes. Callwen integrates with Gmail, Outlook, Zoom, and Fathom for meeting recordings, and has a Chrome extension for capturing web content directly into client files. It complements your existing CRM, practice management software, and tax preparation tools \u2014 it doesn\u2019t replace them.',
+        a: 'Yes. It connects with Gmail, Outlook, Zoom, and Fathom. It\'s meant to complement your existing CRM and tax prep tools, not replace them.',
       },
       {
         q: 'Can my whole team use Callwen?',
-        a: 'Absolutely. Callwen supports multi-user organizations with role-based access, client assignments, and shared document libraries. The Firm tier includes 3 seats with additional seats at $79/month. Team members see only the clients assigned to them unless given broader access.',
+        a: 'Yes. The Firm tier includes 3 seats with additional seats at $79/month. You get role-based access, client assignments, and shared document libraries. Team members only see the clients assigned to them.',
       },
     ],
   },
@@ -52,19 +52,19 @@ const faqCategories = [
     items: [
       {
         q: 'Is there a free plan?',
-        a: 'Yes. The free tier includes 5 clients, unlimited document uploads, 50 AI queries per month, and 5 client check-ins per month. No credit card required. It\u2019s a fully functional version of the product \u2014 not a limited demo.',
+        a: 'Yes. 5 clients, unlimited documents, 50 AI queries per month. No credit card required. It\'s the full product, not a limited demo.',
       },
       {
-        q: 'What\u2019s the difference between Standard, Advanced, and Premium AI analysis?',
-        a: 'Standard analysis handles straightforward document lookups \u2014 \u201cWhat was this client\u2019s W-2 income?\u201d Advanced analysis handles comparisons and synthesis across multiple documents. Premium analysis provides strategic recommendations and tax planning insights. All tiers include all three levels \u2014 the difference is how many advanced and premium queries are included per month.',
+        q: 'What\'s the difference between Standard, Advanced, and Premium analysis?',
+        a: 'Standard handles simple lookups like "What was this client\'s W-2 income?" Advanced compares and synthesizes across multiple documents. Premium gives strategic recommendations and tax planning insights. All plans include all three levels. The difference is how many of each you get per month.',
       },
       {
         q: 'Can I change or cancel my plan?',
-        a: 'Yes. All plans are month-to-month with no long-term contracts. You can upgrade, downgrade, or cancel at any time from your account settings. Annual plans offer a 20% discount and can also be cancelled.',
+        a: 'Yes. Month-to-month, no contracts. Cancel anytime from your settings. Annual plans save 20% and can also be cancelled.',
       },
       {
         q: 'Do you offer a trial?',
-        a: 'The free tier is essentially an unlimited trial \u2014 5 clients, no time limit, no credit card. Use it as long as you want. When you\u2019re ready for more clients or more AI queries, upgrade to a paid plan.',
+        a: 'The free tier is basically an unlimited trial. 5 clients, no time limit, no credit card. Upgrade when you need more.',
       },
     ],
   },
@@ -73,19 +73,19 @@ const faqCategories = [
     items: [
       {
         q: 'How secure is my data?',
-        a: 'All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Client documents are stored in US-based data centers via Supabase. All AI processing uses commercial APIs with zero data retention policies \u2014 your client data is never used to train AI models and is never stored by AI providers.',
+        a: 'AES-256 encryption at rest, TLS 1.3 in transit. US-based data centers. All AI processing uses commercial APIs with zero data retention. Your data is never used to train models.',
       },
       {
         q: 'What is IRC Section 7216 and why does it matter?',
-        a: 'Section 7216 of the Internal Revenue Code requires CPAs to obtain written taxpayer consent before disclosing or using tax return information with third-party services \u2014 including AI tools. Most AI platforms ignore this entirely. Callwen has built-in tiered consent tracking with e-signature workflow, so you can document compliance for every client before uploading their tax documents.',
+        a: 'It requires CPAs to get written consent before using tax return info with third-party services, including AI tools. Most platforms ignore this. Callwen has built-in consent tracking with e-signature, so you\'re compliant before you upload anything.',
       },
       {
-        q: 'Who can see my clients\u2019 data?',
-        a: 'Only authorized users in your organization. Callwen uses organization-scoped data isolation \u2014 your data is completely separate from every other firm on the platform. Within your org, you can control access at the client level through team assignments.',
+        q: 'Who can see my clients\' data?',
+        a: 'Only people in your organization. Your data is completely separate from every other firm on the platform. You control access at the client level through team assignments.',
       },
       {
         q: 'Does Callwen use my data to train AI models?',
-        a: 'No. Your data is used exclusively to serve your queries. It is never shared with other customers, never used for model training, and never stored beyond what\u2019s needed to deliver your results. Our AI providers (used via API) have zero data retention agreements in place.',
+        a: 'No. Never shared, never used for training, never stored longer than needed. Our AI providers have zero data retention agreements.',
       },
     ],
   },
@@ -528,7 +528,6 @@ export default function LandingPage() {
             <div className="nav-links">
               <a href="#features">Features</a>
               <a href="#pricing">Pricing</a>
-              <a href="#extension">Extension</a>
               <Link href="/sign-in">Log in</Link>
               <Link href="/sign-up" className="nav-cta">Get started free</Link>
             </div>
@@ -544,7 +543,6 @@ export default function LandingPage() {
             <div className="mobile-menu">
               <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
-              <a href="#extension" onClick={() => setMenuOpen(false)}>Extension</a>
               <Link href="/sign-in" onClick={() => setMenuOpen(false)}>Log in</Link>
               <Link href="/sign-up" className="mobile-menu-cta" onClick={() => setMenuOpen(false)}>Get started free</Link>
             </div>
@@ -557,7 +555,7 @@ export default function LandingPage() {
             <div className="hero-left">
               <div className="hero-badge"><span className="pulse" /> AI Advisory Intelligence Platform</div>
               <h1>The AI that <em>knows</em><br />your clients as well<br />as you do.</h1>
-              <p className="subtitle">Upload tax returns, meeting recordings, and client files. Ask any question. Get cited answers in seconds. Surface strategies you missed.</p>
+              <p className="subtitle">Upload your client files, ask a question, and get an answer with the exact page cited. It&apos;s like having a colleague who&apos;s read every document in your office.</p>
               <div className="hero-buttons">
                 <Link href="/sign-up" className="btn btn-primary">
                   Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
@@ -645,7 +643,7 @@ export default function LandingPage() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
                 </div>
                 <h3>Ask</h3>
-                <p>Ask anything in plain English. Get cited answers sourced from every document in the client&apos;s history — not just the last one.</p>
+                <p>Ask anything in plain English. You&apos;ll get cited answers from the client&apos;s full history, not just the last document.</p>
               </div>
               <div className="workflow-step">
                 <div className="workflow-num">03</div>
@@ -653,7 +651,7 @@ export default function LandingPage() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"/></svg>
                 </div>
                 <h3>Discover</h3>
-                <p>Callwen surfaces tax strategies you might have missed, flags data contradictions, and tracks financial trends across years.</p>
+                <p>Callwen flags tax strategies you might have missed, catches data contradictions, and tracks financial trends across years.</p>
               </div>
               <div className="workflow-step">
                 <div className="workflow-num">04</div>
@@ -673,7 +671,7 @@ export default function LandingPage() {
             <div className="number">01</div>
             <div className="content">
               <h2>Every document,<br /><em>instantly searchable</em></h2>
-              <p>Upload tax returns, meeting recordings, emails, and financial statements. Callwen auto-classifies 12+ document types, extracts structured financial data, and makes everything queryable with AI — complete with source citations and confidence scores.</p>
+              <p>Upload tax returns, recordings, emails, and financials. Callwen auto-classifies 12+ document types, pulls out structured data, and lets you ask questions with source citations on every answer.</p>
               <span className="tag">Upload · Classify · Query</span>
             </div>
             <div className="section-visual section-visual-img" aria-hidden="true">
@@ -689,7 +687,7 @@ export default function LandingPage() {
             <div className="number">02</div>
             <div className="content">
               <h2>Walk into every meeting<br /><em>prepared</em></h2>
-              <p>Send automated check-ins before client meetings. Clients complete them in minutes — no login required. Their responses feed directly into your AI, so every question you ask already knows what&apos;s keeping your client up at night.</p>
+              <p>Send check-ins before client meetings. Clients fill them out in minutes, no login needed. Their responses go straight into the AI, so you already know what&apos;s on their mind before the meeting starts.</p>
               <span className="tag">Check-ins · No login · AI-fed</span>
             </div>
             <div className="section-visual" aria-hidden="true">
@@ -711,8 +709,8 @@ export default function LandingPage() {
           <div className="section left" data-reveal>
             <div className="number">03</div>
             <div className="content">
-              <h2>Strategies you&apos;d miss,<br /><em>surfaced automatically</em></h2>
-              <p>Track 15+ tax strategies per client with implementation status and estimated dollar impact. Year-over-year comparison shows what&apos;s working. AI proactively suggests strategies based on the full document history.</p>
+              <h2>Strategies you&apos;d miss,<br /><em>found automatically</em></h2>
+              <p>Track 15+ tax strategies for each client. See which ones you&apos;ve implemented, which ones you&apos;re missing, and how much each one is saving. The AI also suggests new strategies based on uploaded documents.</p>
               <span className="tag">Strategies · Dollar impact · YoY</span>
             </div>
             <div className="section-visual" aria-hidden="true">
@@ -740,7 +738,7 @@ export default function LandingPage() {
             <div className="number">04</div>
             <div className="content">
               <h2>Your practice,<br /><em>ready to scale or sell</em></h2>
-              <p>The Practice Book packages everything — financial trends, strategy history, communication logs, engagement health scores — into a professional export. Eliminate key-man risk and demonstrate advisory value to buyers, partners, or your future self.</p>
+              <p>The Practice Book pulls together financial trends, strategy history, communication logs, and health scores into one export. If you ever want to sell your practice or bring on a partner, everything they need is already documented.</p>
               <span className="tag">Practice Book · Health scores · Export</span>
             </div>
             <div className="section-visual" aria-hidden="true">
@@ -766,7 +764,7 @@ export default function LandingPage() {
             <div className="number">05</div>
             <div className="content">
               <h2>Never miss a deadline.<br /><em>Never chase a task.</em></h2>
-              <p>Assign engagement templates and Callwen generates every quarterly estimate reminder, every return deadline, every document request. Threaded email drafts reference prior conversations and open items automatically.</p>
+              <p>Pick an engagement template and Callwen generates all the deadlines: quarterly estimates, return due dates, document requests. Email drafts reference prior conversations and open items automatically.</p>
               <span className="tag">Deadlines · Reminders · Threaded emails</span>
             </div>
             <div className="section-visual" aria-hidden="true">
@@ -790,11 +788,11 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="section right" data-reveal id="extension">
+          <div className="section right" data-reveal>
             <div className="number">06</div>
             <div className="content">
               <h2>Context that<br /><em>compounds over time</em></h2>
-              <p>Callwen remembers every conversation, detects contradictions across documents, and logs circumstance changes automatically. The longer you use it, the smarter it gets — like institutional memory that never leaves the firm.</p>
+              <p>Callwen remembers every conversation, catches contradictions across documents, and logs changes automatically. The longer you use it, the smarter it gets. It&apos;s institutional memory that never leaves the firm.</p>
               <span className="tag">Memory · Contradictions · Sessions</span>
             </div>
             <div className="section-visual" aria-hidden="true">
@@ -830,7 +828,7 @@ export default function LandingPage() {
                 </div>
                 <h3>Email</h3>
                 <p className="integration-names">Gmail &middot; Outlook</p>
-                <p className="integration-desc">Auto-sync client emails and index every conversation for search.</p>
+                <p className="integration-desc">Sync client emails automatically. Every conversation gets indexed and searchable.</p>
               </div>
               <div className="integration-card">
                 <div className="integration-icon">
@@ -838,7 +836,7 @@ export default function LandingPage() {
                 </div>
                 <h3>Meetings</h3>
                 <p className="integration-names">Zoom &middot; Fathom</p>
-                <p className="integration-desc">Import recordings and transcripts. Every meeting becomes searchable knowledge.</p>
+                <p className="integration-desc">Import recordings and transcripts. Every meeting becomes searchable.</p>
               </div>
               <div className="integration-card">
                 <div className="integration-icon">
@@ -846,7 +844,7 @@ export default function LandingPage() {
                 </div>
                 <h3>Browser</h3>
                 <p className="integration-names">Chrome Extension</p>
-                <p className="integration-desc">Access client intelligence from any tab. Ask questions without leaving your workflow.</p>
+                <p className="integration-desc">Ask questions about any client without leaving your browser tab.</p>
               </div>
               <div className="integration-card coming-soon">
                 <div className="integration-icon">
@@ -854,7 +852,7 @@ export default function LandingPage() {
                 </div>
                 <h3>Coming Soon</h3>
                 <p className="integration-names">QuickBooks &middot; Calendar Sync</p>
-                <p className="integration-desc">Direct accounting data import and calendar-aware deadline management.</p>
+                <p className="integration-desc">Pull in accounting data directly and sync deadlines with your calendar.</p>
                 <span className="integration-soon-badge">Coming Q3 2026</span>
               </div>
             </div>
@@ -880,12 +878,12 @@ export default function LandingPage() {
                 </thead>
                 <tbody>
                   {[
-                    { other: 'Captures meeting transcripts', callwen: 'Analyzes your entire document history \u2014 tax returns, recordings, emails, check-ins' },
+                    { other: 'Captures meeting transcripts', callwen: 'Analyzes your full document history: tax returns, recordings, emails, check-ins' },
                     { other: 'AI summaries of last conversation', callwen: 'AI answers from every document, cross-referenced with financial data' },
                     { other: 'No document intelligence', callwen: '12+ document types auto-classified, 63 financial metrics extracted' },
-                    { other: 'No tax compliance features', callwen: 'Built-in IRC \u00a77216 consent tracking with e-signature' },
-                    { other: 'Context resets every meeting', callwen: 'Session memory + client journal \u2014 context that compounds over years' },
-                    { other: 'No strategy analysis', callwen: 'Tax Strategy Matrix with 15+ strategies, impact tracking, and practice book export' },
+                    { other: 'No tax compliance features', callwen: 'Built-in \u00a77216 consent tracking with e-signature' },
+                    { other: 'Context resets every meeting', callwen: 'Session memory + client journal. Context compounds over years' },
+                    { other: 'No strategy analysis', callwen: '15+ strategies tracked with dollar impact and practice book export' },
                   ].map((row, i) => (
                     <tr key={i} className="compare-row">
                       <td className="compare-td other-col">
@@ -939,7 +937,7 @@ export default function LandingPage() {
             <div className="audience-grid">
               <div className="audience-card audience-gold">
                 <h3>Solo Practitioners</h3>
-                <p>Stop drowning in client files. Callwen gives you back the hours you spend searching for information — so you can spend them advising.</p>
+                <p>Get back the hours you spend searching through client files. Spend that time advising instead.</p>
               </div>
               <div className="audience-card audience-teal">
                 <h3>Growing Firms</h3>
@@ -947,7 +945,7 @@ export default function LandingPage() {
               </div>
               <div className="audience-card audience-cream">
                 <h3>Advisory-Focused Practices</h3>
-                <p>Tax strategy tracking, client check-ins, and engagement health scoring — the tools you need to prove and grow your advisory value.</p>
+                <p>Tax strategy tracking, client check-ins, and engagement health scoring. The tools you need to prove and grow your advisory value.</p>
               </div>
             </div>
           </div>
@@ -1186,7 +1184,7 @@ export default function LandingPage() {
           <p className="overline" data-reveal>Ready?</p>
           <h2 data-reveal>Stop searching.<br />Start <em>advising.</em></h2>
           <div className="finale-rule" data-reveal />
-          <p className="finale-subtitle" data-reveal>Document intelligence. Tax strategy. Client check-ins. Practice valuation. All in one platform, built by a CPA who got tired of digging through client files.</p>
+          <p className="finale-subtitle" data-reveal>Built by a CPA who got tired of digging through client files. Now used by firms who&apos;d rather spend their time advising.</p>
           <p data-reveal>Free tier includes 5 clients and unlimited documents. No credit card required.</p>
           <Link href="/sign-up" className="cta-btn" data-reveal>
             Get started for free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
