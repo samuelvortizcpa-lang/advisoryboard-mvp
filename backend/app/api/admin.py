@@ -13,10 +13,13 @@ Routes:
   POST  /api/admin/evaluate-rag/{client_id}
   GET   /api/admin/evaluations
   GET   /api/admin/evaluations/compare
+  POST  /api/admin/reprocess-documents
+  GET   /api/admin/reprocess-status/{task_id}
 """
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 from datetime import date, datetime, timedelta, timezone
@@ -1076,3 +1079,88 @@ async def compare_evaluations_endpoint(
         },
         **comparison,
     }
+
+
+# ─── Batch Reprocessing ─────────────────────────────────────────────────────
+
+
+class ReprocessRequest(BaseModel):
+    client_id: Optional[UUID] = None
+    document_ids: Optional[List[UUID]] = None
+    force: bool = False
+
+
+@router.post(
+    "/reprocess-documents",
+    summary="Reprocess documents with new chunking strategy",
+)
+async def reprocess_documents(
+    body: ReprocessRequest,
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Reprocess selected documents with improved chunking and hybrid search.
+
+    If force=true, all matching documents are re-chunked from scratch.
+    If force=false, only unprocessed documents are queued.
+
+    Each document costs ~$0.01-0.05 in embedding calls. Start with one
+    test client before batch-processing everything.
+    """
+    from app.services.reprocess_service import reprocess_documents as _reprocess, _new_task
+
+    if not body.client_id and not body.document_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either client_id or document_ids",
+        )
+
+    # Resolve document IDs
+    if body.document_ids:
+        docs = (
+            db.query(Document)
+            .filter(Document.id.in_(body.document_ids))
+            .all()
+        )
+    else:
+        query = db.query(Document).filter(Document.client_id == body.client_id)
+        if not body.force:
+            query = query.filter(Document.processed == False)  # noqa: E712
+        docs = query.all()
+
+    if not docs:
+        return {
+            "status": "no_documents",
+            "documents_queued": 0,
+            "message": "No documents matched the criteria",
+        }
+
+    doc_ids = [d.id for d in docs]
+    task_id = _new_task(len(doc_ids))
+
+    # Fire-and-forget background task
+    asyncio.create_task(_reprocess(doc_ids, task_id))
+
+    return {
+        "status": "processing",
+        "task_id": task_id,
+        "documents_queued": len(doc_ids),
+        "message": f"Reprocessing {len(doc_ids)} document(s) in background",
+    }
+
+
+@router.get(
+    "/reprocess-status/{task_id}",
+    summary="Check batch reprocessing progress",
+)
+async def reprocess_status(
+    task_id: str,
+    _admin: None = Depends(verify_admin_access),
+) -> dict:
+    from app.services.reprocess_service import get_task_status
+
+    status = get_task_status(task_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return status
