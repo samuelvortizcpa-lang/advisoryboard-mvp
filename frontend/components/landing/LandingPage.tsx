@@ -857,32 +857,46 @@ export default function LandingPage() {
             <p className="integrations-subtitle">One-click connections. No IT department needed.</p>
             <div className="integrations-grid">
               <div className="integration-card">
-                <div className="integration-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-8.97 5.7a1.94 1.94 0 01-2.06 0L2 7"/></svg>
+                <div className="integration-logos">
+                  {/* Gmail */}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 010 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z" fill="#EA4335"/><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64" fill="#FBBC04"/><path d="M0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548" fill="#34A853"/><path d="M12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457v0L18.545 11.73 12 16.64l-6.545-4.91L0 5.457" fill="none"/><path d="M0 5.457l5.455 6.273" stroke="none" fill="#C5221F" opacity="0"/><path d="M18.545 11.73V21h3.819A1.636 1.636 0 0024 19.366V5.457L18.545 11.73z" fill="#4285F4"/><path d="M0 5.457v13.909c0 .904.732 1.636 1.636 1.636h3.819V11.73L0 5.457z" fill="#1A73E8"/>
+                  </svg>
+                  {/* Outlook */}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><path d="M24 7.387v10.478c0 .23-.08.424-.238.583a.793.793 0 01-.583.238h-8.304v-8.47l1.6 1.152 1.13-.757V9.166l-1.13.522-1.6-1.27V6.088h8.304c.23 0 .424.08.583.238.16.16.238.353.238.583z" fill="#0364B8"/><path d="M16.08 10.636l-1.204.822V8.47h-1.6v3.218l-1.956-1.448-.148.104v11.069l8.053-1.84V10.196l-1.13.757z" fill="#0078D4" opacity="0.001"/><path d="M14.875 8.47v3.987l1.204-.821 1.13-.757.866-.584V7.387a.793.793 0 00-.238-.583.793.793 0 00-.583-.238h-4.567l-.804 1.17.804 1.16h2.188z" fill="#28A8EA"/><path d="M14.875 8.47h-8.48v12.456l5.47.762V8.47z" fill="#0078D4"/><path d="M9.87 5.035H0v13.93l4.266 2.2 5.604-.852V5.035z" fill="#0364B8"/><ellipse cx="4.97" cy="12.09" rx="2.6" ry="3.1" fill="#fff"/><ellipse cx="4.97" cy="12.09" rx="1.7" ry="2.2" fill="#0364B8"/><path d="M14.875 8.47v12.456h8.304c.23 0 .424-.08.583-.238a.793.793 0 00.238-.583V7.387" fill="none"/><path d="M14.875 20.926l-8.48-1.257V8.47h8.48v12.456z" fill="#0364B8" opacity="0.5"/>
+                  </svg>
                 </div>
                 <h3>Email</h3>
                 <p className="integration-names">Gmail &middot; Outlook</p>
                 <p className="integration-desc">Sync client emails automatically. Every conversation gets indexed and searchable.</p>
               </div>
               <div className="integration-card">
-                <div className="integration-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                <div className="integration-logos">
+                  {/* Zoom */}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><path d="M4.585 16.56a4.585 4.585 0 01-4.585-4.585V7.44A4.585 4.585 0 014.585 2.856h8.854a4.585 4.585 0 014.585 4.585v4.534a4.585 4.585 0 01-4.585 4.585H4.585z" fill="#2D8CFF"/><path d="M18.024 9.283l4.09-2.85c.528-.37.886-.18.886.47v10.194c0 .65-.358.84-.886.47l-4.09-2.85V9.283z" fill="#2D8CFF"/><path d="M4.585 16.56a4.585 4.585 0 01-4.585-4.585V7.44A4.585 4.585 0 014.585 2.856h8.854a4.585 4.585 0 014.585 4.585v4.534a4.585 4.585 0 01-4.585 4.585H4.585z" fill="#2D8CFF"/>
+                  </svg>
+                  {/* Fathom */}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><rect width="24" height="24" rx="5" fill="#7C3AED"/><path d="M7 7h3v10H7V7zm4 3h3v7h-3v-7zm4-1h3v8h-3V9z" fill="#fff"/>
+                  </svg>
                 </div>
                 <h3>Meetings</h3>
                 <p className="integration-names">Zoom &middot; Fathom</p>
                 <p className="integration-desc">Import recordings and transcripts. Every meeting becomes searchable.</p>
               </div>
               <div className="integration-card">
-                <div className="integration-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21a9 9 0 100-18 9 9 0 000 18z"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></svg>
+                <div className="integration-logos">
+                  {/* Chrome */}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="12" r="11.5" fill="#fff"/><path d="M12 5.5h9.2a11.5 11.5 0 01-4.6 14.65L12 12V5.5z" fill="#4285F4" opacity="0"/><circle cx="12" cy="12" r="4.8" fill="#fff" stroke="#4285F4" strokeWidth="3.5"/><path d="M12 .5a11.5 11.5 0 019.2 5H12V.5z" fill="#EA4335"/><path d="M21.2 5.5A11.5 11.5 0 0116.6 20.15L12 12l9.2-6.5z" fill="#FBBC04"/><path d="M16.6 20.15A11.5 11.5 0 012.8 5.5H12l4.6 14.65z" fill="#34A853"/><path d="M2.8 5.5A11.5 11.5 0 0112 .5v5H2.8z" fill="#EA4335"/><circle cx="12" cy="12" r="4.5" fill="#4285F4"/><circle cx="12" cy="12" r="2.8" fill="#fff"/>
+                  </svg>
                 </div>
                 <h3>Browser</h3>
                 <p className="integration-names">Chrome Extension</p>
                 <p className="integration-desc">Ask questions about any client without leaving your browser tab.</p>
               </div>
               <div className="integration-card coming-soon">
-                <div className="integration-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                <div className="integration-logos">
+                  {/* QuickBooks */}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="12" r="12" fill="#2CA01C"/><path d="M7.5 7v10h1.8v-3.2h1.4c2 0 3.2-1.2 3.2-3.4S12.7 7 10.7 7H7.5zm1.8 1.5h1.3c1 0 1.5.6 1.5 1.9s-.5 1.9-1.5 1.9H9.3V8.5z" fill="#fff"/><path d="M14.3 10.2v6.8h1.7v-2.8c0-1.3.6-2 1.6-2 .2 0 .4 0 .6.1v-1.8c-.1 0-.3-.1-.5-.1-.8 0-1.4.5-1.7 1.2v-1h-1.7z" fill="#fff" opacity="0"/><path d="M15 8a7 7 0 110 8" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
                 </div>
                 <h3>Coming Soon</h3>
                 <p className="integration-names">QuickBooks &middot; Calendar Sync</p>
@@ -912,9 +926,9 @@ export default function LandingPage() {
                 </thead>
                 <tbody>
                   {[
-                    { other: 'Captures meeting transcripts', callwen: 'Analyzes your full document history: tax returns, recordings, emails, check-ins' },
-                    { other: 'AI summaries of last conversation', callwen: 'AI answers from every document, cross-referenced with financial data' },
-                    { other: 'No document intelligence', callwen: '12+ document types auto-classified, 63 financial metrics extracted' },
+                    { other: 'Captures meeting transcripts', callwen: 'Full document history: tax returns, recordings, emails, check-ins' },
+                    { other: 'AI summaries of last conversation', callwen: 'AI answers cross-referenced across every document and financial record' },
+                    { other: 'No document intelligence', callwen: '12+ doc types auto-classified, 63 financial metrics extracted' },
                     { other: 'No tax compliance features', callwen: 'Built-in \u00a77216 consent tracking with e-signature' },
                     { other: 'Context resets every meeting', callwen: 'Session memory + client journal. Context compounds over years' },
                     { other: 'No strategy analysis', callwen: '15+ strategies tracked with dollar impact and practice book export' },
@@ -1328,7 +1342,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
 
 /* Trust badges */
-.trust-badges-section { padding: 48px 2rem 56px; text-align: center; border-top: 1px solid rgba(201,148,74,0.06); border-bottom: 1px solid rgba(201,148,74,0.06); background: rgba(12,14,19,0.5); }
+.trust-badges-section { padding: 80px 2rem 88px; text-align: center; background: rgba(12,14,19,0.5); }
 .trust-badges-label { font-family: var(--sans); font-size: 0.75rem; font-weight: 500; letter-spacing: 0.25em; text-transform: uppercase; color: #c9944a; margin-bottom: 36px; }
 .trust-badges-row { display: flex; justify-content: center; align-items: flex-start; gap: 48px; flex-wrap: wrap; max-width: 960px; margin: 0 auto; }
 .trust-badge { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.7; transition: opacity 0.3s ease; cursor: default; }
@@ -1338,13 +1352,13 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 
 /* Metrics strip */
 .metrics-row { display: flex; justify-content: center; align-items: center; gap: 0; max-width: 960px; margin: 0 auto; flex-wrap: wrap; }
-.metric-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 40px; }
+.metric-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 56px; }
 .metric-number { font-family: var(--serif); font-size: 2.2rem; font-weight: 600; color: var(--accent); line-height: 1; }
 .metric-label { font-size: 0.75rem; font-weight: 400; color: var(--white-dim); letter-spacing: 0.06em; text-transform: uppercase; }
 .metric-divider { width: 1px; height: 40px; background: rgba(201,148,74,0.15); flex-shrink: 0; }
 
 /* Workflow section */
-.workflow-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.workflow-section { padding: 6rem 2rem; }
 .workflow-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
 .workflow-heading { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; color: var(--white); text-wrap: balance; }
 .workflow-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: rgba(255,255,255,0.03); border-radius: 12px; overflow: hidden; }
@@ -1408,7 +1422,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .mid-cta-note { font-size: 0.85rem; color: var(--white-faint); }
 
 /* Integrations section */
-.integrations-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.integrations-section { padding: 6rem 2rem; }
 .integrations-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
 .integrations-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .integrations-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; line-height: 1.15; text-wrap: balance; }
@@ -1419,6 +1433,8 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .integration-card.coming-soon { opacity: 0.6; }
 .integration-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--accent-glow); border: 1px solid rgba(201,148,74,0.12); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.2rem; }
 .integration-icon svg { width: 22px; height: 22px; stroke: var(--accent-light); }
+.integration-logos { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 auto 1.2rem; }
+.integration-logos svg { width: 28px; height: 28px; stroke: none; }
 .integration-card h3 { font-family: var(--sans); font-size: 0.95rem; font-weight: 500; color: var(--white); margin-bottom: 0.4rem; }
 .integration-names { font-size: 0.75rem; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 0.8rem; font-weight: 400; }
 .integration-desc { font-size: 0.78rem; line-height: 1.65; color: var(--white-dim); font-weight: 400; }
@@ -1473,7 +1489,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .testimonial-title { font-size: 0.78rem; color: var(--white-faint); }
 
 /* Security & Compliance */
-.security-section { padding: 6rem 2rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.03); }
+.security-section { padding: 6rem 2rem; text-align: center; }
 .security-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .security-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; line-height: 1.15; text-wrap: balance; }
 .security-section h2 em { font-style: italic; color: var(--accent-light); }
@@ -1485,7 +1501,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .security-card p { font-size: 0.82rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
 
 /* Comparison: Meeting Tools vs Callwen */
-.compare-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.compare-section { padding: 6rem 2rem; }
 .compare-inner { max-width: 900px; margin: 0 auto; text-align: center; }
 .compare-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .compare-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 1rem; text-wrap: balance; }
@@ -1497,16 +1513,17 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .compare-th.callwen-col { text-align: left; }
 .callwen-badge { display: inline-block; background: var(--accent); color: var(--bg-deep); font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; letter-spacing: 0.1em; }
 .compare-row { border-bottom: 1px solid rgba(255,255,255,0.03); }
-.compare-td { padding: 1rem 1.5rem; font-size: 0.82rem; line-height: 1.6; vertical-align: top; }
+.compare-row:nth-child(even) td { background: rgba(255,255,255,0.015); }
+.compare-td { padding: 0.8rem 1.5rem; font-size: 0.82rem; line-height: 1.6; vertical-align: top; min-height: 56px; display: flex; align-items: center; gap: 10px; }
 .compare-td.other-col { color: var(--white-faint); font-weight: 400; width: 40%; }
-.compare-td.callwen-col { color: var(--white-dim); font-weight: 400; }
-.compare-x { width: 14px; height: 14px; color: #e05252; display: inline-block; vertical-align: middle; margin-right: 8px; flex-shrink: 0; }
-.compare-check { width: 14px; height: 14px; color: var(--teal); display: inline-block; vertical-align: middle; margin-right: 8px; flex-shrink: 0; }
+.compare-td.callwen-col { color: var(--white-dim); font-weight: 400; font-size: 0.8rem; line-height: 1.5; }
+.compare-x { width: 20px; height: 20px; color: #e05252; display: inline-block; vertical-align: middle; flex-shrink: 0; }
+.compare-check { width: 20px; height: 20px; color: var(--teal); display: inline-block; vertical-align: middle; flex-shrink: 0; }
 .compare-cta { display: inline-block; font-size: 0.88rem; font-weight: 500; color: var(--accent); text-decoration: none; transition: color 0.2s; }
 .compare-cta:hover { color: var(--accent-light); }
 
 /* Audience / Who It's For */
-.audience-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.audience-section { padding: 6rem 2rem; }
 .audience-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
 .audience-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .audience-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; line-height: 1.15; text-wrap: balance; }
@@ -1524,7 +1541,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .audience-cream { border-top: 2px solid rgba(240,237,230,0.15); }
 
 /* Impact Cards */
-.impact-section { padding: 6rem 2rem; border-top: 1px solid rgba(255,255,255,0.03); }
+.impact-section { padding: 6rem 2rem; }
 .impact-inner { max-width: 1000px; margin: 0 auto; text-align: center; }
 .impact-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .impact-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 3.5rem; text-wrap: balance; }
@@ -1565,7 +1582,7 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .p-btn-ghost:hover { background: rgba(255,255,255,0.08); }
 
 /* FAQ */
-.faq-section { padding: 6rem 2rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.04); }
+.faq-section { padding: 6rem 2rem; text-align: center; }
 .faq-section .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; }
 .faq-section h2 { font-family: var(--serif); font-size: clamp(2rem,4vw,3rem); font-weight: 400; margin-bottom: 2rem; text-wrap: balance; }
 .faq-filters { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 3rem; -webkit-overflow-scrolling: touch; }
