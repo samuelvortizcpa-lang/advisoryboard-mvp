@@ -14,7 +14,7 @@ const faqCategories = [
       },
       {
         q: 'What kinds of questions can I ask?',
-        a: 'Anything you\'d ask a colleague who memorized every client document. "What was John\'s AGI trend over the last 3 years?" or "What strategies are we missing for this S-Corp?" or "Are there contradictions between the 2024 and 2023 returns?" Every answer includes source citations so you can verify.',
+        a: 'Anything you would ask a colleague who memorized every client document. "What was John\'s AGI trend over the last 3 years?" or "What strategies are we missing for this S-Corp?" or "Are there contradictions between the 2024 and 2023 returns?" Every answer includes source citations so you can verify.',
       },
       {
         q: 'What document types does Callwen support?',
@@ -26,7 +26,7 @@ const faqCategories = [
       },
       {
         q: 'What are Client Check-ins?',
-        a: 'Short questionnaires you send to clients before meetings via email. No login required. Clients answer questions about what\'s changed and what they want to discuss. Their responses feed into the AI, so you walk in already knowing what\'s on their mind.',
+        a: 'Short questionnaires you send to clients before meetings via email. No login required. Clients answer questions about what has changed and what they want to discuss. Their responses feed into the AI, so you walk in already knowing what is on their mind.',
       },
     ],
   },
@@ -39,7 +39,7 @@ const faqCategories = [
       },
       {
         q: 'Can I use Callwen with my existing tools?',
-        a: 'Yes. It connects with Gmail, Outlook, Zoom, and Fathom. It\'s meant to complement your existing CRM and tax prep tools, not replace them.',
+        a: 'Yes. It connects with Gmail, Outlook, Zoom, and Fathom. It is meant to complement your existing CRM and tax prep tools, not replace them.',
       },
       {
         q: 'Can my whole team use Callwen?',
@@ -52,10 +52,10 @@ const faqCategories = [
     items: [
       {
         q: 'Is there a free plan?',
-        a: 'Yes. 5 clients, unlimited documents, 50 AI queries per month. No credit card required. It\'s the full product, not a limited demo.',
+        a: 'Yes. 5 clients, unlimited documents, 50 AI queries per month. No credit card required. It is the full product, not a limited demo.',
       },
       {
-        q: 'What\'s the difference between Standard, Advanced, and Premium analysis?',
+        q: 'What is the difference between Standard, Advanced, and Premium analysis?',
         a: 'Standard handles simple lookups like "What was this client\'s W-2 income?" Advanced compares and synthesizes across multiple documents. Premium gives strategic recommendations and tax planning insights. All plans include all three levels. The difference is how many of each you get per month.',
       },
       {
@@ -77,7 +77,7 @@ const faqCategories = [
       },
       {
         q: 'What is IRC Section 7216 and why does it matter?',
-        a: 'It requires CPAs to get written consent before using tax return info with third-party services, including AI tools. Most platforms ignore this. Callwen has built-in consent tracking with e-signature, so you\'re compliant before you upload anything.',
+        a: 'It requires CPAs to get written consent before using tax return info with third-party services, including AI tools. Most platforms ignore this. Callwen has built-in consent tracking with e-signature, so you are compliant before you upload anything.',
       },
       {
         q: 'Who can see my clients\' data?',
@@ -555,7 +555,7 @@ export default function LandingPage() {
             <div className="hero-left">
               <div className="hero-badge"><span className="pulse" /> AI Advisory Intelligence Platform</div>
               <h1>The AI that <em>knows</em><br />your clients as well<br />as you do.</h1>
-              <p className="subtitle">Upload your client files, ask a question, and get an answer with the exact page cited. It&apos;s like having a colleague who&apos;s read every document in your office.</p>
+              <p className="subtitle">Upload your client files, ask a question, and get an answer with the exact page cited. It is like having a colleague who has read every document in your office.</p>
               <div className="hero-buttons">
                 <Link href="/sign-up" className="btn btn-primary">
                   Start free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
@@ -595,7 +595,6 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <div className="rule" />
           <div className="scroll-hint">Explore</div>
         </section>
 
@@ -606,17 +605,14 @@ export default function LandingPage() {
               <span className="metric-number">63</span>
               <span className="metric-label">Financial Metrics Extracted</span>
             </div>
-            <span className="metric-divider" />
             <div className="metric-item">
               <span className="metric-number">15+</span>
               <span className="metric-label">Tax Strategies Tracked</span>
             </div>
-            <span className="metric-divider" />
             <div className="metric-item">
               <span className="metric-number">38</span>
               <span className="metric-label">Automated Deadlines</span>
             </div>
-            <span className="metric-divider" />
             <div className="metric-item">
               <span className="metric-number">{'\u00a7'}7216</span>
               <span className="metric-label">Compliant</span>
@@ -643,7 +639,7 @@ export default function LandingPage() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
                 </div>
                 <h3>Ask</h3>
-                <p>Ask anything in plain English. You&apos;ll get cited answers from the client&apos;s full history, not just the last document.</p>
+                <p>Ask anything in plain English. You will get cited answers from the client&apos;s full history, not just the last document.</p>
               </div>
               <div className="workflow-step">
                 <div className="workflow-num">03</div>
@@ -712,7 +708,7 @@ export default function LandingPage() {
             <div className="number">02</div>
             <div className="content">
               <h2>Walk into every meeting<br /><em>prepared</em></h2>
-              <p>Send check-ins before client meetings. Clients fill them out in minutes, no login needed. Their responses go straight into the AI, so you already know what&apos;s on their mind before the meeting starts.</p>
+              <p>Send check-ins before client meetings. Clients fill them out in minutes, no login needed. Their responses go straight into the AI, so you already know what is on their mind before the meeting starts.</p>
               <span className="tag">Check-ins · No login · AI-fed</span>
             </div>
             <div className="section-visual" aria-hidden="true">
@@ -734,8 +730,8 @@ export default function LandingPage() {
           <div className="section left" data-reveal>
             <div className="number">03</div>
             <div className="content">
-              <h2>Strategies you&apos;d miss,<br /><em>found automatically</em></h2>
-              <p>Track 15+ tax strategies for each client. See which ones you&apos;ve implemented, which ones you&apos;re missing, and how much each one is saving. The AI also suggests new strategies based on uploaded documents.</p>
+              <h2>Strategies you would miss,<br /><em>found automatically</em></h2>
+              <p>Track 15+ tax strategies for each client. See which ones you have implemented, which ones you are missing, and how much each one is saving. The AI also suggests new strategies based on uploaded documents.</p>
               <span className="tag">Strategies · Dollar impact · YoY</span>
             </div>
             <div className="section-visual" aria-hidden="true">
@@ -817,7 +813,7 @@ export default function LandingPage() {
             <div className="number">06</div>
             <div className="content">
               <h2>Context that<br /><em>compounds over time</em></h2>
-              <p>Callwen remembers every conversation, catches contradictions across documents, and logs changes automatically. The longer you use it, the smarter it gets. It&apos;s institutional memory that never leaves the firm.</p>
+              <p>Callwen remembers every conversation, catches contradictions across documents, and logs changes automatically. The longer you use it, the smarter it gets. It is institutional memory that never leaves the firm.</p>
               <span className="tag">Memory · Contradictions · Sessions</span>
             </div>
             <div className="section-visual" aria-hidden="true">
@@ -911,7 +907,7 @@ export default function LandingPage() {
         <div className="compare-section" data-reveal>
           <div className="compare-inner">
             <p className="overline">Why Callwen</p>
-            <h2>What meeting tools <em>can&apos;t</em> do</h2>
+            <h2>What meeting tools <em>cannot</em> do</h2>
             <p className="compare-subtitle">Meeting tools structure conversations. Callwen delivers the knowledge that makes them count.</p>
 
             <div className="compare-table-wrap">
@@ -955,7 +951,7 @@ export default function LandingPage() {
         {/* Who It's For */}
         <div className="audience-section" data-reveal>
           <div className="audience-inner">
-            <p className="overline">Who it&apos;s for</p>
+            <p className="overline">Who it is for</p>
             <h2>Built for every<br /><em>advisory practice</em></h2>
             <div className="audience-grid">
               <div className="audience-card audience-gold">
@@ -1163,7 +1159,7 @@ export default function LandingPage() {
                   <li>Admin controls &amp; audit log</li>
                   <li>Dedicated support</li>
                 </ul>
-                <a href="mailto:support@callwen.com" className="p-btn p-btn-ghost">Contact us</a>
+                <a href="mailto:info@callwen.com" className="p-btn p-btn-ghost">Contact us</a>
               </div>
             </div>
           </div>
@@ -1206,8 +1202,7 @@ export default function LandingPage() {
         <div className="finale">
           <p className="overline" data-reveal>Ready?</p>
           <h2 data-reveal>Stop searching.<br />Start <em>advising.</em></h2>
-          <div className="finale-rule" data-reveal />
-          <p className="finale-subtitle" data-reveal>Built by a CPA who got tired of digging through client files. Now used by firms who&apos;d rather spend their time advising.</p>
+          <p className="finale-subtitle" data-reveal>Built by a CPA who got tired of digging through client files. Now used by firms who would rather spend their time advising.</p>
           <p data-reveal>Free tier includes 5 clients and unlimited documents. No credit card required.</p>
           <Link href="/sign-up" className="cta-btn" data-reveal>
             Get started for free <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
@@ -1222,7 +1217,7 @@ export default function LandingPage() {
               <div className="foot-brand">
                 <div className="foot-logo">Call<span>wen</span></div>
                 <p className="foot-tagline">AI-powered document intelligence for financial professionals. Built by CPAs, for CPAs.</p>
-                <a href="mailto:support@callwen.com" className="foot-email">support@callwen.com</a>
+                <a href="mailto:info@callwen.com" className="foot-email">info@callwen.com</a>
               </div>
               <div className="foot-col">
                 <h4>Product</h4>
@@ -1233,7 +1228,7 @@ export default function LandingPage() {
               </div>
               <div className="foot-col">
                 <h4>Company</h4>
-                <a href="mailto:support@callwen.com">Contact</a>
+                <a href="mailto:info@callwen.com">Contact</a>
               </div>
               <div className="foot-col">
                 <h4>Legal</h4>
@@ -1335,7 +1330,6 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .btn-ghost { background: rgba(255,255,255,0.04); color: var(--white); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(4px); }
 .btn-ghost:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); }
 .btn svg { width: 16px; height: 16px; flex-shrink: 0; }
-.splash .rule { width: 50px; height: 1px; background: var(--accent); margin: 2.5rem auto 0; opacity: 0; animation: fadeUp 0.8s 0.9s forwards; }
 .scroll-hint { position: absolute; bottom: 2.5rem; font-size: 0.7rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--white-faint); opacity: 0; animation: fadeUp 0.8s 1.1s forwards; }
 .scroll-hint::after { content: ''; display: block; width: 1px; height: 36px; background: var(--accent); margin: 0.6rem auto 0; animation: scrollPulse 2s ease-in-out infinite; }
 @keyframes scrollPulse { 0%,100%{opacity:0.2;transform:scaleY(0.5)} 50%{opacity:0.8;transform:scaleY(1)} }
@@ -1351,11 +1345,10 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .trust-badge-label { font-family: var(--sans); font-size: 0.75rem; font-weight: 400; color: #8a8680; letter-spacing: 0.04em; line-height: 1.35; max-width: 110px; text-align: center; }
 
 /* Metrics strip */
-.metrics-row { display: flex; justify-content: center; align-items: center; gap: 0; max-width: 960px; margin: 0 auto; flex-wrap: wrap; }
-.metric-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 56px; }
+.metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); max-width: 960px; margin: 0 auto; text-align: center; }
+.metric-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .metric-number { font-family: var(--serif); font-size: 2.2rem; font-weight: 600; color: var(--accent); line-height: 1; }
 .metric-label { font-size: 0.75rem; font-weight: 400; color: var(--white-dim); letter-spacing: 0.06em; text-transform: uppercase; }
-.metric-divider { width: 1px; height: 40px; background: rgba(201,148,74,0.15); flex-shrink: 0; }
 
 /* Workflow section */
 .workflow-section { padding: 6rem 2rem; }
@@ -1601,7 +1594,6 @@ body { background: var(--bg-deep); color: var(--white); font-family: var(--sans)
 .finale { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 2rem; }
 .finale .overline { font-size: 0.75rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--accent); margin-bottom: 2rem; }
 .finale h2 { font-family: var(--serif); font-size: clamp(2.5rem,6vw,4.5rem); font-weight: 400; line-height: 1.1; margin-bottom: 1.5rem; color: var(--white); }
-.finale-rule { width: 50px; height: 1px; background: var(--accent); margin: 0 auto 1.5rem; opacity: 0.6; }
 .finale h2 em { font-style: italic; color: var(--accent-light); }
 .finale-subtitle { max-width: 560px; margin: 0 auto 1rem; font-size: 1.05rem; line-height: 1.7; color: var(--white-dim); font-weight: 400; }
 .finale p { max-width: 480px; margin: 0 auto; font-size: 0.95rem; line-height: 1.7; color: var(--white-faint); font-weight: 400; }
@@ -1655,8 +1647,8 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .section-visual { width: 100%; max-width: 360px; }
   .section-visual-img { max-width: 480px; height: auto; }
   .section-visual-ext { width: 260px; max-width: 80%; height: auto; margin: 0 auto; }
-  .metrics-row { gap: 0; }
-  .metric-item { padding: 0 24px; }
+  .metrics-row { grid-template-columns: repeat(4, 1fr); }
+  .metric-item { }
   .metric-number { font-size: 1.6rem; }
   .workflow-grid { grid-template-columns: repeat(2,1fr); }
   .integrations-grid { grid-template-columns: repeat(2,1fr); }
@@ -1683,8 +1675,7 @@ footer { padding: 4rem 2rem 2rem; border-top: 1px solid rgba(255,255,255,0.05); 
   .price-grid { grid-template-columns: 1fr; }
   .hero-buttons { flex-wrap: wrap; justify-content: center; }
   .hero-buttons .btn { flex-shrink: 0; }
-  .metrics-row { flex-direction: column; gap: 20px; }
-  .metric-divider { width: 40px; height: 1px; }
+  .metrics-row { grid-template-columns: repeat(2, 1fr); gap: 24px; }
   .workflow-grid { grid-template-columns: 1fr; }
   .integrations-grid { grid-template-columns: 1fr; }
   .faq-filters { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
