@@ -25,13 +25,14 @@ interface Message {
 
 interface Props {
   clientId: string;
+  clientName?: string;
   /** Pass the current doc list length so the status banner re-fetches when docs change */
   documentCount: number;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ClientChat({ clientId, documentCount }: Props) {
+export default function ClientChat({ clientId, clientName, documentCount }: Props) {
   const { getToken } = useAuth();
   const { activeOrg } = useOrg();
 
@@ -60,8 +61,10 @@ export default function ClientChat({ clientId, documentCount }: Props) {
   const [activeSessionTitle, setActiveSessionTitle] = useState<string | null>(null);
   const [activeSessionEndedAt, setActiveSessionEndedAt] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [fading, setFading] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messageAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ── Load persisted history on mount ────────────────────────────────────────
@@ -128,6 +131,12 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           sources: (m.sources as unknown as RagSource[]) ?? undefined,
         }))
       );
+      // Scroll to bottom instantly on session load
+      setTimeout(() => {
+        if (messageAreaRef.current) {
+          messageAreaRef.current.scrollTop = messageAreaRef.current.scrollHeight;
+        }
+      }, 0);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to load session";
       setHistoryError(msg);
@@ -139,23 +148,31 @@ export default function ClientChat({ clientId, documentCount }: Props) {
   // ── Session switching handlers ───────────────────────────────────────────
 
   function handleSessionSelect(sessionId: string) {
-    setActiveSessionId(sessionId);
-    loadSessionMessages(sessionId);
+    setFading(true);
+    setTimeout(() => {
+      setActiveSessionId(sessionId);
+      loadSessionMessages(sessionId);
+      setFading(false);
+    }, 150);
   }
 
   async function handleNewChat() {
+    setFading(true);
     try {
       const api = createSessionsApi(getToken, activeOrg?.id);
       await api.closeActiveSession(clientId);
     } catch {
       // non-fatal — session may already be closed
     }
-    setActiveSessionId(null);
-    setActiveSessionTitle(null);
-    setActiveSessionEndedAt(null);
-    setMessages([]);
-    setRefreshTrigger((n) => n + 1);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    setTimeout(() => {
+      setActiveSessionId(null);
+      setActiveSessionTitle(null);
+      setActiveSessionEndedAt(null);
+      setMessages([]);
+      setRefreshTrigger((n) => n + 1);
+      setFading(false);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }, 150);
   }
 
   // ── Fetch processing status ────────────────────────────────────────────────
@@ -351,6 +368,13 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           activeSessionId={activeSessionId}
           onSessionSelect={handleSessionSelect}
           onNewChat={handleNewChat}
+          onExportSession={async (sessionId) => {
+            try {
+              await createSessionsApi(getToken, activeOrg?.id).exportSessionPdf(clientId, sessionId);
+            } catch (err) {
+              console.error("Export failed:", err);
+            }
+          }}
           onDeleteSession={(sessionId) => {
             if (sessionId === activeSessionId) {
               setActiveSessionId(null);
@@ -461,7 +485,7 @@ export default function ClientChat({ clientId, documentCount }: Props) {
           )}
 
           {/* ── Message list ──────────────────────────────────────────── */}
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+          <div ref={messageAreaRef} className={`flex flex-1 flex-col gap-4 overflow-y-auto p-4 transition-opacity duration-150 ${fading ? "opacity-0" : "opacity-100"}`}>
             {historyLoading ? (
               <div className="flex flex-1 items-center justify-center py-8 text-gray-400">
                 <svg className="animate-spin w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none">
@@ -476,7 +500,7 @@ export default function ClientChat({ clientId, documentCount }: Props) {
                 <button onClick={() => activeSessionId ? loadSessionMessages(activeSessionId) : loadHistory()} className="text-red-500 underline text-xs">Retry</button>
               </div>
             ) : messages.length === 0 ? (
-              <EmptyState hasDocuments={hasProcessed ?? false} />
+              <EmptyState hasDocuments={hasProcessed ?? false} clientName={clientName} documentCount={documentCount} />
             ) : (
               messages.map((msg, i) => (
                 <MessageBubble
@@ -791,18 +815,31 @@ function MessageBubble({
   );
 }
 
-function EmptyState({ hasDocuments }: { hasDocuments: boolean }) {
+function EmptyState({ hasDocuments, clientName, documentCount }: { hasDocuments: boolean; clientName?: string; documentCount: number }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
-        <ChatIcon className="h-6 w-6 text-blue-600" />
+      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+        <ChatIcon className="h-7 w-7 text-blue-600" />
       </div>
-      <p className="text-sm font-medium text-gray-700">No conversation yet — ask a question to get started</p>
-      <p className="mt-1 max-w-xs text-xs text-gray-400">
+      <p className="text-sm font-medium text-gray-700">
+        {clientName
+          ? `Ask me anything about ${clientName}\u2019s documents`
+          : "Ask a question to get started"}
+      </p>
+      <p className="mt-1.5 max-w-xs text-xs text-gray-400">
         {hasDocuments
-          ? "Questions are answered using the client's uploaded documents."
+          ? `${documentCount} document${documentCount !== 1 ? "s" : ""} indexed and ready for questions about financials, filings, and more.`
           : "Upload and process documents first, then ask questions about financials, filings, and more."}
       </p>
+      {hasDocuments && (
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          {["Summarize recent filings", "Key financial changes", "Open action items"].map((q) => (
+            <span key={q} className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-500">
+              {q}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

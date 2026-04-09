@@ -17,6 +17,7 @@ interface Props {
   onSessionSelect: (sessionId: string) => void;
   onNewChat: () => void;
   onDeleteSession?: (sessionId: string) => void;
+  onExportSession?: (sessionId: string) => void;
   refreshTrigger?: number;
 }
 
@@ -64,6 +65,7 @@ export default function ChatSidebar({
   onSessionSelect,
   onNewChat,
   onDeleteSession,
+  onExportSession,
   refreshTrigger = 0,
 }: Props) {
   const { getToken } = useAuth();
@@ -239,13 +241,24 @@ export default function ChatSidebar({
                           </span>
                         )}
                       </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(s.id); }}
-                        className="ml-1 mt-0.5 flex-shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:bg-gray-200 hover:text-red-500 group-hover:opacity-100"
-                        aria-label="Delete conversation"
-                      >
-                        <TrashIcon />
-                      </button>
+                      <div className="ml-1 mt-0.5 flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        {onExportSession && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onExportSession(s.id); }}
+                            className="hidden rounded p-1 text-gray-300 hover:bg-gray-200 hover:text-blue-600 md:flex"
+                            aria-label="Download PDF"
+                          >
+                            <DownloadIcon />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(s.id); }}
+                          className="rounded p-1 text-gray-300 hover:bg-gray-200 hover:text-red-500"
+                          aria-label="Delete conversation"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -268,20 +281,24 @@ export default function ChatSidebar({
         <SidebarIcon />
       </button>
 
-      {/* Mobile overlay */}
-      {mobileOpen && (
+      {/* Mobile overlay — animated slide-out drawer */}
+      <div
+        className={[
+          "fixed inset-0 z-50 transition-colors duration-300 md:hidden",
+          mobileOpen ? "bg-black/40" : "pointer-events-none bg-transparent",
+        ].join(" ")}
+        onClick={() => setMobileOpen(false)}
+      >
         <div
-          className="fixed inset-0 z-50 bg-black/40 md:hidden"
-          onClick={() => setMobileOpen(false)}
+          className={[
+            "pointer-events-auto h-full w-[300px] shadow-xl transition-transform duration-300 ease-out",
+            mobileOpen ? "translate-x-0" : "-translate-x-full",
+          ].join(" ")}
+          onClick={(e) => e.stopPropagation()}
         >
-          <div
-            className="h-full w-[300px] shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {sidebarContent}
-          </div>
+          {sidebarContent}
         </div>
-      )}
+      </div>
 
       {/* Desktop sidebar */}
       <div className="hidden w-[300px] flex-shrink-0 border-r border-gray-200 md:block">
@@ -349,6 +366,14 @@ function SidebarIcon() {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
     </svg>
   );
 }

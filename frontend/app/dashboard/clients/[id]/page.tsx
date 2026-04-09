@@ -1266,7 +1266,7 @@ function ClientDetailContent() {
             {activeTab === "chat" && (
               <div>
                 <h2 className="mb-4 text-base font-semibold text-gray-900">Ask AI</h2>
-                <ClientChat clientId={id} documentCount={documents.length} />
+                <ClientChat clientId={id} clientName={client.name} documentCount={documents.length} />
               </div>
             )}
 
