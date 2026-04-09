@@ -27,6 +27,7 @@ import asyncio
 import logging
 import os
 import re
+import time as _time
 from uuid import UUID
 
 import sentry_sdk
@@ -55,6 +56,7 @@ from app.services.hybrid_search import reciprocal_rank_fusion
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
 
 logger = logging.getLogger(__name__)
+pipeline_logger = logging.getLogger("rag_pipeline")
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -65,6 +67,10 @@ CHAT_MODEL = "gpt-4o"
 TOP_K = 10          # chunks retrieved per query
 FETCH_K = 30        # over-fetch for keyword re-ranking
 EMBED_BATCH = 100  # OpenAI allows up to 2 048 inputs per call
+
+# Last search stats — populated by search_chunks, read by answer_question.
+# Not thread-safe, but fine for async single-threaded uvicorn.
+_last_search_stats: dict = {}
 
 DEFAULT_SYSTEM_PROMPT = """\
 You are an AI assistant for an advisory board platform used by CPA firms.
@@ -664,6 +670,8 @@ async def search_chunks(
     if not query.strip():
         return []
 
+    _search_start = _time.monotonic()
+
     # --- Financial term expansion ---
     expansion_terms, relevant_forms = expand_financial_terms(query)
     if expansion_terms:
@@ -756,12 +764,14 @@ async def search_chunks(
     else:
         merged = reciprocal_rank_fusion([vector_results])
 
-    logger.info(
-        "Hybrid search: %d vector, %d BM25, %d merged",
-        len(vector_results), len(bm25_results), len(merged),
+    _search_ms = (_time.monotonic() - _search_start) * 1000
+    pipeline_logger.info(
+        "  Hybrid search: %d vector + %d BM25 → %d merged | %.0fms",
+        len(vector_results), len(bm25_results), len(merged), _search_ms,
     )
 
     # --- Cross-encoder reranking (optional) ---
+    _rerank_start = _time.monotonic()
     rerank_input = [
         {"chunk_text": item["chunk"].chunk_text, **item}
         for item in merged
@@ -770,6 +780,21 @@ async def search_chunks(
         query=query, chunks=rerank_input, top_k=limit * 2,
     )
     merged = reranked_chunks_list
+    _rerank_ms = (_time.monotonic() - _rerank_start) * 1000
+    if did_rerank:
+        pipeline_logger.info(
+            "  Reranking: %d → %d | %.0fms",
+            len(rerank_input), len(merged), _rerank_ms,
+        )
+
+    # Capture stats for pipeline_stats in ChatResponse
+    _last_search_stats.update({
+        "vector_results": len(vector_results),
+        "bm25_results": len(bm25_results),
+        "merged_results": len(merged),
+        "reranked": did_rerank,
+        "rerank_model": "rerank-v3.5" if did_rerank else None,
+    })
 
     # Build a lookup from chunk id to the original vector distance (for confidence scoring)
     distance_by_id: dict[str, float] = {
@@ -938,7 +963,12 @@ async def answer_question(
                          "score": float, "chunk_text": str, "chunk_index": int}]
         }
     """
+    _pipeline_start = _time.monotonic()
     question = _sanitize_user_input(question)
+    pipeline_logger.info(
+        "RAG query: '%s' | client=%s",
+        question[:80], client_id,
+    )
     chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
 
     # ---- Keyword fallback: direct text search for specific phrases ----
@@ -1170,6 +1200,7 @@ async def answer_question(
         )
 
     # Classify and route to appropriate model
+    _gen_start = _time.monotonic()
     query_type = await classify_query(
         question, db=db, user_id=user_id, client_id=client_id
     )
@@ -1191,6 +1222,12 @@ async def answer_question(
     quota_remaining = route_result.get("quota_remaining")
     quota_warning = route_result.get("quota_warning")
     quota_warning_message = route_result.get("quota_warning_message")
+
+    _gen_ms = (_time.monotonic() - _gen_start) * 1000
+    pipeline_logger.info(
+        "  Generation: model=%s | type=%s | %.0fms",
+        model_used, query_type, _gen_ms,
+    )
 
     # ------------------------------------------------------------------
     # Build deduplicated source list — answer-aware page matching
@@ -1376,6 +1413,12 @@ async def answer_question(
                 "page_number": 1,
             })
 
+    _total_ms = (_time.monotonic() - _pipeline_start) * 1000
+    pipeline_logger.info(
+        "  Total pipeline: %.0fms | confidence=%s (%.1f) | sources=%d",
+        _total_ms, confidence_tier, best_score, len(sources),
+    )
+
     return {
         "answer": answer,
         "confidence_tier": confidence_tier,
@@ -1387,6 +1430,10 @@ async def answer_question(
         "quota_remaining": quota_remaining,
         "quota_warning": quota_warning,
         "quota_warning_message": quota_warning_message,
+        "pipeline_stats": {
+            **_last_search_stats,
+            "total_latency_ms": round(_total_ms),
+        },
     }
 
 

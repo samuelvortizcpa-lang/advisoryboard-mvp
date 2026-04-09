@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -157,6 +157,16 @@ class SourceItem(BaseModel):
     image_url: str | None = None
 
 
+class PipelineStats(BaseModel):
+    """Optional pipeline metadata — only included for admin/debug requests."""
+    vector_results: int = 0
+    bm25_results: int = 0
+    merged_results: int = 0
+    reranked: bool = False
+    rerank_model: Optional[str] = None
+    total_latency_ms: int = 0
+
+
 class ChatResponse(BaseModel):
     model_config = {"protected_namespaces": ()}
 
@@ -171,6 +181,7 @@ class ChatResponse(BaseModel):
     quota_warning: str | None = None
     quota_warning_message: str | None = None
     session_id: str | None = None
+    pipeline_stats: Optional[PipelineStats] = None
 
 
 class CompareRequest(BaseModel):
@@ -484,6 +495,13 @@ async def chat(
         )
     )
 
+    # Include pipeline_stats when model_override is set (debug/admin mode)
+    stats = None
+    if request.model_override:
+        raw_stats = result.get("pipeline_stats")
+        if raw_stats:
+            stats = PipelineStats(**raw_stats)
+
     return ChatResponse(
         answer=result["answer"],
         confidence_tier=result["confidence_tier"],
@@ -496,6 +514,7 @@ async def chat(
         quota_warning=result.get("quota_warning"),
         quota_warning_message=result.get("quota_warning_message"),
         session_id=str(session.id),
+        pipeline_stats=stats,
     )
 
 
