@@ -47,6 +47,7 @@ from app.api.practice_book import router as practice_book_router
 from app.api.sessions import router as sessions_router
 from app.api.contradictions import router as contradictions_router
 from app.api.checkins import checkin_router, checkin_public_router
+from app.api.pdf_export import router as pdf_export_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -272,3 +273,4 @@ app.include_router(sessions_router,            prefix="/api", tags=["sessions"])
 app.include_router(contradictions_router,      prefix="/api", tags=["contradictions"])
 app.include_router(checkin_router,             prefix="/api", tags=["checkins"])
 app.include_router(checkin_public_router,      prefix="/api/checkins/public", tags=["checkins-public"])
+app.include_router(pdf_export_router,          prefix="/api", tags=["pdf-export"])

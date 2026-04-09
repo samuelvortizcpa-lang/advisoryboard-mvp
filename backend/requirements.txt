@@ -24,8 +24,15 @@ extract-msg==0.48.0
 # Anthropic (Claude — strategic query routing)
 anthropic>=0.42.0
 
+# Cross-encoder reranking (Cohere Rerank API)
+cohere>=5.0.0
+
 # Chat export
 reportlab==4.0.9
+
+# Server-side PDF generation
+weasyprint>=62.0
+markdown>=3.5
 
 # Supabase Storage
 supabase>=2.0.0
@@ -33,6 +40,9 @@ supabase>=2.0.0
 # Google APIs (Gmail integration)
 google-api-python-client>=2.100.0
 google-auth>=2.23.0
+
+# Google Document AI (structured tax form extraction)
+google-cloud-documentai>=2.20.0
 
 # PDF page images (OCR + thumbnails)
 pdf2image>=1.17.0

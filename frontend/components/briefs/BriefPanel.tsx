@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ClientBrief } from "@/lib/api";
+import { useAuth } from "@clerk/nextjs";
+import { ClientBrief, createBriefsApi } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
 
 interface Props {
   brief: ClientBrief;
@@ -10,7 +12,11 @@ interface Props {
 
 export default function BriefPanel({ brief, onClose }: Props) {
   const [copied, setCopied] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const { getToken } = useAuth();
+  const { activeOrg } = useOrg();
 
   // Close on Escape key
   useEffect(() => {
@@ -39,48 +45,18 @@ export default function BriefPanel({ brief, onClose }: Props) {
     }
   }
 
-  function handleExportPdf() {
-    // Create a printable window with the brief content
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
-    const htmlContent = markdownToHtml(brief.content);
-    const generatedDate = new Date(brief.generated_at).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Client Brief</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px; color: #1a1a1a; }
-          h1 { font-size: 22px; border-bottom: 2px solid #2563eb; padding-bottom: 8px; margin-bottom: 20px; }
-          h2 { font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #1e40af; }
-          h3 { font-size: 14px; margin-top: 16px; margin-bottom: 6px; }
-          p { font-size: 13px; line-height: 1.6; margin: 8px 0; }
-          ul { font-size: 13px; line-height: 1.6; padding-left: 20px; }
-          li { margin: 4px 0; }
-          strong { font-weight: 600; }
-          hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0; }
-          .meta { font-size: 11px; color: #6b7280; margin-bottom: 20px; }
-          @media print { body { padding: 20px; } }
-        </style>
-      </head>
-      <body>
-        <h1>Client Meeting Brief</h1>
-        <div class="meta">Generated on ${generatedDate} · ${brief.document_count ?? 0} documents · ${brief.action_item_count ?? 0} action items</div>
-        ${htmlContent}
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+  async function handleExportPdf() {
+    setPdfLoading(true);
+    setPdfError(null);
+    try {
+      const api = createBriefsApi(getToken, activeOrg?.id);
+      const data = await api.exportPdf(brief.client_id, brief.id);
+      window.open(data.pdf_url, "_blank");
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : "PDF export failed");
+    } finally {
+      setPdfLoading(false);
+    }
   }
 
   const generatedDate = new Date(brief.generated_at).toLocaleDateString("en-US", {
@@ -132,11 +108,21 @@ export default function BriefPanel({ brief, onClose }: Props) {
             </button>
             <button
               onClick={handleExportPdf}
+              disabled={pdfLoading}
               title="Export as PDF"
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
             >
-              <PdfIcon />
-              PDF
+              {pdfLoading ? (
+                <>
+                  <SpinnerIcon />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <PdfIcon />
+                  PDF
+                </>
+              )}
             </button>
             <button
               onClick={onClose}
@@ -147,6 +133,13 @@ export default function BriefPanel({ brief, onClose }: Props) {
             </button>
           </div>
         </div>
+
+        {/* PDF error */}
+        {pdfError && (
+          <div className="mx-6 mt-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+            {pdfError}
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -296,25 +289,16 @@ function InlineMarkdown({ text }: { text: string }) {
   );
 }
 
-// Simple markdown-to-HTML for PDF export
-function markdownToHtml(md: string): string {
-  return md
-    .split("\n")
-    .map((line) => {
-      if (line.trim() === "") return "";
-      if (/^---+$/.test(line.trim())) return "<hr>";
-      if (line.startsWith("### ")) return `<h3>${line.slice(4)}</h3>`;
-      if (line.startsWith("## ")) return `<h2>${line.slice(3)}</h2>`;
-      if (line.trimStart().startsWith("- ") || line.trimStart().startsWith("* "))
-        return `<li>${line.trimStart().slice(2)}</li>`;
-      return `<p>${line}</p>`;
-    })
-    .join("\n")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
-}
-
 // ─── Icons ──────────────────────────────────────────────────────────────────
+
+function SpinnerIcon() {
+  return (
+    <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
 
 function CopyIcon() {
   return (

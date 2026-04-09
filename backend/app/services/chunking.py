@@ -4,17 +4,18 @@ Semantic text chunking for RAG.
 Strategy
 --------
 1. Split input on paragraph breaks (double newlines).
-2. Accumulate paragraphs until the current chunk would exceed CHUNK_SIZE chars.
-3. When flushing, carry CHUNK_OVERLAP chars of the previous chunk forward so
+2. Accumulate paragraphs until the current chunk would exceed the target size.
+3. When flushing, carry overlap chars of the previous chunk forward so
    context is preserved across boundaries.
-4. Paragraphs that are individually larger than CHUNK_SIZE are further split
+4. Paragraphs that are individually larger than the target are further split
    at sentence boundaries using the same overlap logic.
 
-Tuning
+Tuning (document-type-specific)
 ------
-Default:  1 500 chars / 200 overlap  (good for narrative documents)
-Financial: 500 chars / 100 overlap   (preserves line-item structure on
-           tax returns, W-2s, K-1s, invoices, and financial statements)
+Financial:   600 chars / 100 overlap  (preserves line-item structure)
+Transcript: 1800 chars / 200 overlap  (preserves conversational context)
+Email:      1200 chars / 200 overlap  (medium — single-thread messages)
+Default:    1200 chars / 200 overlap  (balanced for narrative documents)
 MIN_CHUNK_LEN = 50  chars   — discard tiny noise fragments
 """
 
@@ -23,12 +24,11 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+# Legacy constants (kept for backward compat with any direct callers)
 CHUNK_SIZE = 1_500
 CHUNK_OVERLAP = 200
 MIN_CHUNK_LEN = 50
 
-# Smaller chunks for structured financial documents so that individual
-# line items, box values, and table rows stay intact within a single chunk.
 FINANCIAL_CHUNK_SIZE = 500
 FINANCIAL_CHUNK_OVERLAP = 100
 
@@ -36,8 +36,21 @@ FINANCIAL_DOC_TYPES: set[str] = {
     "tax_return",
     "w2",
     "k1",
+    "1099",
+    "1040x",
+    "1120",
+    "1065",
     "financial_statement",
     "invoice",
+}
+
+TRANSCRIPT_DOC_TYPES: set[str] = {
+    "meeting_transcript",
+    "video_transcript",
+}
+
+EMAIL_DOC_TYPES: set[str] = {
+    "email",
 }
 
 
@@ -46,11 +59,17 @@ def get_chunk_params(document_type: Optional[str] = None) -> tuple[int, int]:
     Return (chunk_size, overlap) appropriate for the document type.
 
     Financial document types get smaller chunks to preserve line-item
-    structure (500/100); everything else uses the default (1500/200).
+    structure; transcripts get larger chunks for context; everything else
+    uses a balanced default.
     """
-    if document_type and document_type.lower() in FINANCIAL_DOC_TYPES:
-        return FINANCIAL_CHUNK_SIZE, FINANCIAL_CHUNK_OVERLAP
-    return CHUNK_SIZE, CHUNK_OVERLAP
+    dt = (document_type or "").lower()
+    if dt in FINANCIAL_DOC_TYPES:
+        return 600, 100
+    if dt in TRANSCRIPT_DOC_TYPES:
+        return 1800, 200
+    if dt in EMAIL_DOC_TYPES:
+        return 1200, 200
+    return 1200, 200
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +78,39 @@ def get_chunk_params(document_type: Optional[str] = None) -> tuple[int, int]:
 
 
 _PAGE_MARKER_RE = re.compile(r"^\[Page\s+\d+\]", re.MULTILINE)
+
+
+def smart_chunk(
+    text: str,
+    document_type: str = "general",
+    max_chars: Optional[int] = None,
+    overlap: int = 200,
+) -> list[str]:
+    """
+    Structure-aware chunking that respects paragraph and section boundaries.
+
+    Selects chunk size based on document_type, then delegates to the
+    paragraph-aware chunking pipeline (which handles [Page N] markers,
+    paragraph merging, sentence splitting for oversized paragraphs, and
+    overlap carry-forward).
+
+    Falls back to character-split for text that doesn't have clear structure.
+    """
+    if not text or not text.strip():
+        return []
+
+    # Determine sizing from document type if not explicitly provided
+    if max_chars is None:
+        max_chars, overlap = get_chunk_params(document_type)
+
+    # Normalise: collapse runs of blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+
+    # Delegate to page-marker-aware or plain paragraph chunking
+    if _PAGE_MARKER_RE.search(text):
+        return _chunk_with_page_markers(text, max_chars, overlap)
+
+    return _chunk_plain(text, max_chars, overlap)
 
 
 def chunk_text(
@@ -75,6 +127,9 @@ def chunk_text(
     page it starts on.
 
     Returns a list of non-empty strings, each at least MIN_CHUNK_LEN chars.
+
+    NOTE: Prefer smart_chunk() for new code — it selects sizing automatically
+    based on document_type.
     """
     if not text or not text.strip():
         return []
@@ -128,7 +183,7 @@ def _chunk_plain(
     chunk_size: int = CHUNK_SIZE,
     overlap: int = CHUNK_OVERLAP,
 ) -> list[str]:
-    """Original paragraph-based chunking for text without page markers."""
+    """Paragraph-based chunking for text without page markers."""
     # Split into paragraphs
     paragraphs = [p.strip() for p in re.split(r"\n\n+", text) if p.strip()]
 
@@ -187,6 +242,68 @@ def _tail_parts(parts: list[str], max_chars: int) -> list[str]:
         else:
             break
     return result
+
+
+def structure_aware_chunk(
+    pages: list[dict],
+    max_chars: int = 1200,
+    overlap: int = 200,
+) -> list[dict]:
+    """
+    Chunk based on document structure (page/block boundaries) from Document AI.
+
+    Each block is a logical unit (paragraph, table, header).
+    Merges small adjacent blocks, splits oversized ones.
+    Returns list of {"text": str, "page_number": int} with [Page N] prefix.
+    """
+    chunks: list[dict] = []
+    current_chunk = ""
+    current_page: int | None = None
+
+    for page in pages:
+        page_num = page["page_number"]
+        blocks = page.get("blocks", [{"text": page["text"], "type": "paragraph"}])
+
+        for block in blocks:
+            block_text = block["text"].strip()
+            if not block_text:
+                continue
+
+            # Oversized block: flush current, then char-split the block
+            if len(block_text) > max_chars:
+                if current_chunk.strip():
+                    chunks.append({"text": current_chunk.strip(), "page_number": current_page})
+                    current_chunk = ""
+                for i in range(0, len(block_text), max_chars - overlap):
+                    chunk_slice = block_text[i : i + max_chars].strip()
+                    if chunk_slice:
+                        chunks.append({"text": chunk_slice, "page_number": page_num})
+                continue
+
+            # Would exceed max_chars: close current chunk, carry overlap
+            if len(current_chunk) + len(block_text) + 2 > max_chars and current_chunk:
+                chunks.append({"text": current_chunk.strip(), "page_number": current_page})
+                if overlap and len(current_chunk) > overlap:
+                    current_chunk = current_chunk[-overlap:] + "\n\n" + block_text
+                else:
+                    current_chunk = block_text
+                current_page = page_num
+            else:
+                if current_chunk:
+                    current_chunk += "\n\n" + block_text
+                else:
+                    current_chunk = block_text
+                    current_page = page_num
+
+    if current_chunk.strip():
+        chunks.append({"text": current_chunk.strip(), "page_number": current_page})
+
+    # Add page markers to match existing chunk format
+    for chunk in chunks:
+        if chunk["page_number"] is not None:
+            chunk["text"] = f"[Page {chunk['page_number']}]\n{chunk['text']}"
+
+    return chunks
 
 
 def _split_sentences(text: str, chunk_size: int, overlap: int) -> list[str]:

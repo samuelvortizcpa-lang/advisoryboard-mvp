@@ -411,6 +411,7 @@ export function createRagApi(getToken: GetToken, orgId?: string) {
         quota_warning: string | null;
         quota_warning_message: string | null;
         session_id: string | null;
+        message_id: string | null;
       }) => void,
     ): Promise<void> {
       const token = await getToken();
@@ -508,6 +509,13 @@ export function createRagApi(getToken: GetToken, orgId?: string) {
       return f<BackfillResponse>(`/documents/backfill-pages`, {
         method: "POST",
       });
+    },
+
+    exportChatPdf(clientId: string, messageId: string) {
+      return f<{ pdf_url: string; size_bytes: number }>(
+        `/clients/${clientId}/chat/${messageId}/pdf`,
+        { method: "POST" }
+      );
     },
   };
 }
@@ -819,6 +827,20 @@ export function createBriefsApi(getToken: GetToken, orgId?: string) {
 
     getLatest(clientId: string) {
       return f<ClientBrief | null>(`/clients/${clientId}/briefs/latest`);
+    },
+
+    exportPdf(clientId: string, briefId: string) {
+      return f<{ pdf_url: string; size_bytes: number }>(
+        `/clients/${clientId}/briefs/${briefId}/pdf`,
+        { method: "POST" }
+      );
+    },
+
+    generateWithPdf(clientId: string) {
+      return f<{ brief_id: string; pdf_url: string; markdown: string }>(
+        `/clients/${clientId}/briefs/generate-pdf`,
+        { method: "POST" }
+      );
     },
   };
 }

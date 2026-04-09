@@ -42,7 +42,8 @@ from app.models.document_page_image import DocumentPageImage
 from app.models.checkin_response import CheckinResponse
 from app.models.checkin_template import CheckinTemplate
 from app.services import storage_service
-from app.services.chunking import chunk_text, get_chunk_params
+from app.services.chunking import chunk_text, get_chunk_params, smart_chunk, structure_aware_chunk
+from app.services.reranker import rerank_chunks
 from app.services.context_assembler import (
     ContextPurpose,
     assemble_context,
@@ -354,10 +355,18 @@ async def process_document(db: Session, document: Document) -> None:
     try:
         # 1. Extract text — download from Supabase Storage to a temp file
         temp_path = None
+        file_bytes = None  # cached for Document AI re-extraction
         try:
             temp_path = await asyncio.to_thread(
                 storage_service.get_temp_local_path, document.file_path
             )
+            # Cache file bytes before deletion (avoids second Supabase download)
+            if document.file_type == "pdf" and temp_path:
+                try:
+                    with open(temp_path, "rb") as f:
+                        file_bytes = f.read()
+                except OSError:
+                    pass
             text = await asyncio.to_thread(extract_text, temp_path, document.file_type)
         except UnsupportedFileType as exc:
             raise ValueError(str(exc)) from exc
@@ -428,9 +437,43 @@ async def process_document(db: Session, document: Document) -> None:
             )
             return
 
-        # 2. Chunk (use smaller chunks for financial documents)
+        # 1d. Re-extract with Document AI if available (best-effort)
+        docai_result = None
+        if document.file_type == "pdf" and file_bytes:
+            try:
+                from app.services.text_extraction import extract_text_with_docai
+                docai_result = await asyncio.to_thread(
+                    extract_text_with_docai, file_bytes, document.document_type
+                )
+                if docai_result:
+                    text = docai_result["text"]
+                    logger.info(
+                        "RAG: using Document AI extraction for %s (type: %s)",
+                        doc_label, document.document_type,
+                    )
+            except Exception:
+                logger.warning(
+                    "RAG: Document AI extraction failed for %s, using pdfplumber text",
+                    doc_label, exc_info=True,
+                )
+
+        # 2. Chunk (document-type-specific sizing)
         chunk_size, chunk_overlap = get_chunk_params(document.document_type)
-        chunks = await asyncio.to_thread(chunk_text, text, chunk_size, chunk_overlap)
+        if docai_result and docai_result.get("pages"):
+            # Structure-aware chunking from Document AI
+            structured_chunks = structure_aware_chunk(
+                docai_result["pages"], max_chars=chunk_size, overlap=chunk_overlap
+            )
+            chunks = [c["text"] for c in structured_chunks]
+            logger.info(
+                "RAG: structure-aware chunking: %d chunks from %d pages (size=%d, overlap=%d)",
+                len(chunks), len(docai_result["pages"]), chunk_size, chunk_overlap,
+            )
+        else:
+            # Smart chunking: respects paragraph/section boundaries with
+            # document-type-specific sizing (financial=600, transcript=1800, etc.)
+            doc_type = document.document_type or "general"
+            chunks = await asyncio.to_thread(smart_chunk, text, doc_type)
         if not chunks:
             raise ValueError("Document produced no usable text chunks after extraction.")
 
@@ -718,6 +761,16 @@ async def search_chunks(
         len(vector_results), len(bm25_results), len(merged),
     )
 
+    # --- Cross-encoder reranking (optional) ---
+    rerank_input = [
+        {"chunk_text": item["chunk"].chunk_text, **item}
+        for item in merged
+    ]
+    reranked_chunks_list, did_rerank = await rerank_chunks(
+        query=query, chunks=rerank_input, top_k=limit * 2,
+    )
+    merged = reranked_chunks_list
+
     # Build a lookup from chunk id to the original vector distance (for confidence scoring)
     distance_by_id: dict[str, float] = {
         str(chunk.id): distance for chunk, distance, _ in all_rows
@@ -762,6 +815,13 @@ async def search_chunks(
         # Two-list top-1 max is ~0.0328. Normalize to 0–5% range.
         rrf_boost = min(5.0, rrf_score * 200)
         confidence = min(100.0, confidence + rrf_boost)
+
+        # Rerank boost: if Cohere reranking scored this chunk, use it.
+        # rerank_score is 0-1 (relevance_score from Cohere). Scale to 0-15% boost.
+        rerank_score = item.get("rerank_score")
+        if rerank_score is not None:
+            rerank_boost = rerank_score * 15.0
+            confidence = min(100.0, confidence + rerank_boost)
 
         # Recency boost: +5% for chunks from non-superseded (current) documents
         doc = chunk.document
@@ -1644,4 +1704,4 @@ async def answer_question_stream(
     )
 
     # Send final event with metadata
-    yield f'data: {_json.dumps({"type": "done", "sources": sources, "confidence_tier": confidence_tier, "confidence_score": round(best_score, 2), "model_used": model_used, "query_type": query_type, "quota_remaining": quota_remaining, "quota_warning": quota_warning, "session_id": str(session.id)})}\n\n'
+    yield f'data: {_json.dumps({"type": "done", "sources": sources, "confidence_tier": confidence_tier, "confidence_score": round(best_score, 2), "model_used": model_used, "query_type": query_type, "quota_remaining": quota_remaining, "quota_warning": quota_warning, "session_id": str(session.id), "message_id": str(assistant_msg.id)})}\n\n'

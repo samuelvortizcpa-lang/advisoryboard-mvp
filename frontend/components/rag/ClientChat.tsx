@@ -12,6 +12,7 @@ import MarkdownContent from "./MarkdownContent";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Message {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   sources?: RagSource[];
@@ -77,6 +78,7 @@ export default function ClientChat({ clientId, clientName, documentCount }: Prop
       .then((res) => {
         setMessages(
           res.messages.map((m) => ({
+            id: m.id,
             role: m.role,
             content: m.content,
             sources: m.sources ?? undefined,
@@ -126,6 +128,7 @@ export default function ClientChat({ clientId, clientName, documentCount }: Prop
       setActiveSessionEndedAt(res.ended_at);
       setMessages(
         res.messages.map((m) => ({
+          id: m.id,
           role: m.role as "user" | "assistant",
           content: m.content,
           sources: (m.sources as unknown as RagSource[]) ?? undefined,
@@ -276,6 +279,7 @@ export default function ClientChat({ clientId, clientName, documentCount }: Prop
             if (last && last.role === "assistant") {
               updated[updated.length - 1] = {
                 ...last,
+                id: meta.message_id ?? undefined,
                 sources: meta.sources,
                 confidence_tier: meta.confidence_tier as "high" | "medium" | "low",
                 confidence_score: meta.confidence_score,
@@ -506,9 +510,18 @@ export default function ClientChat({ clientId, clientName, documentCount }: Prop
                 <MessageBubble
                   key={i}
                   message={msg}
+                  clientId={clientId}
                   onImageClick={(url, filename, pageNumber) =>
                     setImageModal({ url, filename, pageNumber })
                   }
+                  onExportPdf={async (messageId) => {
+                    try {
+                      const data = await createRagApi(getToken, activeOrg?.id).exportChatPdf(clientId, messageId);
+                      window.open(data.pdf_url, "_blank");
+                    } catch (err) {
+                      console.error("PDF export failed:", err);
+                    }
+                  }}
                 />
               ))
             )}
@@ -745,15 +758,19 @@ function SourceCard({
 
 function MessageBubble({
   message,
+  clientId,
   onImageClick,
+  onExportPdf,
 }: {
   message: Message;
+  clientId: string;
   onImageClick?: (url: string, filename: string, pageNumber: number) => void;
+  onExportPdf?: (messageId: string) => void;
 }) {
   const isUser = message.role === "user";
 
   return (
-    <div className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+    <div className={`group flex items-end gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
       {isUser ? <UserAvatar /> : <BotAvatar />}
 
       <div className={`max-w-[85%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1.5`}>
@@ -770,20 +787,36 @@ function MessageBubble({
           </span>
         )}
 
-        <div
-          className={[
-            "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-            isUser
-              ? "rounded-br-sm bg-blue-600 text-white whitespace-pre-wrap"
-              : message.error
-              ? "rounded-bl-sm border border-red-200 bg-red-50 text-red-700 whitespace-pre-wrap"
-              : "rounded-bl-sm bg-gray-100 text-gray-800",
-          ].join(" ")}
-        >
-          {isUser || message.error ? (
-            message.content
-          ) : (
-            <MarkdownContent content={message.content} />
+        <div className="relative">
+          <div
+            className={[
+              "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+              isUser
+                ? "rounded-br-sm bg-blue-600 text-white whitespace-pre-wrap"
+                : message.error
+                ? "rounded-bl-sm border border-red-200 bg-red-50 text-red-700 whitespace-pre-wrap"
+                : "rounded-bl-sm bg-gray-100 text-gray-800",
+            ].join(" ")}
+          >
+            {isUser || message.error ? (
+              message.content
+            ) : (
+              <MarkdownContent content={message.content} />
+            )}
+          </div>
+
+          {/* Per-message PDF export button (assistant only, on hover) */}
+          {!isUser && !message.error && message.id && onExportPdf && (
+            <button
+              type="button"
+              onClick={() => onExportPdf(message.id!)}
+              title="Export as PDF"
+              className="absolute -right-8 top-1 hidden rounded p-1 text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-500 group-hover:block"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            </button>
           )}
         </div>
 
