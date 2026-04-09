@@ -4,14 +4,14 @@ Populates the tsvector column for all rows where it's currently NULL,
 enabling BM25 hybrid search on pre-existing chunks.
 
 Revision ID: b2c3d4e5f6g7
-Revises: a1b2c3d4e5f6
+Revises: e4f5g6h7i8j9
 Create Date: 2026-04-09
 """
 
 from alembic import op
 
 revision = "b2c3d4e5f6g7"
-down_revision = "a1b2c3d4e5f6"
+down_revision = "e4f5g6h7i8j9"
 branch_labels = None
 depends_on = None
 

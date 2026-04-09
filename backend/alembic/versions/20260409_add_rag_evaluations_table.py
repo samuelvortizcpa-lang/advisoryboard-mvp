@@ -1,6 +1,6 @@
 """Add rag_evaluations table for storing RAG quality eval results.
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: e4f5g6h7i8j9
 Revises: r3s4t5u6v7w8
 Create Date: 2026-04-09
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
-revision = "a1b2c3d4e5f6"
+revision = "e4f5g6h7i8j9"
 down_revision = "r3s4t5u6v7w8"
 branch_labels = None
 depends_on = None
