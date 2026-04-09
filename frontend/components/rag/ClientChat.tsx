@@ -57,7 +57,9 @@ export default function ClientChat({ clientId, documentCount }: Props) {
 
   // Session sidebar state
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const sidebarKeyRef = useRef(0);
+  const [activeSessionTitle, setActiveSessionTitle] = useState<string | null>(null);
+  const [activeSessionEndedAt, setActiveSessionEndedAt] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -117,6 +119,8 @@ export default function ClientChat({ clientId, documentCount }: Props) {
     try {
       const api = createSessionsApi(getToken, activeOrg?.id);
       const res = await api.getSessionMessages(sessionId);
+      setActiveSessionTitle(res.title);
+      setActiveSessionEndedAt(res.ended_at);
       setMessages(
         res.messages.map((m) => ({
           role: m.role as "user" | "assistant",
@@ -147,9 +151,10 @@ export default function ClientChat({ clientId, documentCount }: Props) {
       // non-fatal — session may already be closed
     }
     setActiveSessionId(null);
+    setActiveSessionTitle(null);
+    setActiveSessionEndedAt(null);
     setMessages([]);
-    // Bump key to force sidebar to reload session list
-    sidebarKeyRef.current += 1;
+    setRefreshTrigger((n) => n + 1);
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
@@ -185,6 +190,20 @@ export default function ClientChat({ clientId, documentCount }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // ── Keyboard shortcut: Cmd/Ctrl+Shift+N for New Chat ─────────────────────
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "N") {
+        e.preventDefault();
+        handleNewChat();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, activeOrg?.id]);
 
   // ── Process documents ──────────────────────────────────────────────────────
 
@@ -250,6 +269,12 @@ export default function ClientChat({ clientId, documentCount }: Props) {
             }
             return updated;
           });
+          // Capture session_id from response and refresh sidebar
+          if (meta.session_id) {
+            setActiveSessionId(meta.session_id);
+            setActiveSessionEndedAt(null); // it's active
+          }
+          setRefreshTrigger((n) => n + 1);
         },
       );
     } catch (err) {
@@ -283,7 +308,11 @@ export default function ClientChat({ clientId, documentCount }: Props) {
   async function handleExport(format: "txt" | "pdf") {
     setExportingFormat(format);
     try {
-      await createRagApi(getToken).exportChat(clientId, format);
+      if (format === "pdf" && activeSessionId) {
+        await createSessionsApi(getToken, activeOrg?.id).exportSessionPdf(clientId, activeSessionId);
+      } else {
+        await createRagApi(getToken).exportChat(clientId, format);
+      }
     } catch (err) {
       console.error("Export failed:", err);
     } finally {
@@ -318,15 +347,38 @@ export default function ClientChat({ clientId, documentCount }: Props) {
       <div className="flex h-[600px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         {/* ── Sidebar ──────────────────────────────────────────────────── */}
         <ChatSidebar
-          key={sidebarKeyRef.current}
           clientId={clientId}
           activeSessionId={activeSessionId}
           onSessionSelect={handleSessionSelect}
           onNewChat={handleNewChat}
+          onDeleteSession={(sessionId) => {
+            if (sessionId === activeSessionId) {
+              setActiveSessionId(null);
+              setActiveSessionTitle(null);
+              setActiveSessionEndedAt(null);
+              setMessages([]);
+            }
+          }}
+          refreshTrigger={refreshTrigger}
         />
 
         {/* ── Main chat area ───────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-1 flex-col">
+
+          {/* ── Session header ─────────────────────────────────────────── */}
+          {activeSessionId && activeSessionEndedAt && activeSessionTitle && (
+            <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-4 py-1.5 text-xs text-gray-500">
+              <span>&#128203;</span>
+              <span className="font-medium text-gray-700">{activeSessionTitle}</span>
+              <span className="text-gray-400">&mdash;</span>
+              <span>{new Date(activeSessionEndedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+            </div>
+          )}
+          {!activeSessionId && messages.length === 0 && !historyLoading && (
+            <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-1.5 text-xs text-gray-400">
+              New conversation
+            </div>
+          )}
 
           {/* ── Status banner ─────────────────────────────────────────── */}
           {!statusLoading && status && (
@@ -394,8 +446,9 @@ export default function ClientChat({ clientId, documentCount }: Props) {
                 onClick={() => handleExport("pdf")}
                 disabled={exportingFormat !== null}
                 className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-40 transition-colors"
+                title={activeSessionId ? "Download this conversation as PDF" : "Export all chat history as PDF"}
               >
-                {exportingFormat === "pdf" ? "Exporting…" : "Export PDF"}
+                {exportingFormat === "pdf" ? "Exporting…" : activeSessionId ? "Export Session PDF" : "Export PDF"}
               </button>
               <span className="select-none text-gray-300">|</span>
               <button

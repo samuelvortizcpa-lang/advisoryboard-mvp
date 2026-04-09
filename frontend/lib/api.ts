@@ -410,6 +410,7 @@ export function createRagApi(getToken: GetToken, orgId?: string) {
         quota_remaining: number | null;
         quota_warning: string | null;
         quota_warning_message: string | null;
+        session_id: string | null;
       }) => void,
     ): Promise<void> {
       const token = await getToken();

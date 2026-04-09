@@ -170,6 +170,7 @@ class ChatResponse(BaseModel):
     quota_remaining: int | None = None
     quota_warning: str | None = None
     quota_warning_message: str | None = None
+    session_id: str | None = None
 
 
 class CompareRequest(BaseModel):
@@ -494,6 +495,7 @@ async def chat(
         quota_remaining=result.get("quota_remaining"),
         quota_warning=result.get("quota_warning"),
         quota_warning_message=result.get("quota_warning_message"),
+        session_id=str(session.id),
     )
 
 

@@ -1573,4 +1573,4 @@ async def answer_question_stream(
     )
 
     # Send final event with metadata
-    yield f'data: {_json.dumps({"type": "done", "sources": sources, "confidence_tier": confidence_tier, "confidence_score": round(best_score, 2), "model_used": model_used, "query_type": query_type, "quota_remaining": quota_remaining, "quota_warning": quota_warning})}\n\n'
+    yield f'data: {_json.dumps({"type": "done", "sources": sources, "confidence_tier": confidence_tier, "confidence_score": round(best_score, 2), "model_used": model_used, "query_type": query_type, "quota_remaining": quota_remaining, "quota_warning": quota_warning, "session_id": str(session.id)})}\n\n'
