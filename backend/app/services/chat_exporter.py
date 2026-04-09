@@ -24,10 +24,13 @@ def _get_messages(
     db: Session,
     client_id: UUID,
     user_id: str | None = None,
+    session_id: UUID | None = None,
 ) -> list[ChatMessage]:
     q = db.query(ChatMessage).filter(ChatMessage.client_id == client_id)
     if user_id is not None:
         q = q.filter(ChatMessage.user_id == user_id)
+    if session_id is not None:
+        q = q.filter(ChatMessage.session_id == session_id)
     return q.order_by(ChatMessage.created_at.asc()).limit(1000).all()
 
 
@@ -45,13 +48,23 @@ def _escape_html(text: str) -> str:
 
 
 def export_chat_as_txt(
-    client_id: UUID, client_name: str, db: Session, *, user_id: str | None = None,
+    client_id: UUID,
+    client_name: str,
+    db: Session,
+    *,
+    user_id: str | None = None,
+    session_id: UUID | None = None,
+    session_title: str | None = None,
 ) -> str:
-    messages = _get_messages(db, client_id, user_id=user_id)
+    messages = _get_messages(db, client_id, user_id=user_id, session_id=session_id)
+
+    header_title = "Callwen Chat History"
+    if session_title:
+        header_title += f" — {session_title}"
 
     lines = [
         "==========================================",
-        "Callwen Chat History",
+        header_title,
         f"Client: {client_name}",
         f"Export Date: {datetime.now(timezone.utc).strftime('%B %d, %Y')}",
         f"Total Messages: {len(messages)}",
@@ -87,7 +100,13 @@ def export_chat_as_txt(
 
 
 def export_chat_as_pdf(
-    client_id: UUID, client_name: str, db: Session, *, user_id: str | None = None,
+    client_id: UUID,
+    client_name: str,
+    db: Session,
+    *,
+    user_id: str | None = None,
+    session_id: UUID | None = None,
+    session_title: str | None = None,
 ) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter
@@ -95,7 +114,7 @@ def export_chat_as_pdf(
     from reportlab.lib.units import inch
     from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
 
-    messages = _get_messages(db, client_id, user_id=user_id)
+    messages = _get_messages(db, client_id, user_id=user_id, session_id=session_id)
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -161,7 +180,10 @@ def export_chat_as_pdf(
     story = []
 
     # Header
-    story.append(Paragraph("Callwen Chat History", title_style))
+    pdf_title = "Callwen Chat History"
+    if session_title:
+        pdf_title += f" — {_escape_html(session_title)}"
+    story.append(Paragraph(pdf_title, title_style))
     story.append(Paragraph(f"Client: {client_name}", meta_style))
     story.append(
         Paragraph(

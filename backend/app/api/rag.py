@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import List
 from uuid import UUID
 
@@ -679,6 +680,7 @@ async def clear_chat_history(
 async def export_chat_history(
     client_id: UUID,
     format: str = Query(..., description="Export format: 'txt' or 'pdf'"),
+    session_id: UUID | None = Query(default=None, description="Scope export to a single session"),
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth),
 ) -> StreamingResponse:
@@ -690,6 +692,27 @@ async def export_chat_history(
             detail="format must be 'txt' or 'pdf'",
         )
 
+    # If session_id provided, verify it belongs to this client and user
+    session_title: str | None = None
+    if session_id is not None:
+        from app.models.chat_session import ChatSession
+
+        session = (
+            db.query(ChatSession)
+            .filter(
+                ChatSession.id == session_id,
+                ChatSession.client_id == client_id,
+                ChatSession.user_id == auth.user_id,
+            )
+            .first()
+        )
+        if session is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found",
+            )
+        session_title = session.title
+
     # Sanitize client name for use in filename
     safe_name = (
         "".join(c if c.isalnum() or c in " -_" else "" for c in client.name)
@@ -698,23 +721,42 @@ async def export_chat_history(
         or "client"
     )
 
+    # Build filename
+    if session_title:
+        safe_session = (
+            "".join(c if c.isalnum() or c in " -_" else "" for c in session_title)
+            .strip()
+            .replace(" ", "-")[:50]
+            or "session"
+        )
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        filename_base = f"Chat_{safe_name}_{safe_session}_{date_str}"
+    else:
+        filename_base = f"chat-history-{safe_name}"
+
     from app.services.chat_exporter import export_chat_as_pdf, export_chat_as_txt
 
+    export_kwargs = dict(
+        user_id=auth.user_id,
+        session_id=session_id,
+        session_title=session_title,
+    )
+
     if format == "txt":
-        content = export_chat_as_txt(client_id, client.name, db, user_id=auth.user_id)
+        content = export_chat_as_txt(client_id, client.name, db, **export_kwargs)
         return StreamingResponse(
             iter([content.encode("utf-8")]),
             media_type="text/plain; charset=utf-8",
             headers={
-                "Content-Disposition": f'attachment; filename="chat-history-{safe_name}.txt"'
+                "Content-Disposition": f'attachment; filename="{filename_base}.txt"'
             },
         )
     else:
-        pdf_bytes = export_chat_as_pdf(client_id, client.name, db, user_id=auth.user_id)
+        pdf_bytes = export_chat_as_pdf(client_id, client.name, db, **export_kwargs)
         return StreamingResponse(
             iter([pdf_bytes]),
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="chat-history-{safe_name}.pdf"'
+                "Content-Disposition": f'attachment; filename="{filename_base}.pdf"'
             },
         )

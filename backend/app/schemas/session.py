@@ -64,3 +64,43 @@ class QAPairResult(BaseModel):
 class SessionSearchResponse(BaseModel):
     sessions: List[SessionSearchResult]
     qa_pairs: List[QAPairResult]
+
+
+# ---------------------------------------------------------------------------
+# Close active session
+# ---------------------------------------------------------------------------
+
+
+class SessionMessageItem(BaseModel):
+    """Single message in a session."""
+    id: UUID
+    role: str
+    content: str
+    sources: Optional[Any] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SessionWithMessages(BaseModel):
+    """Session metadata plus ordered messages (standalone endpoint)."""
+    id: UUID
+    title: Optional[str]
+    summary: Optional[str]
+    key_topics: Optional[List[str]]
+    key_decisions: Optional[List[str]]
+    started_at: datetime
+    ended_at: Optional[datetime]
+    is_active: bool
+    message_count: int
+    messages: List[SessionMessageItem]
+
+
+# ---------------------------------------------------------------------------
+# Close active session
+# ---------------------------------------------------------------------------
+
+
+class CloseSessionResponse(BaseModel):
+    closed_session_id: Optional[UUID] = None
+    closed_session_title: Optional[str] = None
