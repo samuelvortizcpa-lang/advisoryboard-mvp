@@ -10,6 +10,9 @@ Routes:
   GET   /api/admin/subscriptions/summary
   PUT   /api/admin/subscriptions/{user_id}
   POST  /api/admin/subscriptions/{user_id}/reset-usage
+  POST  /api/admin/evaluate-rag/{client_id}
+  GET   /api/admin/evaluations
+  GET   /api/admin/evaluations/compare
 """
 
 from __future__ import annotations
@@ -956,4 +959,120 @@ async def ai_costs(
         "total_cost": round(total_cost, 4),
         "projected_monthly": projected_monthly,
         "top_expensive_queries": top_expensive_queries,
+    }
+
+
+# ─── RAG Evaluation ─────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/evaluate-rag/{client_id}",
+    summary="Run RAG evaluation against a client's documents",
+)
+async def evaluate_rag(
+    client_id: UUID,
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Run 8 test questions through the live RAG pipeline and score retrieval
+    quality.  Takes 30-60s.  Each run costs ~$0.05-0.10 in LLM calls.
+    """
+    from app.services.rag_evaluator import run_evaluation
+    from app.models.rag_evaluation import RagEvaluation
+
+    # Use a synthetic user_id for eval runs
+    eval_user_id = "eval_system"
+
+    results = await run_evaluation(
+        client_id=str(client_id),
+        user_id=eval_user_id,
+        db=db,
+    )
+
+    # Persist
+    evaluation = RagEvaluation(
+        client_id=client_id,
+        user_id=eval_user_id,
+        results=results,
+    )
+    db.add(evaluation)
+    db.commit()
+    db.refresh(evaluation)
+
+    return {
+        "evaluation_id": str(evaluation.id),
+        "client_id": str(client_id),
+        "created_at": evaluation.created_at.isoformat(),
+        **results,
+    }
+
+
+@router.get(
+    "/evaluations",
+    summary="List past RAG evaluation results",
+)
+async def list_evaluations(
+    client_id: Optional[UUID] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    from app.models.rag_evaluation import RagEvaluation
+
+    query = db.query(RagEvaluation).order_by(RagEvaluation.created_at.desc())
+    if client_id:
+        query = query.filter(RagEvaluation.client_id == client_id)
+    evals = query.limit(limit).all()
+
+    return [
+        {
+            "evaluation_id": str(e.id),
+            "client_id": str(e.client_id),
+            "created_at": e.created_at.isoformat(),
+            "retrieval_hit_rate": e.results.get("retrieval_hit_rate"),
+            "response_keyword_rate": e.results.get("response_keyword_rate"),
+            "avg_latency_ms": e.results.get("avg_latency_ms"),
+            "total_questions": e.results.get("total_questions"),
+            "errors": e.results.get("errors", 0),
+        }
+        for e in evals
+    ]
+
+
+@router.get(
+    "/evaluations/compare",
+    summary="Compare two evaluation runs",
+)
+async def compare_evaluations_endpoint(
+    eval_a_id: UUID = Query(..., description="Baseline evaluation ID"),
+    eval_b_id: UUID = Query(..., description="New evaluation ID"),
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.models.rag_evaluation import RagEvaluation
+    from app.services.rag_evaluator import compare_evaluations
+
+    eval_a = db.query(RagEvaluation).filter(RagEvaluation.id == eval_a_id).first()
+    eval_b = db.query(RagEvaluation).filter(RagEvaluation.id == eval_b_id).first()
+
+    if not eval_a or not eval_b:
+        raise HTTPException(status_code=404, detail="Evaluation not found")
+
+    comparison = compare_evaluations(eval_a.results, eval_b.results)
+
+    return {
+        "baseline": {
+            "id": str(eval_a.id),
+            "created_at": eval_a.created_at.isoformat(),
+            "retrieval_hit_rate": eval_a.results.get("retrieval_hit_rate"),
+            "response_keyword_rate": eval_a.results.get("response_keyword_rate"),
+        },
+        "current": {
+            "id": str(eval_b.id),
+            "created_at": eval_b.created_at.isoformat(),
+            "retrieval_hit_rate": eval_b.results.get("retrieval_hit_rate"),
+            "response_keyword_rate": eval_b.results.get("response_keyword_rate"),
+        },
+        **comparison,
     }
