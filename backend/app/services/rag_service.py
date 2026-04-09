@@ -31,6 +31,7 @@ from uuid import UUID
 
 import sentry_sdk
 from openai import AsyncOpenAI
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import get_settings
@@ -49,6 +50,7 @@ from app.services.context_assembler import (
 )
 from app.services.query_router import classify_query, route_completion, route_completion_stream
 from app.services.tax_terms import expand_query as expand_financial_terms
+from app.services.hybrid_search import reciprocal_rank_fusion
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
 
 logger = logging.getLogger(__name__)
@@ -666,6 +668,61 @@ async def search_chunks(
                 seen_chunk_ids.add(chunk.id)
                 all_rows.append((chunk, distance, source))
 
+    # --- BM25 full-text search via tsvector ---
+    bm25_results: list[dict] = []
+    try:
+        tsquery = func.plainto_tsquery("english", query)
+        bm25_score_col = func.ts_rank_cd(
+            DocumentChunk.search_vector, tsquery
+        ).label("bm25_score")
+
+        bm25_rows = (
+            db.query(DocumentChunk, bm25_score_col)
+            .join(Document, DocumentChunk.document_id == Document.id)
+            .filter(
+                DocumentChunk.client_id == client_id,
+                Document.client_id == client_id,
+                DocumentChunk.search_vector.op("@@")(tsquery),
+            )
+            .order_by(bm25_score_col.desc())
+            .limit(FETCH_K)
+            .all()
+        )
+
+        for chunk, bm25_score in bm25_rows:
+            bm25_results.append({
+                "id": chunk.id,
+                "chunk": chunk,
+                "score": float(bm25_score),
+            })
+    except Exception:
+        logger.warning("BM25 full-text search failed; continuing with vector-only", exc_info=True)
+
+    # --- Format vector results for RRF ---
+    vector_results: list[dict] = []
+    for chunk, distance, _source in all_rows:
+        vector_results.append({
+            "id": chunk.id,
+            "chunk": chunk,
+            "score": float(distance),
+        })
+
+    # --- Merge with Reciprocal Rank Fusion ---
+    if bm25_results:
+        merged = reciprocal_rank_fusion([vector_results, bm25_results])
+    else:
+        merged = reciprocal_rank_fusion([vector_results])
+
+    logger.info(
+        "Hybrid search: %d vector, %d BM25, %d merged",
+        len(vector_results), len(bm25_results), len(merged),
+    )
+
+    # Build a lookup from chunk id to the original vector distance (for confidence scoring)
+    distance_by_id: dict[str, float] = {
+        str(chunk.id): distance for chunk, distance, _ in all_rows
+    }
+
     # --- Build keyword phrases from query for boosting ---
     query_lower = query.lower()
     tokens = query_lower.split()
@@ -688,9 +745,23 @@ async def search_chunks(
 
     # --- Score and rank ---
     results: list[tuple[DocumentChunk, float]] = []
-    for chunk, distance, source in all_rows:
+    for item in merged:
+        chunk = item["chunk"]
+        chunk_id_str = str(item["id"])
+
+        # Use vector distance if available; otherwise assign a default mid-range distance
+        distance = distance_by_id.get(chunk_id_str, 0.5)
+
         # Convert cosine distance (0–2) to confidence percentage (0–100)
         confidence = (1 - distance / 2) * 100
+
+        # RRF boost: chunks appearing in both lists get a higher RRF score.
+        # Scale the RRF score into a small additive boost (0–5%)
+        rrf_score = item.get("rrf_score", 0.0)
+        # Max possible single-list RRF score is 1/(60+1) ≈ 0.0164
+        # Two-list top-1 max is ~0.0328. Normalize to 0–5% range.
+        rrf_boost = min(5.0, rrf_score * 200)
+        confidence = min(100.0, confidence + rrf_boost)
 
         # Recency boost: +5% for chunks from non-superseded (current) documents
         doc = chunk.document
@@ -728,8 +799,8 @@ async def search_chunks(
 
         if keyword_boost > 0:
             logger.info(
-                "Keyword boost +%.1f%% for chunk %d (%s query)",
-                keyword_boost, chunk.chunk_index, source,
+                "Keyword boost +%.1f%% for chunk %d",
+                keyword_boost, chunk.chunk_index,
             )
 
         results.append((chunk, round(confidence, 2)))

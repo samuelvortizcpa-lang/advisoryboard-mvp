@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Optional
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, Integer, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -62,6 +62,12 @@ class DocumentChunk(Base):
     # None until the document has been processed.
     embedding: Mapped[Optional[list]] = mapped_column(
         Vector(EMBEDDING_DIM),
+        nullable=True,
+    )
+
+    # Full-text search vector, auto-populated by a DB trigger on chunk_text.
+    search_vector: Mapped[Optional[str]] = mapped_column(
+        TSVECTOR,
         nullable=True,
     )
 
