@@ -2723,6 +2723,32 @@ export interface SessionSearchResponse {
   qa_pairs: QAPairResult[];
 }
 
+export interface SessionMessageItem {
+  id: string;
+  role: string;
+  content: string;
+  sources?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface SessionWithMessages {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  key_topics: string[] | null;
+  key_decisions: string[] | null;
+  started_at: string;
+  ended_at: string | null;
+  is_active: boolean;
+  message_count: number;
+  messages: SessionMessageItem[];
+}
+
+export interface CloseSessionResponse {
+  closed_session_id: string | null;
+  closed_session_title: string | null;
+}
+
 // ─── Sessions API factory ────────────────────────────────────────────────────
 
 export function createSessionsApi(getToken: GetToken, orgId?: string) {
@@ -2754,6 +2780,36 @@ export function createSessionsApi(getToken: GetToken, orgId?: string) {
       return f<void>(`/clients/${clientId}/sessions/${sessionId}`, {
         method: "DELETE",
       });
+    },
+
+    getSessionMessages(sessionId: string) {
+      return f<SessionWithMessages>(`/sessions/${sessionId}/messages`);
+    },
+
+    closeActiveSession(clientId: string) {
+      return f<CloseSessionResponse>(`/clients/${clientId}/sessions/new`, {
+        method: "POST",
+      });
+    },
+
+    async exportSessionPdf(clientId: string, sessionId: string): Promise<void> {
+      const token = await getToken();
+      const res = await fetch(
+        `${API_BASE}/clients/${clientId}/chat-history/export?format=pdf&session_id=${sessionId}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      if (!res.ok) {
+        throw new Error(`Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      a.download = match ? match[1] : `chat-session.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
     },
   };
 }

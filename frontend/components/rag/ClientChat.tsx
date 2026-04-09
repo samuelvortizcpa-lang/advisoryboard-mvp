@@ -1,11 +1,12 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
-import { RagSource, RagStatus, createRagApi } from "@/lib/api";
+import { RagSource, RagStatus, createRagApi, createSessionsApi } from "@/lib/api";
+import { useOrg } from "@/contexts/OrgContext";
 import HelpTooltip from "@/components/ui/HelpTooltip";
-import SessionHistory from "@/components/sessions/SessionHistory";
+import ChatSidebar from "./ChatSidebar";
 import MarkdownContent from "./MarkdownContent";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ interface Props {
 
 export default function ClientChat({ clientId, documentCount }: Props) {
   const { getToken } = useAuth();
+  const { activeOrg } = useOrg();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -52,6 +54,10 @@ export default function ClientChat({ clientId, documentCount }: Props) {
     filename: string;
     pageNumber: number;
   } | null>(null);
+
+  // Session sidebar state
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const sidebarKeyRef = useRef(0);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,10 +84,74 @@ export default function ClientChat({ clientId, documentCount }: Props) {
       .finally(() => setHistoryLoading(false));
   }
 
-  useEffect(() => {
-    loadHistory();
+  // On mount, find the active session and load its messages
+  const initSession = useCallback(async () => {
+    try {
+      const api = createSessionsApi(getToken, activeOrg?.id);
+      const res = await api.getClientSessions(clientId, 1, 10);
+      const active = res.sessions.find((s) => s.ended_at === null);
+      if (active) {
+        setActiveSessionId(active.id);
+        loadSessionMessages(active.id);
+      } else {
+        // No active session — start with empty state
+        setMessages([]);
+        setHistoryLoading(false);
+      }
+    } catch {
+      // Fall back to loading all history
+      loadHistory();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  }, [clientId, activeOrg?.id]);
+
+  useEffect(() => {
+    initSession();
+  }, [initSession]);
+
+  // ── Load messages for a specific session ─────────────────────────────────
+
+  async function loadSessionMessages(sessionId: string) {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const api = createSessionsApi(getToken, activeOrg?.id);
+      const res = await api.getSessionMessages(sessionId);
+      setMessages(
+        res.messages.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          sources: (m.sources as unknown as RagSource[]) ?? undefined,
+        }))
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to load session";
+      setHistoryError(msg);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  // ── Session switching handlers ───────────────────────────────────────────
+
+  function handleSessionSelect(sessionId: string) {
+    setActiveSessionId(sessionId);
+    loadSessionMessages(sessionId);
+  }
+
+  async function handleNewChat() {
+    try {
+      const api = createSessionsApi(getToken, activeOrg?.id);
+      await api.closeActiveSession(clientId);
+    } catch {
+      // non-fatal — session may already be closed
+    }
+    setActiveSessionId(null);
+    setMessages([]);
+    // Bump key to force sidebar to reload session list
+    sidebarKeyRef.current += 1;
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
 
   // ── Fetch processing status ────────────────────────────────────────────────
 
@@ -245,158 +315,167 @@ export default function ClientChat({ clientId, documentCount }: Props) {
 
   return (
     <>
-      <div className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex h-[600px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        {/* ── Sidebar ──────────────────────────────────────────────────── */}
+        <ChatSidebar
+          key={sidebarKeyRef.current}
+          clientId={clientId}
+          activeSessionId={activeSessionId}
+          onSessionSelect={handleSessionSelect}
+          onNewChat={handleNewChat}
+        />
 
-        {/* ── Status banner ─────────────────────────────────────────────── */}
-        {!statusLoading && status && (
-          <div className={[
-            "flex items-center justify-between gap-3 border-b px-4 py-2.5 text-xs",
-            hasPending
-              ? "border-amber-200 bg-amber-50 text-amber-800"
-              : hasErrors && !hasProcessed
-              ? "border-red-200 bg-red-50 text-red-800"
-              : "border-gray-100 bg-gray-50 text-gray-600",
-          ].join(" ")}>
-            <div className="flex items-center gap-2">
-              {hasPending ? (
-                <>
-                  <Spinner className="text-amber-600" />
-                  <span>
-                    Processing {status.pending} document{status.pending !== 1 ? "s" : ""}…
-                  </span>
-                </>
-              ) : hasErrors && !hasProcessed ? (
-                <>
-                  <ErrorIcon />
-                  <span>
-                    {status.errors} document{status.errors !== 1 ? "s" : ""} failed to process.
-                  </span>
-                </>
-              ) : (
-                <>
-                  <CheckIcon />
-                  <span>
-                    {status.processed} document{status.processed !== 1 ? "s" : ""} ready
-                    {status.total_chunks > 0 && ` · ${status.total_chunks.toLocaleString()} chunks indexed`}
-                  </span>
-                </>
-              )}
-            </div>
+        {/* ── Main chat area ───────────────────────────────────────────── */}
+        <div className="flex min-w-0 flex-1 flex-col">
 
-            {status.pending > 0 || (status.total_documents > 0 && status.processed < status.total_documents) ? (
-              <button
-                onClick={handleProcess}
-                disabled={processing || hasPending === true}
-                className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {processing ? "Queuing…" : "Process Documents"}
-              </button>
-            ) : null}
-          </div>
-        )}
-
-        {/* ── Export / Clear toolbar (only when messages exist) ─────────── */}
-        {!historyLoading && hasMessages && (
-          <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-1.5">
-            <span className="mr-auto text-xs text-gray-400">
-              {messages.length} message{messages.length !== 1 ? "s" : ""}
-            </span>
-            <button
-              onClick={() => handleExport("txt")}
-              disabled={exportingFormat !== null}
-              className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-40 transition-colors"
-            >
-              {exportingFormat === "txt" ? "Exporting…" : "Export TXT"}
-            </button>
-            <span className="select-none text-gray-300">|</span>
-            <button
-              onClick={() => handleExport("pdf")}
-              disabled={exportingFormat !== null}
-              className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-40 transition-colors"
-            >
-              {exportingFormat === "pdf" ? "Exporting…" : "Export PDF"}
-            </button>
-            <span className="select-none text-gray-300">|</span>
-            <button
-              onClick={() => setShowClearConfirm(true)}
-              className="text-xs text-red-400 hover:text-red-600 transition-colors"
-            >
-              Clear History
-            </button>
-          </div>
-        )}
-
-        {/* ── Past conversations (collapsible) ─────────────────────────── */}
-        <SessionHistory clientId={clientId} />
-
-        {/* ── Message list ──────────────────────────────────────────────── */}
-        <div className="flex min-h-[300px] max-h-[480px] flex-col gap-4 overflow-y-auto p-4">
-          {historyLoading ? (
-            <div className="flex flex-1 items-center justify-center py-8 text-gray-400">
-              <svg className="animate-spin w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              Loading...
-            </div>
-          ) : historyError ? (
-            <div className="flex items-center justify-between px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm">
-              <span>{historyError}</span>
-              <button onClick={loadHistory} className="text-red-500 underline text-xs">Retry</button>
-            </div>
-          ) : messages.length === 0 ? (
-            <EmptyState hasDocuments={hasProcessed ?? false} />
-          ) : (
-            messages.map((msg, i) => (
-              <MessageBubble
-                key={i}
-                message={msg}
-                onImageClick={(url, filename, pageNumber) =>
-                  setImageModal({ url, filename, pageNumber })
-                }
-              />
-            ))
-          )}
-
-          {/* Typing indicator */}
-          {loading && (
-            <div className="flex items-end gap-2">
-              <BotAvatar />
-              <div className="flex items-center gap-1 rounded-2xl rounded-bl-sm bg-gray-100 px-4 py-3">
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]" />
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]" />
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce" />
+          {/* ── Status banner ─────────────────────────────────────────── */}
+          {!statusLoading && status && (
+            <div className={[
+              "flex items-center justify-between gap-3 border-b px-4 py-2.5 text-xs",
+              hasPending
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : hasErrors && !hasProcessed
+                ? "border-red-200 bg-red-50 text-red-800"
+                : "border-gray-100 bg-gray-50 text-gray-600",
+            ].join(" ")}>
+              <div className="flex items-center gap-2">
+                {hasPending ? (
+                  <>
+                    <Spinner className="text-amber-600" />
+                    <span>
+                      Processing {status.pending} document{status.pending !== 1 ? "s" : ""}…
+                    </span>
+                  </>
+                ) : hasErrors && !hasProcessed ? (
+                  <>
+                    <ErrorIcon />
+                    <span>
+                      {status.errors} document{status.errors !== 1 ? "s" : ""} failed to process.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <CheckIcon />
+                    <span>
+                      {status.processed} document{status.processed !== 1 ? "s" : ""} ready
+                      {status.total_chunks > 0 && ` · ${status.total_chunks.toLocaleString()} chunks indexed`}
+                    </span>
+                  </>
+                )}
               </div>
+
+              {status.pending > 0 || (status.total_documents > 0 && status.processed < status.total_documents) ? (
+                <button
+                  onClick={handleProcess}
+                  disabled={processing || hasPending === true}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {processing ? "Queuing…" : "Process Documents"}
+                </button>
+              ) : null}
             </div>
           )}
 
-          <div ref={bottomRef} />
-        </div>
+          {/* ── Export / Clear toolbar (only when messages exist) ─────── */}
+          {!historyLoading && hasMessages && (
+            <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-1.5">
+              <span className="mr-auto text-xs text-gray-400">
+                {messages.length} message{messages.length !== 1 ? "s" : ""}
+              </span>
+              <button
+                onClick={() => handleExport("txt")}
+                disabled={exportingFormat !== null}
+                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-40 transition-colors"
+              >
+                {exportingFormat === "txt" ? "Exporting…" : "Export TXT"}
+              </button>
+              <span className="select-none text-gray-300">|</span>
+              <button
+                onClick={() => handleExport("pdf")}
+                disabled={exportingFormat !== null}
+                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-40 transition-colors"
+              >
+                {exportingFormat === "pdf" ? "Exporting…" : "Export PDF"}
+              </button>
+              <span className="select-none text-gray-300">|</span>
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                className="text-xs text-red-400 hover:text-red-600 transition-colors"
+              >
+                Clear History
+              </button>
+            </div>
+          )}
 
-        {/* ── Input ────────────────────────────────────────────────────── */}
-        <div className="border-t border-gray-100">
-        <form
-          onSubmit={handleSubmit}
-          className="flex items-center gap-2 px-3 pb-3 pt-1.5"
-        >
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question about this client's documents…"
-            disabled={loading || historyLoading}
-            className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || loading || historyLoading}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Send"
+          {/* ── Message list ──────────────────────────────────────────── */}
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+            {historyLoading ? (
+              <div className="flex flex-1 items-center justify-center py-8 text-gray-400">
+                <svg className="animate-spin w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Loading...
+              </div>
+            ) : historyError ? (
+              <div className="flex items-center justify-between px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm">
+                <span>{historyError}</span>
+                <button onClick={() => activeSessionId ? loadSessionMessages(activeSessionId) : loadHistory()} className="text-red-500 underline text-xs">Retry</button>
+              </div>
+            ) : messages.length === 0 ? (
+              <EmptyState hasDocuments={hasProcessed ?? false} />
+            ) : (
+              messages.map((msg, i) => (
+                <MessageBubble
+                  key={i}
+                  message={msg}
+                  onImageClick={(url, filename, pageNumber) =>
+                    setImageModal({ url, filename, pageNumber })
+                  }
+                />
+              ))
+            )}
+
+            {/* Typing indicator */}
+            {loading && (
+              <div className="flex items-end gap-2">
+                <BotAvatar />
+                <div className="flex items-center gap-1 rounded-2xl rounded-bl-sm bg-gray-100 px-4 py-3">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce" />
+                </div>
+              </div>
+            )}
+
+            <div ref={bottomRef} />
+          </div>
+
+          {/* ── Input ──────────────────────────────────────────────────── */}
+          <div className="border-t border-gray-100">
+          <form
+            onSubmit={handleSubmit}
+            className="flex items-center gap-2 px-3 pb-3 pt-1.5"
           >
-            <SendIcon />
-          </button>
-        </form>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask a question about this client's documents…"
+              disabled={loading || historyLoading}
+              className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || loading || historyLoading}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Send"
+            >
+              <SendIcon />
+            </button>
+          </form>
+          </div>
         </div>
       </div>
 
