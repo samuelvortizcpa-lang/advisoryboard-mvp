@@ -563,6 +563,57 @@ def _extract_fathom_json(path: Path) -> str:
     return "\n\n".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# Google Document AI enhanced extraction
+# ---------------------------------------------------------------------------
+
+FINANCIAL_DOC_TYPES: set[str] = {
+    "tax_return", "w2", "k1", "1099", "financial_statement", "1040x", "invoice",
+}
+
+
+def extract_text_with_docai(
+    file_bytes: bytes, document_type: str | None = None
+) -> dict | None:
+    """
+    Try Document AI extraction.  Returns structured dict or None.
+
+    For financial document types, uses Form Parser (structured key-value +
+    table extraction).  For other PDFs, uses Document AI OCR (higher quality
+    than pytesseract).  Returns None when Document AI is not configured or
+    fails, so the caller falls back to the existing pdfplumber text.
+    """
+    from app.services.document_ai_service import (
+        is_available,
+        extract_with_form_parser,
+        extract_with_ocr,
+    )
+
+    if not is_available():
+        logger.info("Document AI not configured, using pdfplumber fallback")
+        return None
+
+    if document_type and document_type.lower() in FINANCIAL_DOC_TYPES:
+        result = extract_with_form_parser(file_bytes)
+        if result:
+            logger.info(
+                "Document AI Form Parser extracted %d pages, %d entities",
+                len(result.get("pages", [])),
+                len(result.get("entities", [])),
+            )
+            return result
+
+    # For non-financial PDFs or if form parser failed, try Document AI OCR
+    result = extract_with_ocr(file_bytes)
+    if result:
+        logger.info(
+            "Document AI OCR extracted %d pages", len(result.get("pages", []))
+        )
+        return result
+
+    return None
+
+
 def _extract_email(path: Path) -> str:
     """Extract text from .eml or .msg email files via email_extractor."""
     try:

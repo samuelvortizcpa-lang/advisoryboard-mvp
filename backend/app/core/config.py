@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     # ── OpenAI ────────────────────────────────────────────────────────────────
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    cohere_api_key: str = ""
+
+    # ── Google Document AI ─────────────────────────────────────────────
+    google_cloud_project: str = ""
+    google_application_credentials_json: str = ""
+    docai_form_parser_id: str = ""
+    docai_ocr_processor_id: str = ""
+    docai_location: str = "us"
 
     # ── Clerk ─────────────────────────────────────────────────────────────────
     clerk_frontend_api_url: str = ""   # e.g. https://your-app.clerk.accounts.dev
