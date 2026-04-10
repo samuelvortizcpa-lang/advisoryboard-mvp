@@ -107,8 +107,37 @@ Data contradiction awareness:
 - For example, if the user asks about a metric that has a contradiction, flag the discrepancy and explain both values.
 - Suggest resolution steps when appropriate (e.g. "You may want to verify which source is correct").
 
+Determining the tax year of a document:
+When a user asks about a specific tax year (e.g., "What is the AGI for 2024?"), determine which year the document covers using this priority order:
+1. Filename — the document filename is the most reliable signal. A file named "2024 Tax Return.pdf" is the 2024 return, period.
+2. Primary form header — the year printed in the form header (e.g., "Form 1040 (2024)").
+3. Page context — most lines describe the current tax year unless explicitly labeled otherwise.
+Do NOT infer the tax year from secondary forward-looking references:
+- "Apply overpayment to [YEAR] estimated tax" (Form 1040 line 36) — this is a forward-looking election for the NEXT year
+- "Prior year excess contributions" or carryforward language on Form 5329, Schedule D, etc.
+- "Estimated tax payments for [YEAR]" sections
+- Form 1040-ES voucher references (these are for the NEXT tax year, not the current one)
+If the filename and primary header clearly indicate year X, answer using the data in the document — do not refuse or claim the document is for year X+1 just because secondary forward references mention that year.
+
 Context:
 {context}
+"""
+
+# Tax-year disambiguation guidance — appended to client_type prompts that
+# don't include DEFAULT_SYSTEM_PROMPT (which already has it inline).
+_TAX_YEAR_GUIDANCE = """
+
+Determining the tax year of a document:
+When a user asks about a specific tax year (e.g., "What is the AGI for 2024?"), determine which year the document covers using this priority order:
+1. Filename — the document filename is the most reliable signal. A file named "2024 Tax Return.pdf" is the 2024 return, period.
+2. Primary form header — the year printed in the form header (e.g., "Form 1040 (2024)").
+3. Page context — most lines describe the current tax year unless explicitly labeled otherwise.
+Do NOT infer the tax year from secondary forward-looking references:
+- "Apply overpayment to [YEAR] estimated tax" (Form 1040 line 36) — this is a forward-looking election for the NEXT year
+- "Prior year excess contributions" or carryforward language on Form 5329, Schedule D, etc.
+- "Estimated tax payments for [YEAR]" sections
+- Form 1040-ES voucher references (these are for the NEXT tax year, not the current one)
+If the filename and primary header clearly indicate year X, answer using the data in the document — do not refuse or claim the document is for year X+1 just because secondary forward references mention that year.
 """
 
 
@@ -1191,6 +1220,9 @@ async def answer_question(
 
     if db_client and db_client.client_type:
         system_prompt = db_client.client_type.system_prompt.format(context=context)
+        # Client-type prompts don't include DEFAULT_SYSTEM_PROMPT, so append
+        # tax-year guidance separately
+        system_prompt += _TAX_YEAR_GUIDANCE
     else:
         system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
 
@@ -1622,6 +1654,7 @@ async def answer_question_stream(
 
     if db_client and db_client.client_type:
         system_prompt = db_client.client_type.system_prompt.format(context=context)
+        system_prompt += _TAX_YEAR_GUIDANCE
     else:
         system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
 
