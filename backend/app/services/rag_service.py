@@ -1088,7 +1088,7 @@ def _build_context_with_attribution(
 
     logger.info(
         "Built RAG context with %d chunks from %d documents (%d chars)",
-        len(chunk_results), len(distinct_filenames), len(context),
+        len(chunk_results), len(distinct_docs), len(context),
     )
 
     return context
