@@ -127,17 +127,19 @@ Context:
 # don't include DEFAULT_SYSTEM_PROMPT (which already has it inline).
 _TAX_YEAR_GUIDANCE = """
 
-Determining the tax year of a document:
-When a user asks about a specific tax year (e.g., "What is the AGI for 2024?"), determine which year the document covers using this priority order:
-1. Filename — the document filename is the most reliable signal. A file named "2024 Tax Return.pdf" is the 2024 return, period.
-2. Primary form header — the year printed in the form header (e.g., "Form 1040 (2024)").
-3. Page context — most lines describe the current tax year unless explicitly labeled otherwise.
-Do NOT infer the tax year from secondary forward-looking references:
-- "Apply overpayment to [YEAR] estimated tax" (Form 1040 line 36) — this is a forward-looking election for the NEXT year
-- "Prior year excess contributions" or carryforward language on Form 5329, Schedule D, etc.
-- "Estimated tax payments for [YEAR]" sections
-- Form 1040-ES voucher references (these are for the NEXT tax year, not the current one)
-If the filename and primary header clearly indicate year X, answer using the data in the document — do not refuse or claim the document is for year X+1 just because secondary forward references mention that year.
+MANDATORY TAX YEAR RULE:
+Every chunk header begins with [TAX YEAR YYYY]. That tag is the AUTHORITATIVE tax year for the data in that chunk. Do NOT override it based on any text inside the chunk.
+
+Specifically:
+- If a chunk says [TAX YEAR 2024], ALL dollar amounts and line items in that chunk belong to the 2024 tax year, regardless of any mention of other years inside the text.
+- Forward-looking references (e.g., "Apply overpayment to 2025 estimated tax", Form 1040-ES vouchers, "Prior year excess contributions") are NOT evidence that the chunk is from a different tax year. They are secondary references within the return for the year stated in the TAX YEAR tag.
+- NEVER refuse to answer by claiming the available data is for the wrong year when the TAX YEAR tag matches what the user asked for.
+
+LINE-ITEM PRECISION:
+- When answering questions about tax amounts, you MUST cite the specific Form line number (e.g., "Form 1040, Line 11: $142,350").
+- Quote exact dollar amounts as they appear — never round or approximate (e.g., "$142,350" not "about $142k").
+- If the exact line asked about is not in the chunks but a related figure is, provide what IS available and explain which line it comes from and how it differs.
+- For W-2s and K-1s, cite box numbers (e.g., "Box 1: $95,000").
 """
 
 
