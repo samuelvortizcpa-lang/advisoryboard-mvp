@@ -949,6 +949,8 @@ async def answer_question(
     client_id: UUID,
     question: str,
     user_id: str | None = None,
+    *,
+    include_debug_chunks: bool = False,
 ) -> dict:
     """
     RAG Q&A: retrieve relevant chunks then synthesise an answer.
@@ -1419,7 +1421,7 @@ async def answer_question(
         _total_ms, confidence_tier, best_score, len(sources),
     )
 
-    return {
+    result = {
         "answer": answer,
         "confidence_tier": confidence_tier,
         "confidence_score": round(best_score, 2),
@@ -1436,12 +1438,28 @@ async def answer_question(
         },
     }
 
+    if include_debug_chunks:
+        result["retrieved_chunks_debug"] = [
+            {
+                "chunk_text": chunk.chunk_text,
+                "document_id": str(chunk.document_id),
+                "chunk_index": chunk.chunk_index,
+                "score": score,
+                "rank": rank,
+            }
+            for rank, (chunk, score) in enumerate(chunk_results)
+        ]
+
+    return result
+
 
 async def answer_question_stream(
     db: Session,
     client_id: UUID,
     question: str,
     user_id: str | None = None,
+    *,
+    include_debug_chunks: bool = False,
 ):
     """
     Streaming variant of answer_question. Yields SSE-formatted strings.

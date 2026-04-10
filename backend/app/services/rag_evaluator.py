@@ -294,16 +294,16 @@ async def run_ground_truth_evaluation(
                 client_id=client_id_uuid,
                 question=question,
                 user_id="eval_ground_truth",
+                include_debug_chunks=True,
             )
             latency_ms = (time.monotonic() - start) * 1000
 
             answer = result.get("answer", "")
-            sources = result.get("sources", [])
+            debug_chunks = result.get("retrieved_chunks_debug", [])
 
-            # Extract [Page N] markers from all retrieved chunk texts
+            # Extract [Page N] markers from all raw retrieved chunk texts
             chunk_texts = [
-                s.get("chunk_text", "") or s.get("preview", "")
-                for s in sources
+                c.get("chunk_text", "") for c in debug_chunks
             ]
             retrieved_pages = _extract_pages_from_chunks(chunk_texts)
 
@@ -317,6 +317,17 @@ async def run_ground_truth_evaluation(
                 for variant in expected_answers
             )
 
+            # Build top-5 chunk rank/page debug info
+            top_chunk_ranks_and_pages = []
+            for c in debug_chunks[:5]:
+                pages_in_chunk = [
+                    int(m) for m in re.findall(r"\[Page\s+(\d+)\]", c.get("chunk_text", ""))
+                ]
+                top_chunk_ranks_and_pages.append({
+                    "rank": c.get("rank", 0),
+                    "pages_in_chunk": pages_in_chunk,
+                })
+
             per_question.append({
                 "question": question,
                 "category": item["category"],
@@ -329,7 +340,8 @@ async def run_ground_truth_evaluation(
                 "response_snippet": answer[:300],
                 "response_hit": response_hit,
                 "latency_ms": round(latency_ms, 1),
-                "source_count": len(sources),
+                "retrieved_chunk_count": len(debug_chunks),
+                "top_chunk_ranks_and_pages": top_chunk_ranks_and_pages,
                 "error": None,
             })
 
@@ -350,7 +362,8 @@ async def run_ground_truth_evaluation(
                 "response_snippet": "",
                 "response_hit": False,
                 "latency_ms": round(latency_ms, 1),
-                "source_count": 0,
+                "retrieved_chunk_count": 0,
+                "top_chunk_ranks_and_pages": [],
                 "error": str(exc)[:500],
             })
 
