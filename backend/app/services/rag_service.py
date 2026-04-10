@@ -992,6 +992,22 @@ def _compute_confidence_tier(scores: list[float]) -> str:
     return "low"
 
 
+_TAX_YEAR_FROM_FILENAME_RE = re.compile(r"(?<!\d)(20\d{2})(?!\d)")
+
+
+def extract_tax_year_from_filename(filename: str) -> int | None:
+    """Extract a 4-digit tax year (20xx) from a document filename.
+
+    Uses a non-word-boundary pattern so years embedded in names like
+    ``TaxReturn2024.pdf`` are still captured.  Returns the *last* match
+    so that ``2023_amended_2024.pdf`` yields 2024.
+    """
+    matches = _TAX_YEAR_FROM_FILENAME_RE.findall(filename or "")
+    if not matches:
+        return None
+    return int(matches[-1])
+
+
 def _build_context_with_attribution(
     chunk_results: list[tuple[DocumentChunk, float]],
     checkin_context_parts: list[str] | None = None,
@@ -999,29 +1015,31 @@ def _build_context_with_attribution(
     """
     Build the text context string sent to the LLM with document attribution.
 
-    Each chunk is prefixed with ``[Document: <filename> | Page N]`` so the
-    LLM can anchor on the filename for tax-year disambiguation.  A preamble
+    Each chunk is prefixed with ``[TAX YEAR YYYY | Document: <filename> | Page N]``
+    so the LLM can anchor on the filename for tax-year disambiguation.  A preamble
     listing distinct source documents is prepended.
     """
     if not chunk_results and not checkin_context_parts:
         return ""
 
-    # Collect distinct filenames (preserving insertion order)
-    distinct_filenames: dict[str, None] = {}
+    # Collect distinct filenames and their tax years (preserving insertion order)
+    distinct_docs: dict[str, int | None] = {}
     for chunk, _score in chunk_results:
         doc = chunk.document
         fname = doc.filename if doc else "unknown"
-        distinct_filenames.setdefault(fname, None)
+        if fname not in distinct_docs:
+            distinct_docs[fname] = extract_tax_year_from_filename(fname)
 
-    # Preamble: inventory of documents
+    # Preamble: inventory of documents with tax year
     preamble_lines = [
         "The following document(s) are available to answer the user's question:\n"
     ]
-    for fname in distinct_filenames:
-        preamble_lines.append(f"- {fname}")
+    for fname, tax_year in distinct_docs.items():
+        year_tag = f" [Tax Year {tax_year}]" if tax_year else ""
+        preamble_lines.append(f"- {fname}{year_tag}")
     preamble_lines.append(
-        "\nUse the filename to determine the tax year and scope of each document. "
-        "Below are the relevant excerpts:"
+        "\nUse the TAX YEAR tag in each chunk header as the authoritative tax year "
+        "for that excerpt. Below are the relevant excerpts:"
     )
     preamble = "\n".join(preamble_lines)
 
@@ -1030,6 +1048,7 @@ def _build_context_with_attribution(
     for chunk, score in chunk_results:
         doc = chunk.document
         filename = doc.filename if doc else "unknown"
+        tax_year = distinct_docs.get(filename)
         chunk_text = chunk.chunk_text
 
         # Extract page number from [Page N] marker if present
@@ -1041,6 +1060,10 @@ def _build_context_with_attribution(
             header = f"[Document: {filename} | Page {page_num} | Relevance: {score:.1f}%]"
         else:
             header = f"[Document: {filename} | Relevance: {score:.1f}%]"
+
+        # Prepend TAX YEAR tag
+        if tax_year:
+            header = f"[TAX YEAR {tax_year} | " + header[1:]
 
         if doc and doc.document_type:
             type_info = f" | Type: {doc.document_type}"
