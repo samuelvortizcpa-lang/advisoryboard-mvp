@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Optional
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, Integer, Text
-from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -68,6 +68,13 @@ class DocumentChunk(Base):
     # Full-text search vector, auto-populated by a DB trigger on chunk_text.
     search_vector: Mapped[Optional[str]] = mapped_column(
         TSVECTOR,
+        nullable=True,
+    )
+
+    # Optional JSONB metadata (e.g., {"is_voucher": true, "voucher_type": "1040-ES"})
+    chunk_metadata: Mapped[Optional[dict]] = mapped_column(
+        "chunk_metadata",
+        JSONB,
         nullable=True,
     )
 

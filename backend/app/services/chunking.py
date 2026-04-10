@@ -29,6 +29,56 @@ CHUNK_SIZE = 1_500
 CHUNK_OVERLAP = 200
 MIN_CHUNK_LEN = 50
 
+# ── Voucher detection ────────────────────────────────────────────────────────
+
+_VOUCHER_PATTERNS = [
+    re.compile(r"form\s*1040-?es", re.IGNORECASE),
+    re.compile(r"estimated\s+tax\s+(payment|voucher)", re.IGNORECASE),
+    re.compile(r"payment\s+voucher", re.IGNORECASE),
+]
+
+_FUTURE_YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
+
+
+def detect_voucher_chunk(
+    chunk_text: str, return_tax_year: int | None = None
+) -> dict:
+    """
+    Detect whether a chunk is a Form 1040-ES estimated-tax voucher for a future tax year.
+
+    Returns a dict with:
+      - is_voucher: bool
+      - voucher_type: "1040-ES" | None
+      - voucher_year: int | None (the tax year the voucher is for, if detectable)
+
+    A chunk is flagged as a voucher only if BOTH conditions hold:
+      1. At least one voucher pattern matches
+      2. A year appears in the chunk that is >= (return_tax_year + 1) if return_tax_year
+         is known, OR any 4-digit year in range 2025-2099 if not
+    """
+    has_voucher_pattern = any(p.search(chunk_text) for p in _VOUCHER_PATTERNS)
+    if not has_voucher_pattern:
+        return {"is_voucher": False, "voucher_type": None, "voucher_year": None}
+
+    years_in_text = [int(y) for y in _FUTURE_YEAR_PATTERN.findall(chunk_text)]
+    if not years_in_text:
+        return {"is_voucher": False, "voucher_type": None, "voucher_year": None}
+
+    if return_tax_year is not None:
+        future_years = [y for y in years_in_text if y >= return_tax_year + 1]
+    else:
+        # Without a known return year, flag any year in 2025+ as potentially future
+        future_years = [y for y in years_in_text if y >= 2025]
+
+    if not future_years:
+        return {"is_voucher": False, "voucher_type": None, "voucher_year": None}
+
+    return {
+        "is_voucher": True,
+        "voucher_type": "1040-ES",
+        "voucher_year": max(future_years),
+    }
+
 FINANCIAL_CHUNK_SIZE = 500
 FINANCIAL_CHUNK_OVERLAP = 100
 

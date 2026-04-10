@@ -32,6 +32,7 @@ from uuid import UUID
 
 import sentry_sdk
 from openai import AsyncOpenAI
+import sqlalchemy as sa
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
@@ -43,7 +44,7 @@ from app.models.document_page_image import DocumentPageImage
 from app.models.checkin_response import CheckinResponse
 from app.models.checkin_template import CheckinTemplate
 from app.services import storage_service
-from app.services.chunking import chunk_text, get_chunk_params, smart_chunk, structure_aware_chunk
+from app.services.chunking import chunk_text, detect_voucher_chunk, get_chunk_params, smart_chunk, structure_aware_chunk
 from app.services.reranker import rerank_chunks
 from app.services.context_assembler import (
     ContextPurpose,
@@ -497,6 +498,14 @@ async def process_document(db: Session, document: Document) -> None:
         client = _openai()
         chunk_rows: list[DocumentChunk] = []
 
+        # Extract return tax year for voucher detection (e.g., "2024" from document_period)
+        _return_tax_year: int | None = None
+        if document.document_period:
+            import re as _re_year
+            _year_match = _re_year.search(r"\b(20\d{2})\b", document.document_period)
+            if _year_match:
+                _return_tax_year = int(_year_match.group(1))
+
         for batch_start in range(0, len(chunks), EMBED_BATCH):
             batch = chunks[batch_start : batch_start + EMBED_BATCH]
 
@@ -508,6 +517,16 @@ async def process_document(db: Session, document: Document) -> None:
             for local_i, (chunk_text_val, emb_data) in enumerate(
                 zip(batch, response.data)
             ):
+                # Detect 1040-ES voucher chunks
+                voucher_info = detect_voucher_chunk(chunk_text_val, _return_tax_year)
+                chunk_metadata = None
+                if voucher_info["is_voucher"]:
+                    chunk_metadata = {
+                        "is_voucher": True,
+                        "voucher_type": voucher_info["voucher_type"],
+                        "voucher_year": voucher_info["voucher_year"],
+                    }
+
                 chunk_rows.append(
                     DocumentChunk(
                         document_id=document.id,
@@ -515,6 +534,7 @@ async def process_document(db: Session, document: Document) -> None:
                         chunk_text=chunk_text_val,
                         chunk_index=batch_start + local_i,
                         embedding=emb_data.embedding,
+                        chunk_metadata=chunk_metadata,
                     )
                 )
 
@@ -656,6 +676,8 @@ async def search_chunks(
     client_id: UUID,
     query: str,
     limit: int = TOP_K,
+    *,
+    include_vouchers: bool = False,
 ) -> list[tuple[DocumentChunk, float]]:
     """
     Return the *limit* most semantically similar DocumentChunks for *query*
@@ -697,6 +719,16 @@ async def search_chunks(
     seen_chunk_ids: set = set()
     all_rows: list[tuple[DocumentChunk, float, str]] = []  # (chunk, distance, source)
 
+    # Build voucher exclusion filter (exclude chunks with chunk_metadata->>'is_voucher' = 'true')
+    _voucher_filter = (
+        sa.or_(
+            DocumentChunk.chunk_metadata.is_(None),
+            DocumentChunk.chunk_metadata["is_voucher"].astext != "true",
+        )
+        if not include_vouchers
+        else sa.true()
+    )
+
     for embed_idx, query_embedding in enumerate(embeddings):
         source = "original" if embed_idx == 0 else "expanded"
         distance_col = DocumentChunk.embedding.cosine_distance(query_embedding).label("distance")
@@ -708,6 +740,7 @@ async def search_chunks(
                 DocumentChunk.client_id == client_id,
                 Document.client_id == client_id,
                 DocumentChunk.embedding.isnot(None),
+                _voucher_filter,
             )
             .order_by(distance_col)
             .limit(FETCH_K)
@@ -734,6 +767,7 @@ async def search_chunks(
                 DocumentChunk.client_id == client_id,
                 Document.client_id == client_id,
                 DocumentChunk.search_vector.op("@@")(tsquery),
+                _voucher_filter,
             )
             .order_by(bm25_score_col.desc())
             .limit(FETCH_K)
@@ -971,7 +1005,12 @@ async def answer_question(
         "RAG query: '%s' | client=%s",
         question[:80], client_id,
     )
-    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
+
+    # Check if user is explicitly asking about estimated tax / vouchers
+    _voucher_keywords = ["1040-es", "1040es", "estimated tax", "estimated payment", "quarterly payment", "voucher"]
+    _include_vouchers = any(kw in question.lower() for kw in _voucher_keywords)
+
+    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K, include_vouchers=_include_vouchers)
 
     # ---- Keyword fallback: direct text search for specific phrases ----
     # Vector search alone struggles with structured forms (tax returns) where
@@ -1472,7 +1511,9 @@ async def answer_question_stream(
     question = _sanitize_user_input(question)
 
     # ── Retrieval phase (identical to answer_question) ──
-    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
+    _voucher_keywords = ["1040-es", "1040es", "estimated tax", "estimated payment", "quarterly payment", "voucher"]
+    _include_vouchers = any(kw in question.lower() for kw in _voucher_keywords)
+    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K, include_vouchers=_include_vouchers)
 
     logger.info("STREAM SOURCE DEBUG: search_chunks returned %d results, reranked=%s, rerank_model=%s",
                 len(chunk_results), _last_search_stats.get("reranked"),

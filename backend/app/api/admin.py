@@ -1129,6 +1129,66 @@ async def compare_evaluations_endpoint(
     }
 
 
+# ─── Voucher Metadata Backfill ──────────────────────────────────────────────
+
+
+class BackfillVoucherRequest(BaseModel):
+    client_id: Optional[UUID] = None
+
+
+@router.post(
+    "/backfill-voucher-metadata",
+    summary="Scan existing chunks and tag 1040-ES voucher chunks",
+)
+async def backfill_voucher_metadata(
+    body: BackfillVoucherRequest,
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Scan existing document_chunks, run detect_voucher_chunk on each,
+    and set metadata for chunks flagged as vouchers.
+    """
+    from app.models.document_chunk import DocumentChunk
+    from app.services.chunking import detect_voucher_chunk
+
+    query = db.query(DocumentChunk)
+    if body.client_id:
+        query = query.filter(DocumentChunk.client_id == body.client_id)
+
+    total_scanned = 0
+    total_flagged = 0
+    batch_size = 500
+    offset = 0
+
+    while True:
+        batch = query.order_by(DocumentChunk.id).offset(offset).limit(batch_size).all()
+        if not batch:
+            break
+
+        for chunk in batch:
+            total_scanned += 1
+            result = detect_voucher_chunk(chunk.chunk_text)
+            if result["is_voucher"]:
+                chunk.chunk_metadata = {
+                    "is_voucher": True,
+                    "voucher_type": result["voucher_type"],
+                    "voucher_year": result["voucher_year"],
+                }
+                total_flagged += 1
+
+        db.flush()
+        offset += batch_size
+
+    db.commit()
+
+    return {
+        "total_scanned": total_scanned,
+        "total_flagged": total_flagged,
+        "client_id": str(body.client_id) if body.client_id else "all",
+    }
+
+
 # ─── Batch Reprocessing ─────────────────────────────────────────────────────
 
 
