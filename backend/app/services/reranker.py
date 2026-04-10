@@ -52,7 +52,6 @@ async def rerank_chunks(
             query=query,
             documents=documents,
             top_n=top_k,
-            return_documents=False,
         )
 
         reranked = []
@@ -74,3 +73,26 @@ async def rerank_chunks(
         sentry_sdk.capture_exception(exc)
         logger.warning("Reranking failed, using unranked results", exc_info=True)
         return chunks[:top_k], False
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    async def _smoke_test():
+        sample_chunks = [
+            {"chunk_text": "The client's 2024 W-2 shows gross wages of $145,000."},
+            {"chunk_text": "Meeting notes from March: discussed Roth conversion strategy."},
+            {"chunk_text": "Form 1099-DIV reports $3,200 in qualified dividends."},
+            {"chunk_text": "The engagement letter was signed on January 15, 2024."},
+            {"chunk_text": "Schedule C net profit was $87,500 for the tax year."},
+            {"chunk_text": "Client asked about estimated tax payment deadlines."},
+        ]
+        query = "What was the client's W-2 income?"
+        results, did_rerank = await rerank_chunks(query, sample_chunks, top_k=3)
+        print(f"did_rerank={did_rerank}, results={len(results)}")
+        for r in results:
+            score = r.get("rerank_score", "N/A")
+            print(f"  score={score}  text={r['chunk_text'][:60]}")
+
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(_smoke_test())
