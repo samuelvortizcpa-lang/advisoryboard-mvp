@@ -1011,6 +1011,53 @@ async def evaluate_rag(
     }
 
 
+@router.post(
+    "/evaluate-rag-ground-truth/{client_id}",
+    summary="Run ground-truth RAG evaluation with exact page and answer scoring",
+)
+async def evaluate_rag_ground_truth(
+    client_id: UUID,
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Run per-client ground-truth questions through the live RAG pipeline.
+    Uses exact page attribution and answer-substring matching instead of
+    keyword matching. Takes 30-90s. Each run costs ~$0.05-0.15 in LLM calls.
+    """
+    from app.services.rag_eval_fixtures import get_ground_truth
+    from app.services.rag_evaluator import run_ground_truth_evaluation
+    from app.models.rag_evaluation import RagEvaluation
+
+    if get_ground_truth(str(client_id)) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No ground-truth test set defined for client {client_id}",
+        )
+
+    results = await run_ground_truth_evaluation(
+        client_id=str(client_id),
+        db=db,
+    )
+
+    # Persist
+    evaluation = RagEvaluation(
+        client_id=client_id,
+        user_id="eval_ground_truth",
+        results=results,
+    )
+    db.add(evaluation)
+    db.commit()
+    db.refresh(evaluation)
+
+    return {
+        "evaluation_id": str(evaluation.id),
+        "client_id": str(client_id),
+        "created_at": evaluation.created_at.isoformat(),
+        **results,
+    }
+
+
 @router.get(
     "/evaluations",
     summary="List past RAG evaluation results",
@@ -1038,6 +1085,7 @@ async def list_evaluations(
             "avg_latency_ms": e.results.get("avg_latency_ms"),
             "total_questions": e.results.get("total_questions"),
             "errors": e.results.get("errors", 0),
+            "test_set": e.results.get("test_set"),
         }
         for e in evals
     ]

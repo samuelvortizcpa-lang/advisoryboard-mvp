@@ -4,16 +4,23 @@ RAG Evaluation Framework.
 Runs a set of test questions through the live RAG pipeline and measures
 retrieval quality and response accuracy via keyword matching.
 
+Two evaluation modes:
+  - Keyword (run_evaluation): generic 8-question set, keyword hit scoring
+  - Ground truth (run_ground_truth_evaluation): per-client test set with
+    exact page attribution and answer-substring matching
+
 Usage (API):
     POST /api/admin/evaluate-rag/{client_id}
+    POST /api/admin/evaluate-rag-ground-truth/{client_id}
 
-This is an internal tool — not user-facing.  Each run makes 8+ LLM calls
+This is an internal tool — not user-facing.  Each run makes 8-10 LLM calls
 (~$0.05-0.10), so don't run on every deploy.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any
 from uuid import UUID
@@ -91,7 +98,24 @@ def _keyword_hit_count(text: str, keywords: list[str]) -> int:
     return sum(1 for kw in keywords if kw.lower() in text_lower)
 
 
-# ── Main evaluation runner ───────────────────────────────────────────────────
+def _normalize_for_match(text: str) -> str:
+    """Normalize text for answer-substring matching: lowercase, strip $, commas, collapse whitespace."""
+    t = text.lower()
+    t = t.replace("$", "").replace(",", "")
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _extract_pages_from_chunks(chunk_texts: list[str]) -> list[int]:
+    """Extract all unique [Page N] markers from a list of chunk texts."""
+    pages: set[int] = set()
+    for text in chunk_texts:
+        for m in re.findall(r"\[Page\s+(\d+)\]", text):
+            pages.add(int(m))
+    return sorted(pages)
+
+
+# ── Main evaluation runner (keyword) ─────────────────────────────────────────
 
 
 async def run_evaluation(
@@ -211,6 +235,7 @@ async def run_evaluation(
             by_difficulty[diff]["response_hits"] += 1
 
     return {
+        "test_set": "keyword_v1",
         "total_questions": total,
         "retrieval_hit_rate": round(retrieval_hits / total, 3) if total else 0,
         "response_keyword_rate": round(response_hits / total, 3) if total else 0,
@@ -220,6 +245,157 @@ async def run_evaluation(
         "by_category": by_category,
         "by_difficulty": by_difficulty,
         "details": details,
+    }
+
+
+# ── Ground-truth evaluation runner ───────────────────────────────────────────
+
+
+async def run_ground_truth_evaluation(
+    client_id: str | UUID,
+    db: Session,
+) -> dict[str, Any]:
+    """
+    Run per-client ground-truth questions through the live RAG pipeline.
+
+    Scoring:
+    - Retrieval hit: expected_page appears in [Page N] markers extracted
+      from the top-K post-rerank chunks.
+    - Response hit: at least one expected_answer_contains variant appears
+      (after normalization) in the LLM response.
+
+    Returns a summary dict compatible with run_evaluation() shape
+    (same top-level keys) plus a per_question debugging array.
+    """
+    from app.services import rag_service
+    from app.services.rag_eval_fixtures import get_ground_truth
+
+    client_id_str = str(client_id)
+    client_id_uuid = UUID(client_id_str)
+
+    ground_truth = get_ground_truth(client_id_str)
+    if ground_truth is None:
+        raise ValueError(
+            f"No ground-truth test set defined for client {client_id_str}"
+        )
+
+    per_question: list[dict[str, Any]] = []
+    total_latency_ms = 0.0
+
+    for item in ground_truth:
+        question = item["question"]
+        expected_page = item["expected_page"]
+        expected_answers = item["expected_answer_contains"]
+
+        start = time.monotonic()
+        try:
+            result = await rag_service.answer_question(
+                db,
+                client_id=client_id_uuid,
+                question=question,
+                user_id="eval_ground_truth",
+            )
+            latency_ms = (time.monotonic() - start) * 1000
+
+            answer = result.get("answer", "")
+            sources = result.get("sources", [])
+
+            # Extract [Page N] markers from all retrieved chunk texts
+            chunk_texts = [
+                s.get("chunk_text", "") or s.get("preview", "")
+                for s in sources
+            ]
+            retrieved_pages = _extract_pages_from_chunks(chunk_texts)
+
+            # Retrieval scoring: exact page match
+            retrieval_hit = expected_page in retrieved_pages
+
+            # Response scoring: normalized substring match
+            norm_answer = _normalize_for_match(answer)
+            response_hit = any(
+                _normalize_for_match(variant) in norm_answer
+                for variant in expected_answers
+            )
+
+            per_question.append({
+                "question": question,
+                "category": item["category"],
+                "difficulty": item["difficulty"],
+                "notes": item.get("notes", ""),
+                "expected_page": expected_page,
+                "retrieved_pages": retrieved_pages,
+                "retrieval_hit": retrieval_hit,
+                "expected_answer_contains": expected_answers,
+                "response_snippet": answer[:300],
+                "response_hit": response_hit,
+                "latency_ms": round(latency_ms, 1),
+                "source_count": len(sources),
+                "error": None,
+            })
+
+        except Exception as exc:
+            latency_ms = (time.monotonic() - start) * 1000
+            logger.warning(
+                "Ground-truth eval failed: %s — %s", question[:50], exc
+            )
+            per_question.append({
+                "question": question,
+                "category": item["category"],
+                "difficulty": item["difficulty"],
+                "notes": item.get("notes", ""),
+                "expected_page": expected_page,
+                "retrieved_pages": [],
+                "retrieval_hit": False,
+                "expected_answer_contains": expected_answers,
+                "response_snippet": "",
+                "response_hit": False,
+                "latency_ms": round(latency_ms, 1),
+                "source_count": 0,
+                "error": str(exc)[:500],
+            })
+
+        total_latency_ms += latency_ms
+
+    # ── Aggregate scores (same shape as keyword eval) ─────────────────────
+
+    total = len(per_question)
+    retrieval_hits = sum(1 for q in per_question if q["retrieval_hit"])
+    response_hits = sum(1 for q in per_question if q["response_hit"])
+    errors = sum(1 for q in per_question if q["error"])
+
+    by_category: dict[str, dict[str, Any]] = {}
+    for q in per_question:
+        cat = q["category"]
+        if cat not in by_category:
+            by_category[cat] = {"questions": 0, "retrieval_hits": 0, "response_hits": 0}
+        by_category[cat]["questions"] += 1
+        if q["retrieval_hit"]:
+            by_category[cat]["retrieval_hits"] += 1
+        if q["response_hit"]:
+            by_category[cat]["response_hits"] += 1
+
+    by_difficulty: dict[str, dict[str, Any]] = {}
+    for q in per_question:
+        diff = q["difficulty"]
+        if diff not in by_difficulty:
+            by_difficulty[diff] = {"questions": 0, "retrieval_hits": 0, "response_hits": 0}
+        by_difficulty[diff]["questions"] += 1
+        if q["retrieval_hit"]:
+            by_difficulty[diff]["retrieval_hits"] += 1
+        if q["response_hit"]:
+            by_difficulty[diff]["response_hits"] += 1
+
+    return {
+        "test_set": "ground_truth_v1",
+        "total_questions": total,
+        "retrieval_hit_rate": round(retrieval_hits / total, 3) if total else 0,
+        "response_keyword_rate": round(response_hits / total, 3) if total else 0,
+        "avg_latency_ms": round(total_latency_ms / total, 1) if total else 0,
+        "total_latency_ms": round(total_latency_ms, 1),
+        "errors": errors,
+        "by_category": by_category,
+        "by_difficulty": by_difficulty,
+        "per_question": per_question,
     }
 
 
@@ -252,9 +428,20 @@ def compare_evaluations(eval_a: dict, eval_b: dict) -> dict[str, Any]:
             "retrieval_delta": round(b_rr - a_rr, 3),
         }
 
-    return {
+    result: dict[str, Any] = {
         "retrieval_improvement": round(retrieval_delta, 3),
         "response_improvement": round(response_delta, 3),
         "latency_change_ms": round(latency_delta, 1),
         "by_category": by_category,
     }
+
+    # Warn if comparing across different test sets
+    a_set = eval_a.get("test_set")
+    b_set = eval_b.get("test_set")
+    if a_set and b_set and a_set != b_set:
+        result["warning"] = (
+            f"Comparing evaluations from different test sets "
+            f"({a_set} vs {b_set}). Metrics are not directly comparable."
+        )
+
+    return result
