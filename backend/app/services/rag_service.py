@@ -1684,29 +1684,37 @@ async def answer_question_stream(
             "chunk_index": best_chunk_index.get(doc_id_str, 0),
         }
 
-        # Find the page image whose text best matches the retrieved chunk
+        # Find the correct page for this chunk
         pages = page_images_by_doc.get(doc_id_str, [])
         if pages:
             chunk_preview = best_chunk_preview.get(doc_id_str, "")
-            best_page = pages[0]  # fallback to first page
-            if chunk_preview:
-                # Score each page by how much of the chunk text it contains
+            best_page = pages[0]  # ultimate fallback
+
+            # 1) Parse [Page N] marker embedded in chunk text (ground truth)
+            page_match = re.search(r'\[Page\s+(\d+)\]', chunk_preview) if chunk_preview else None
+            if page_match:
+                target_page = int(page_match.group(1))
+                for pi in pages:
+                    if pi.page_number == target_page:
+                        best_page = pi
+                        break
+            elif chunk_preview:
+                # 2) Fallback: text-overlap matching for old chunks without markers
                 best_overlap = 0
                 chunk_lower = chunk_preview.lower().rstrip("…")
                 for pi in pages:
                     if pi.page_text_preview:
                         page_lower = pi.page_text_preview.lower()
-                        # Check if chunk text appears in this page
                         if chunk_lower in page_lower:
                             best_page = pi
                             break
-                        # Fallback: count shared words for partial matches
                         chunk_words = set(chunk_lower.split())
                         page_words = set(page_lower.split())
                         overlap = len(chunk_words & page_words)
                         if overlap > best_overlap:
                             best_overlap = overlap
                             best_page = pi
+
             source["page_number"] = best_page.page_number
             if best_page.image_path:
                 try:
