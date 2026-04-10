@@ -1456,6 +1456,10 @@ async def answer_question_stream(
     # ── Retrieval phase (identical to answer_question) ──
     chunk_results = await search_chunks(db, client_id, question, limit=TOP_K)
 
+    logger.info("STREAM SOURCE DEBUG: search_chunks returned %d results, reranked=%s, rerank_model=%s",
+                len(chunk_results), _last_search_stats.get("reranked"),
+                _last_search_stats.get("rerank_model"))
+
     # Keyword fallback
     _kw_tokens = question.lower().split()
     _kw_bigrams = [
@@ -1633,17 +1637,25 @@ async def answer_question_stream(
     doc_map: dict[str, Document] = {}
     best_chunk_score: dict[str, float] = {}
     best_chunk_preview: dict[str, str] = {}
+    best_chunk_full_text: dict[str, str] = {}   # full text for [Page N] parsing
     best_chunk_index: dict[str, int] = {}
 
-    for chunk, score in chunk_results:
+    logger.info("STREAM SOURCE DEBUG: %d raw chunk_results for question: %s",
+                len(chunk_results), question[:80])
+
+    for i, (chunk, score) in enumerate(chunk_results):
         doc = chunk.document
         doc_id_str = str(chunk.document_id)
         filename = doc.filename if doc else "unknown"
+
+        logger.info("STREAM SOURCE DEBUG: chunk[%d] score=%.1f doc=%s idx=%d text=%.200s",
+                     i, score, filename, chunk.chunk_index, chunk.chunk_text[:200])
 
         if question_year:
             year_in_filename = question_year in filename
             year_in_period = doc and doc.document_period and question_year in doc.document_period
             if not year_in_filename and not year_in_period:
+                logger.info("STREAM SOURCE DEBUG: chunk[%d] SKIPPED (year filter, want %s)", i, question_year)
                 continue
 
         boosted_score = score
@@ -1657,6 +1669,7 @@ async def answer_question_stream(
             if len(chunk.chunk_text) > 200:
                 preview += "…"
             best_chunk_preview[doc_id_str] = preview
+            best_chunk_full_text[doc_id_str] = chunk.chunk_text
             best_chunk_index[doc_id_str] = chunk.chunk_index
 
     # Page image matching for sources
@@ -1687,26 +1700,39 @@ async def answer_question_stream(
         # Find the correct page for this chunk
         pages = page_images_by_doc.get(doc_id_str, [])
         if pages:
-            chunk_preview = best_chunk_preview.get(doc_id_str, "")
+            full_text = best_chunk_full_text.get(doc_id_str, "")
             best_page = pages[0]  # ultimate fallback
+            page_method = "fallback(pages[0])"
 
-            # 1) Parse [Page N] marker embedded in chunk text (ground truth)
-            page_match = re.search(r'\[Page\s+(\d+)\]', chunk_preview) if chunk_preview else None
-            if page_match:
-                target_page = int(page_match.group(1))
+            # 1) Parse ALL [Page N] markers from the full chunk text
+            all_markers = re.findall(r'\[Page\s+(\d+)\]', full_text) if full_text else []
+            logger.info("STREAM SOURCE DEBUG: doc=%s markers_found=%s in chunk (len=%d)",
+                        doc_id_str[:8], all_markers, len(full_text))
+
+            if all_markers:
+                # Use the LAST marker — for chunks spanning pages, the content
+                # the LLM references is typically near the end of the chunk
+                target_page = int(all_markers[-1])
+                logger.info("STREAM SOURCE DEBUG: picking last marker [Page %d] from %s",
+                            target_page, all_markers)
                 for pi in pages:
                     if pi.page_number == target_page:
                         best_page = pi
+                        page_method = f"marker([Page {target_page}])"
                         break
-            elif chunk_preview:
+                else:
+                    logger.info("STREAM SOURCE DEBUG: page %d not found in page_images (have pages %s)",
+                                target_page, [p.page_number for p in pages])
+            elif full_text:
                 # 2) Fallback: text-overlap matching for old chunks without markers
                 best_overlap = 0
-                chunk_lower = chunk_preview.lower().rstrip("…")
+                chunk_lower = full_text.lower()
                 for pi in pages:
                     if pi.page_text_preview:
                         page_lower = pi.page_text_preview.lower()
-                        if chunk_lower in page_lower:
+                        if chunk_lower[:150] in page_lower:
                             best_page = pi
+                            page_method = f"text-overlap(substring)"
                             break
                         chunk_words = set(chunk_lower.split())
                         page_words = set(page_lower.split())
@@ -1714,6 +1740,11 @@ async def answer_question_stream(
                         if overlap > best_overlap:
                             best_overlap = overlap
                             best_page = pi
+                            page_method = f"text-overlap(words={overlap})"
+
+            logger.info("STREAM SOURCE DEBUG: doc=%s → page=%d method=%s (available pages: %s)",
+                        doc_id_str[:8], best_page.page_number, page_method,
+                        [p.page_number for p in pages])
 
             source["page_number"] = best_page.page_number
             if best_page.image_path:
@@ -1726,6 +1757,7 @@ async def answer_question_stream(
                 source["image_path"] = best_page.image_path
         else:
             source["page_number"] = 1
+            logger.info("STREAM SOURCE DEBUG: doc=%s → page=1 (no page images)", doc_id_str[:8])
 
         sources.append(source)
 
