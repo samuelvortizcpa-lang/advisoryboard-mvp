@@ -992,6 +992,83 @@ def _compute_confidence_tier(scores: list[float]) -> str:
     return "low"
 
 
+def _build_context_with_attribution(
+    chunk_results: list[tuple[DocumentChunk, float]],
+    checkin_context_parts: list[str] | None = None,
+) -> str:
+    """
+    Build the text context string sent to the LLM with document attribution.
+
+    Each chunk is prefixed with ``[Document: <filename> | Page N]`` so the
+    LLM can anchor on the filename for tax-year disambiguation.  A preamble
+    listing distinct source documents is prepended.
+    """
+    if not chunk_results and not checkin_context_parts:
+        return ""
+
+    # Collect distinct filenames (preserving insertion order)
+    distinct_filenames: dict[str, None] = {}
+    for chunk, _score in chunk_results:
+        doc = chunk.document
+        fname = doc.filename if doc else "unknown"
+        distinct_filenames.setdefault(fname, None)
+
+    # Preamble: inventory of documents
+    preamble_lines = [
+        "The following document(s) are available to answer the user's question:\n"
+    ]
+    for fname in distinct_filenames:
+        preamble_lines.append(f"- {fname}")
+    preamble_lines.append(
+        "\nUse the filename to determine the tax year and scope of each document. "
+        "Below are the relevant excerpts:"
+    )
+    preamble = "\n".join(preamble_lines)
+
+    # Build per-chunk sections
+    context_parts: list[str] = []
+    for chunk, score in chunk_results:
+        doc = chunk.document
+        filename = doc.filename if doc else "unknown"
+        chunk_text = chunk.chunk_text
+
+        # Extract page number from [Page N] marker if present
+        page_match = re.search(r"\[Page\s+(\d+)\]", chunk_text)
+        if page_match:
+            page_num = page_match.group(1)
+            # Strip the original [Page N] line from the chunk text
+            chunk_text = re.sub(r"\[Page\s+\d+\]\n?", "", chunk_text, count=1).lstrip()
+            header = f"[Document: {filename} | Page {page_num} | Relevance: {score:.1f}%]"
+        else:
+            header = f"[Document: {filename} | Relevance: {score:.1f}%]"
+
+        if doc and doc.document_type:
+            type_info = f" | Type: {doc.document_type}"
+            if doc.document_subtype:
+                type_info += f" ({doc.document_subtype})"
+            if doc.document_period:
+                type_info += f" | Period: {doc.document_period}"
+            if doc.is_superseded:
+                type_info += " | SUPERSEDED"
+            # Insert type info before the closing bracket
+            header = header[:-1] + type_info + "]"
+
+        context_parts.append(f"{header}\n{chunk_text}")
+
+    # Append check-in context
+    if checkin_context_parts:
+        context_parts.extend(checkin_context_parts)
+
+    context = preamble + "\n\n---\n\n" + "\n\n---\n\n".join(context_parts)
+
+    logger.info(
+        "Built RAG context with %d chunks from %d documents (%d chars)",
+        len(chunk_results), len(distinct_filenames), len(context),
+    )
+
+    return context
+
+
 def _sanitize_user_input(text: str, max_length: int = 2000) -> str:
     """
     Sanitize user input before including it in LLM prompts.
@@ -1187,28 +1264,7 @@ async def answer_question(
     # ------------------------------------------------------------------
     # Build text-only context for GPT-4o (NO vision images — text only)
     # ------------------------------------------------------------------
-    context_parts: list[str] = []
-
-    for chunk, score in chunk_results:
-        doc = chunk.document
-        filename = doc.filename if doc else "unknown"
-        doc_meta = f"Source: {filename} | Relevance: {score:.1f}%"
-        if doc and doc.document_type:
-            doc_meta += f" | Type: {doc.document_type}"
-            if doc.document_subtype:
-                doc_meta += f" ({doc.document_subtype})"
-            if doc.document_period:
-                doc_meta += f" | Period: {doc.document_period}"
-            if doc.is_superseded:
-                doc_meta += " | SUPERSEDED"
-
-        context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
-
-    # Append check-in response context
-    if checkin_context_parts:
-        context_parts.extend(checkin_context_parts)
-
-    context = "\n\n---\n\n".join(context_parts)
+    context = _build_context_with_attribution(chunk_results, checkin_context_parts)
 
     # Build dynamic system prompt from client type
     db_client = (
@@ -1631,19 +1687,7 @@ async def answer_question_stream(
     confidence_tier = _compute_confidence_tier(all_scores)
 
     # ── Build context (same as answer_question) ──
-    context_parts: list[str] = []
-    for chunk, score in chunk_results:
-        doc = chunk.document
-        filename = doc.filename if doc else "unknown"
-        doc_meta = f"Source: {filename} | Relevance: {score:.1f}%"
-        if doc and doc.document_type:
-            doc_meta += f" | Type: {doc.document_type}"
-        context_parts.append(f"[{doc_meta}]\n{chunk.chunk_text}")
-
-    if checkin_context_parts:
-        context_parts.extend(checkin_context_parts)
-
-    context = "\n\n---\n\n".join(context_parts)
+    context = _build_context_with_attribution(chunk_results, checkin_context_parts)
 
     db_client = (
         db.query(Client)
