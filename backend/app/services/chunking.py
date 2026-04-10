@@ -35,6 +35,19 @@ _VOUCHER_PATTERNS = [
     re.compile(r"form\s*1040-?es", re.IGNORECASE),
     re.compile(r"estimated\s+tax\s+(payment|voucher)", re.IGNORECASE),
     re.compile(r"payment\s+voucher", re.IGNORECASE),
+    # "Calendar year—Due April 15, 2025" header on 1040-ES vouchers
+    re.compile(r"calendar\s+year.{0,5}due\s", re.IGNORECASE),
+    # IRS lockbox routing number (appears on payment voucher stubs)
+    re.compile(r"3\s*3\s*4\s*0\s*0\s*0\s*3"),
+]
+
+# Patterns that indicate a chunk is a continuation of a voucher (e.g. IRS
+# routing / address block that spills into the next chunk)
+_VOUCHER_CONTINUATION_PATTERNS = [
+    re.compile(r"internal\s+revenue\s+service", re.IGNORECASE),
+    re.compile(r"3\s*3\s*4\s*0\s*0\s*0\s*3"),
+    re.compile(r"united\s+states\s+treasury", re.IGNORECASE),
+    re.compile(r"estimated\s+tax\s+you\s+are\s+paying", re.IGNORECASE),
 ]
 
 _FUTURE_YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
@@ -78,6 +91,57 @@ def detect_voucher_chunk(
         "voucher_type": "1040-ES",
         "voucher_year": max(future_years),
     }
+
+
+def flag_voucher_continuations(
+    chunks: list,
+    *,
+    adjacency: int = 1,
+) -> int:
+    """Flag chunks adjacent to known voucher chunks that contain IRS routing language.
+
+    ``chunks`` is a list of DocumentChunk ORM objects (must have ``chunk_text``,
+    ``chunk_index``, ``document_id``, and ``chunk_metadata``).  The list should
+    be ordered by ``(document_id, chunk_index)``.
+
+    Returns the number of newly-flagged continuation chunks.
+    """
+    # Build set of (document_id, chunk_index) for known voucher chunks
+    voucher_positions: set[tuple] = set()
+    for c in chunks:
+        meta = c.chunk_metadata or {}
+        if meta.get("is_voucher"):
+            voucher_positions.add((str(c.document_id), c.chunk_index))
+
+    flagged = 0
+    for c in chunks:
+        meta = c.chunk_metadata or {}
+        if meta.get("is_voucher"):
+            continue  # already flagged
+
+        doc_id = str(c.document_id)
+        idx = c.chunk_index
+
+        # Check if any neighbour within adjacency range is a voucher
+        is_adjacent = any(
+            (doc_id, idx + delta) in voucher_positions
+            for delta in range(-adjacency, adjacency + 1)
+            if delta != 0
+        )
+        if not is_adjacent:
+            continue
+
+        # Only flag if the chunk itself has voucher continuation language
+        if any(p.search(c.chunk_text) for p in _VOUCHER_CONTINUATION_PATTERNS):
+            c.chunk_metadata = {
+                **(c.chunk_metadata or {}),
+                "is_voucher": True,
+                "voucher_type": "1040-ES-continuation",
+            }
+            flagged += 1
+
+    return flagged
+
 
 FINANCIAL_CHUNK_SIZE = 500
 FINANCIAL_CHUNK_OVERLAP = 100

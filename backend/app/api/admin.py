@@ -1150,7 +1150,7 @@ async def backfill_voucher_metadata(
     and set metadata for chunks flagged as vouchers.
     """
     from app.models.document_chunk import DocumentChunk
-    from app.services.chunking import detect_voucher_chunk
+    from app.services.chunking import detect_voucher_chunk, flag_voucher_continuations
 
     query = db.query(DocumentChunk)
     if body.client_id:
@@ -1180,11 +1180,20 @@ async def backfill_voucher_metadata(
         db.flush()
         offset += batch_size
 
+    # Second pass: flag continuation chunks adjacent to vouchers
+    all_chunks = (
+        query.order_by(DocumentChunk.document_id, DocumentChunk.chunk_index).all()
+    )
+    continuation_flagged = flag_voucher_continuations(all_chunks)
+    if continuation_flagged:
+        db.flush()
+
     db.commit()
 
     return {
         "total_scanned": total_scanned,
         "total_flagged": total_flagged,
+        "continuation_flagged": continuation_flagged,
         "client_id": str(body.client_id) if body.client_id else "all",
     }
 

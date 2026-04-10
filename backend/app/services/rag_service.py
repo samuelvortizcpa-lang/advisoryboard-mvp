@@ -44,7 +44,7 @@ from app.models.document_page_image import DocumentPageImage
 from app.models.checkin_response import CheckinResponse
 from app.models.checkin_template import CheckinTemplate
 from app.services import storage_service
-from app.services.chunking import chunk_text, detect_voucher_chunk, get_chunk_params, smart_chunk, structure_aware_chunk
+from app.services.chunking import chunk_text, detect_voucher_chunk, flag_voucher_continuations, get_chunk_params, smart_chunk, structure_aware_chunk
 from app.services.reranker import rerank_chunks
 from app.services.context_assembler import (
     ContextPurpose,

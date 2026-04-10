@@ -1,6 +1,8 @@
 """Tests for 1040-ES voucher chunk detection."""
 
-from app.services.chunking import detect_voucher_chunk
+from types import SimpleNamespace
+
+from app.services.chunking import detect_voucher_chunk, flag_voucher_continuations
 
 
 def test_real_voucher_chunk_flagged():
@@ -85,3 +87,60 @@ def test_voucher_picks_max_future_year():
     result = detect_voucher_chunk(chunk, return_tax_year=2024)
     assert result["is_voucher"] is True
     assert result["voucher_year"] == 2026
+
+
+def test_calendar_year_due_pattern_flagged():
+    """Calendar year header with due date should trigger voucher detection."""
+    chunk = (
+        "Calendar year—Due April 15, 2025\n"
+        "Amount of estimated tax: $8,000\n"
+    )
+    result = detect_voucher_chunk(chunk, return_tax_year=2024)
+    assert result["is_voucher"] is True
+
+
+def test_irs_lockbox_routing_flagged():
+    """IRS lockbox routing number should trigger voucher detection."""
+    chunk = (
+        "Make check payable to United States Treasury\n"
+        "Mail to: Internal Revenue Service\n"
+        "P.O. Box 1234\n"
+        "3 3 4 0 0 0 3\n"
+        "Due April 15, 2025\n"
+    )
+    result = detect_voucher_chunk(chunk, return_tax_year=2024)
+    assert result["is_voucher"] is True
+
+
+def _make_chunk(doc_id, index, text, metadata=None):
+    """Create a SimpleNamespace that looks like a DocumentChunk for testing."""
+    return SimpleNamespace(
+        document_id=doc_id,
+        chunk_index=index,
+        chunk_text=text,
+        chunk_metadata=metadata,
+    )
+
+
+def test_continuation_chunk_flagged():
+    """A chunk adjacent to a voucher with IRS routing language should be flagged."""
+    chunks = [
+        _make_chunk("doc1", 0, "Form 1040-ES\n2025 Estimated Tax Payment Voucher\n", {
+            "is_voucher": True, "voucher_type": "1040-ES", "voucher_year": 2025,
+        }),
+        _make_chunk("doc1", 1, (
+            "Internal Revenue Service\n"
+            "P.O. Box 12345\n"
+            "Charlotte, NC 28201\n"
+        ), None),
+        _make_chunk("doc1", 2, (
+            "Schedule A (Form 1040)\n"
+            "Itemized Deductions\n"
+        ), None),
+    ]
+    flagged = flag_voucher_continuations(chunks)
+    assert flagged == 1
+    assert chunks[1].chunk_metadata["is_voucher"] is True
+    assert chunks[1].chunk_metadata["voucher_type"] == "1040-ES-continuation"
+    # Non-adjacent chunk without IRS language should NOT be flagged
+    assert chunks[2].chunk_metadata is None
