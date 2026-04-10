@@ -2,7 +2,35 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import logging
+from logging.config import dictConfig
 import os
+
+dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "default",
+        },
+    },
+    "loggers": {
+        "rag_pipeline": {"level": "INFO", "handlers": ["console"], "propagate": False},
+        "performance": {"level": "INFO", "handlers": ["console"], "propagate": False},
+        "app": {"level": "INFO", "handlers": ["console"], "propagate": False},
+        "uvicorn.access": {"level": "INFO"},
+    },
+    "root": {
+        "level": "INFO",
+        "handlers": ["console"],
+    },
+})
 
 import sentry_sdk
 
