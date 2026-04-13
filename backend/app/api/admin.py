@@ -127,6 +127,16 @@ class AdminOverviewResponse(BaseModel):
     mrr: float
 
 
+class AdminClientResponse(BaseModel):
+    id: str
+    name: str
+    owner_email: str
+    document_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
 # ─── Admin user / overview endpoints ─────────────────────────────────────────
 
 
@@ -239,6 +249,48 @@ async def list_admin_users(
         )
 
     return results
+
+
+@router.get(
+    "/clients",
+    response_model=List[AdminClientResponse],
+    summary="List all clients across all users",
+)
+async def list_admin_clients(
+    _admin: None = Depends(verify_admin_access),
+    db: Session = Depends(get_db),
+) -> List[AdminClientResponse]:
+    doc_count_sub = (
+        db.query(
+            Document.client_id,
+            func.count(Document.id).label("doc_count"),
+        )
+        .group_by(Document.client_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            Client.id,
+            Client.name,
+            User.email,
+            func.coalesce(doc_count_sub.c.doc_count, 0),
+        )
+        .join(User, Client.owner_id == User.id)
+        .outerjoin(doc_count_sub, Client.id == doc_count_sub.c.client_id)
+        .order_by(func.lower(Client.name))
+        .all()
+    )
+
+    return [
+        AdminClientResponse(
+            id=str(row[0]),
+            name=row[1],
+            owner_email=row[2],
+            document_count=row[3],
+        )
+        for row in rows
+    ]
 
 
 @router.get(
