@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── API ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +38,28 @@ interface EvalListItem {
   avg_latency_ms: number;
   total_questions: number;
   commit_sha: string | null;
+}
+
+interface EvalDetail {
+  evaluation_id: string;
+  client_id: string;
+  created_at: string;
+  summary: {
+    retrieval_hit_rate: number | null;
+    response_keyword_rate: number | null;
+    avg_latency_ms: number | null;
+    total_questions: number | null;
+    errors: number;
+    test_set: string | null;
+  };
+  per_question: {
+    question: string;
+    expected: string[] | null;
+    response_snippet: string;
+    retrieval_hit: boolean;
+    response_hit: boolean;
+    latency_ms: number | null;
+  }[];
 }
 
 async function apiFetch<T>(token: string | null, path: string): Promise<T> {
@@ -90,6 +112,171 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function EvalDetailModal({
+  detail,
+  loading,
+  error,
+  onClose,
+}: {
+  detail: EvalDetail | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={(e) => {
+        if (e.target === overlayRef.current) onClose();
+      }}
+    >
+      <div
+        className="relative w-full bg-white rounded-2xl shadow-2xl mx-4 flex flex-col"
+        style={{ maxWidth: 900, maxHeight: "85vh" }}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none z-10"
+        >
+          ✕
+        </button>
+
+        {/* Loading */}
+        {loading && (
+          <div className="p-12 text-center">
+            <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+            <p className="mt-3 text-sm text-gray-500">Loading evaluation…</p>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && !loading && (
+          <div className="p-12 text-center">
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+
+        {/* Detail */}
+        {detail && !loading && (
+          <>
+            {/* Header */}
+            <div className="border-b border-gray-100 px-6 py-4 pr-12">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                Evaluation Detail
+              </p>
+              <h2 className="mt-1 text-lg font-bold text-gray-900">
+                {detail.evaluation_id.slice(0, 8)}…
+                <span className="ml-3 text-sm font-normal text-gray-500">
+                  {fmtDate(detail.created_at)}
+                </span>
+              </h2>
+            </div>
+
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 gap-3 px-6 py-4 sm:grid-cols-4">
+              <MetricCard
+                label="Questions"
+                value={String(detail.summary.total_questions ?? 0)}
+              />
+              <MetricCard
+                label="Retrieval Hit Rate"
+                value={fmtPct(detail.summary.retrieval_hit_rate)}
+              />
+              <MetricCard
+                label="Keyword Hit Rate"
+                value={fmtPct(detail.summary.response_keyword_rate)}
+              />
+              <MetricCard
+                label="Avg Latency"
+                value={fmtMs(detail.summary.avg_latency_ms)}
+              />
+            </div>
+
+            {/* Per-question cards */}
+            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-3">
+              {detail.per_question.map((q, i) => {
+                const passed = q.retrieval_hit && q.response_hit;
+                return (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-gray-200 p-4"
+                    style={{
+                      borderLeftWidth: 4,
+                      borderLeftColor: passed ? "#22c55e" : "#ef4444",
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {q.question}
+                      </p>
+                      {q.latency_ms != null && (
+                        <span className="shrink-0 text-xs text-gray-400">
+                          {fmtMs(q.latency_ms)}
+                        </span>
+                      )}
+                    </div>
+
+                    {q.response_snippet && (
+                      <p className="mt-2 text-xs text-gray-500 line-clamp-3">
+                        {q.response_snippet}
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex items-center gap-3">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          q.retrieval_hit
+                            ? "bg-green-50 text-green-700"
+                            : "bg-red-50 text-red-700"
+                        }`}
+                      >
+                        {q.retrieval_hit ? "✓" : "✗"} Retrieval
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          q.response_hit
+                            ? "bg-green-50 text-green-700"
+                            : "bg-red-50 text-red-700"
+                        }`}
+                      >
+                        {q.response_hit ? "✓" : "✗"} Keyword
+                      </span>
+                    </div>
+
+                    {q.expected && q.expected.length > 0 && (
+                      <p className="mt-2 text-[11px] text-gray-400">
+                        Expected: {q.expected.join(", ")}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+
+              {detail.per_question.length === 0 && (
+                <p className="py-8 text-center text-sm text-gray-400">
+                  No per-question data available
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function RagAnalyticsPage() {
@@ -97,6 +284,12 @@ export default function RagAnalyticsPage() {
   const [summary, setSummary] = useState<EvalSummary | null>(null);
   const [evals, setEvals] = useState<EvalListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Drill-down modal state
+  const [selectedEvalId, setSelectedEvalId] = useState<string | null>(null);
+  const [evalDetail, setEvalDetail] = useState<EvalDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -123,6 +316,33 @@ export default function RagAnalyticsPage() {
       cancelled = true;
     };
   }, [token]);
+
+  const openDetail = useCallback(
+    async (evaluationId: string) => {
+      setSelectedEvalId(evaluationId);
+      setEvalDetail(null);
+      setDetailError(null);
+      setDetailLoading(true);
+      try {
+        const detail = await apiFetch<EvalDetail>(
+          token,
+          `/admin/rag-analytics/evaluations/${evaluationId}`,
+        );
+        setEvalDetail(detail);
+      } catch (err) {
+        setDetailError(err instanceof Error ? err.message : "Failed to load");
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [token],
+  );
+
+  const closeDetail = useCallback(() => {
+    setSelectedEvalId(null);
+    setEvalDetail(null);
+    setDetailError(null);
+  }, []);
 
   // ── No token ──────────────────────────────────────────────────────────
 
@@ -290,7 +510,8 @@ export default function RagAnalyticsPage() {
                 {evals.map((e) => (
                   <tr
                     key={e.evaluation_id}
-                    className="border-b border-gray-50 hover:bg-gray-50"
+                    className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                    onClick={() => openDetail(e.evaluation_id)}
                   >
                     <td className="px-5 py-2 text-gray-600">
                       {fmtDate(e.created_at)}
@@ -316,6 +537,16 @@ export default function RagAnalyticsPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Drill-down modal */}
+      {selectedEvalId && (
+        <EvalDetailModal
+          detail={evalDetail}
+          loading={detailLoading}
+          error={detailError}
+          onClose={closeDetail}
+        />
       )}
     </div>
   );
