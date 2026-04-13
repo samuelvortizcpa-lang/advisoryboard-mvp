@@ -200,6 +200,9 @@ def update_org_seat_limit(org_id: UUID, new_tier: str, db: Session) -> None:
 # ---------------------------------------------------------------------------
 
 
+_EVAL_BYPASS = {"allowed": True, "used": 0, "limit": 999999, "remaining": 999999}
+
+
 def _count_chat_usage(
     db: Session,
     sub: UserSubscription,
@@ -211,6 +214,9 @@ def _count_chat_usage(
     """
     Count chat query rows in token_usage for the current billing period.
 
+    Excludes eval-framework traffic (is_eval=True) so that admin eval runs
+    don't consume the user's quota.
+
     Args:
         model_filter: If provided, only count rows where model ILIKE this pattern
                       (e.g. '%sonnet%', '%opus%'). If None, count all chat rows.
@@ -218,6 +224,7 @@ def _count_chat_usage(
     q = db.query(func.count(TokenUsage.id)).filter(
         TokenUsage.endpoint == "chat",
         TokenUsage.created_at >= sub.billing_period_start,
+        TokenUsage.is_eval == False,  # noqa: E712
     )
     if sub.billing_period_end:
         q = q.filter(TokenUsage.created_at < sub.billing_period_end)
@@ -236,13 +243,15 @@ def _count_chat_usage(
 
 
 def check_total_query_quota(
-    db: Session, user_id: str, *, org_id: UUID | None = None,
+    db: Session, user_id: str, *, org_id: UUID | None = None, is_admin_eval: bool = False,
 ) -> dict:
     """
     Check whether the user/org can make any AI chat query this period.
 
     Returns {allowed, used, limit, remaining}.
     """
+    if is_admin_eval:
+        return _EVAL_BYPASS
     sub = get_or_create_subscription(db, user_id, org_id=org_id)
     tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
     limit = tier_config["total_queries_limit"]
@@ -259,7 +268,7 @@ def check_total_query_quota(
 
 
 def check_sonnet_quota(
-    db: Session, user_id: str, *, org_id: UUID | None = None,
+    db: Session, user_id: str, *, org_id: UUID | None = None, is_admin_eval: bool = False,
 ) -> dict:
     """
     Check whether the user/org can make a Sonnet (advanced analysis) query.
@@ -267,6 +276,8 @@ def check_sonnet_quota(
     Counts Sonnet usage from the token_usage table.
     Returns {allowed, tier, used, limit, remaining}.
     """
+    if is_admin_eval:
+        return _EVAL_BYPASS
     sub = get_or_create_subscription(db, user_id, org_id=org_id)
     tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
     limit = tier_config["sonnet_queries_limit"]
@@ -297,7 +308,7 @@ check_quota = check_sonnet_quota
 
 
 def check_opus_quota(
-    db: Session, user_id: str, *, org_id: UUID | None = None,
+    db: Session, user_id: str, *, org_id: UUID | None = None, is_admin_eval: bool = False,
 ) -> dict:
     """
     Check whether the user/org can make an Opus (premium analysis) query.
@@ -305,6 +316,8 @@ def check_opus_quota(
     Counts Opus usage from the token_usage table.
     Returns {allowed, tier, used, limit, remaining}.
     """
+    if is_admin_eval:
+        return _EVAL_BYPASS
     sub = get_or_create_subscription(db, user_id, org_id=org_id)
     tier_config = TIER_DEFAULTS.get(sub.tier, TIER_DEFAULTS["free"])
     limit = tier_config["opus_queries_limit"]

@@ -157,6 +157,7 @@ async def route_completion(
     user_id: Optional[str] = None,
     client_id: Optional[UUID] = None,
     client_type: Optional[str] = None,
+    is_admin_eval: bool = False,
 ) -> dict[str, Any]:
     """
     Route to the appropriate model based on query_type with cascading fallback.
@@ -183,7 +184,7 @@ async def route_completion(
     # ── GATE: Total query quota check ───────────────────────────────────
     if db and user_id:
         try:
-            total_quota = check_total_query_quota(db, user_id)
+            total_quota = check_total_query_quota(db, user_id, is_admin_eval=is_admin_eval)
             if not total_quota["allowed"]:
                 logger.info(
                     "Total query limit reached for user %s (used=%d/%d)",
@@ -207,7 +208,7 @@ async def route_completion(
     # ── Strategic path: try Opus → Sonnet → GPT-4o-mini ─────────────────
     if query_type == "strategic" and db and user_id and settings.anthropic_api_key:
         try:
-            opus_quota = check_opus_quota(db, user_id)
+            opus_quota = check_opus_quota(db, user_id, is_admin_eval=is_admin_eval)
             if not opus_quota["allowed"]:
                 logger.info(
                     "Strategic query: Opus quota exceeded for user %s (used=%d/%d), trying Sonnet",
@@ -249,6 +250,7 @@ async def route_completion(
                         prompt_tokens=usage.input_tokens if usage else 0,
                         completion_tokens=usage.output_tokens if usage else 0,
                         endpoint="chat",
+                        is_eval=is_admin_eval,
                     )
                 except Exception:
                     logger.error("Failed to log Opus token usage", exc_info=True)
@@ -273,7 +275,7 @@ async def route_completion(
     # ── Synthesis path: try Sonnet → GPT-4o-mini ────────────────────────
     if query_type == "synthesis" and db and user_id:
         try:
-            sonnet_quota = check_sonnet_quota(db, user_id)
+            sonnet_quota = check_sonnet_quota(db, user_id, is_admin_eval=is_admin_eval)
             quota_remaining = sonnet_quota["remaining"]
 
             if not sonnet_quota["allowed"]:
@@ -331,6 +333,7 @@ async def route_completion(
                         prompt_tokens=usage.input_tokens if usage else 0,
                         completion_tokens=usage.output_tokens if usage else 0,
                         endpoint="chat",
+                        is_eval=is_admin_eval,
                     )
                 except Exception:
                     logger.error("Failed to log Claude token usage", exc_info=True)
@@ -339,7 +342,7 @@ async def route_completion(
             if db and user_id:
                 try:
                     increment_usage(db, user_id, original_query_type)
-                    updated_quota = check_sonnet_quota(db, user_id)
+                    updated_quota = check_sonnet_quota(db, user_id, is_admin_eval=is_admin_eval)
                     quota_remaining = updated_quota["remaining"]
                     if quota_remaining is not None and quota_remaining < 10:
                         quota_warning = (
@@ -396,6 +399,7 @@ async def route_completion(
                     prompt_tokens=usage.prompt_tokens if usage else 0,
                     completion_tokens=usage.completion_tokens if usage else 0,
                     endpoint="chat",
+                    is_eval=is_admin_eval,
                 )
             except Exception:
                 logger.error("Failed to log GPT token usage", exc_info=True)
@@ -434,6 +438,7 @@ async def route_completion_stream(
     user_id: Optional[str] = None,
     client_id: Optional[UUID] = None,
     client_type: Optional[str] = None,
+    is_admin_eval: bool = False,
 ):
     """
     Streaming variant of route_completion. Yields (token, None) for content
@@ -457,7 +462,7 @@ async def route_completion_stream(
     # ── GATE: Total query quota check ───────────────────────────────────
     if db and user_id:
         try:
-            total_quota = check_total_query_quota(db, user_id)
+            total_quota = check_total_query_quota(db, user_id, is_admin_eval=is_admin_eval)
             if not total_quota["allowed"]:
                 logger.info(
                     "Streaming: Total query limit reached for user %s (used=%d/%d)",
@@ -491,7 +496,7 @@ async def route_completion_stream(
     # Check Sonnet quota for synthesis queries
     if query_type == "synthesis" and db and user_id:
         try:
-            sonnet_quota = check_sonnet_quota(db, user_id)
+            sonnet_quota = check_sonnet_quota(db, user_id, is_admin_eval=is_admin_eval)
             quota_remaining = sonnet_quota["remaining"]
             if not sonnet_quota["allowed"]:
                 if original_query_type == "strategic":
@@ -533,7 +538,7 @@ async def route_completion_stream(
             if db and user_id:
                 try:
                     increment_usage(db, user_id, original_query_type)
-                    updated_quota = check_sonnet_quota(db, user_id)
+                    updated_quota = check_sonnet_quota(db, user_id, is_admin_eval=is_admin_eval)
                     quota_remaining = updated_quota["remaining"]
                     if quota_remaining is not None and quota_remaining < 10:
                         quota_warning = (
@@ -556,6 +561,7 @@ async def route_completion_stream(
                         prompt_tokens=usage.input_tokens if usage else 0,
                         completion_tokens=usage.output_tokens if usage else 0,
                         endpoint="chat_stream",
+                        is_eval=is_admin_eval,
                     )
                 except Exception:
                     logger.error("Failed to log Claude stream token usage", exc_info=True)
@@ -602,6 +608,7 @@ async def route_completion_stream(
                 query_type=original_query_type, model="gpt-4o-mini",
                 prompt_tokens=0, completion_tokens=0,
                 endpoint="chat_stream",
+                is_eval=is_admin_eval,
             )
         except Exception:
             logger.error("Failed to log GPT stream token usage", exc_info=True)

@@ -2,7 +2,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, func
+import sqlalchemy as sa
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -60,6 +61,9 @@ class TokenUsage(Base):
     # Which feature triggered the call (e.g. "chat", "classify", "brief")
     endpoint: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
+    # True for eval-framework traffic — excluded from quota enforcement
+    is_eval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa.text("false"))
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -70,6 +74,7 @@ class TokenUsage(Base):
         Index("ix_token_usage_user_created", "user_id", "created_at"),
         Index("ix_token_usage_client_id", "client_id"),
         Index("ix_token_usage_model", "model"),
+        Index("ix_token_usage_user_is_eval", "user_id", "is_eval"),
     )
 
     def __repr__(self) -> str:

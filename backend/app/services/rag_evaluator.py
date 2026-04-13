@@ -145,6 +145,7 @@ async def run_evaluation(
                 client_id=client_id,
                 question=question,
                 user_id=user_id,
+                is_admin_eval=True,
             )
             latency_ms = (time.monotonic() - start) * 1000
             answer = result.get("answer", "")
@@ -295,6 +296,7 @@ async def run_ground_truth_evaluation(
                 question=question,
                 user_id="eval_ground_truth",
                 include_debug_chunks=True,
+                is_admin_eval=True,
             )
             latency_ms = (time.monotonic() - start) * 1000
 

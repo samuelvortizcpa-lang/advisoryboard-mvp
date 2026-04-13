@@ -1117,6 +1117,7 @@ async def answer_question(
     user_id: str | None = None,
     *,
     include_debug_chunks: bool = False,
+    is_admin_eval: bool = False,
 ) -> dict:
     """
     RAG Q&A: retrieve relevant chunks then synthesise an answer.
@@ -1369,6 +1370,7 @@ async def answer_question(
         query_type, system_prompt, question,
         db=db, user_id=user_id, client_id=client_id,
         client_type=_client_type_name,
+        is_admin_eval=is_admin_eval,
     )
     answer = route_result["answer"]
     model_used = route_result["model_used"]

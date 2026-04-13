@@ -42,6 +42,7 @@ def log_token_usage(
     prompt_tokens: int,
     completion_tokens: int,
     endpoint: Optional[str] = None,
+    is_eval: bool = False,
 ) -> None:
     """
     Calculate cost and insert a token_usage row.
@@ -71,6 +72,7 @@ def log_token_usage(
             total_tokens=total_tokens,
             estimated_cost_usd=round(cost, 6),
             endpoint=endpoint,
+            is_eval=is_eval,
         )
         db.add(row)
         db.commit()
