@@ -35,8 +35,13 @@ const clerkHandler = clerkMiddleware(async (auth, request) => {
   const adminIds = getAdminUserIds();
   // TODO: Replace ADMIN_USER_IDS env var check with Clerk organization
   // roles or user metadata once role-based access is set up.
-  if (adminIds.size > 0 && !adminIds.has(userId)) {
-    // Non-admin authenticated user — redirect to home
+  // Fail-closed: empty/missing ADMIN_USER_IDS means the Set is empty,
+  // which means no user ID can match, which means everyone is denied.
+  // Do NOT add a "size > 0" guard here — that would re-introduce fail-open.
+  if (!adminIds.has(userId)) {
+    if (adminIds.size === 0) {
+      console.warn("ADMIN_USER_IDS is not configured; denying admin access. Set ADMIN_USER_IDS in the deployment environment.");
+    }
     return NextResponse.redirect(new URL("/", request.url));
   }
 

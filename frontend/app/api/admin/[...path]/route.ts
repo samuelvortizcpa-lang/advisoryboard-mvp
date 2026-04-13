@@ -56,7 +56,13 @@ async function handleProxy(
 
   // 2. Check admin allowlist (defense-in-depth — backend also checks)
   const adminIds = getAdminUserIds();
-  if (adminIds.size > 0 && !adminIds.has(userId)) {
+  // Fail-closed: empty/missing ADMIN_USER_IDS means the Set is empty,
+  // which means no user ID can match, which means everyone is denied.
+  // Do NOT add a "size > 0" guard here — that would re-introduce fail-open.
+  if (!adminIds.has(userId)) {
+    if (adminIds.size === 0) {
+      console.warn("ADMIN_USER_IDS is not configured; denying admin access. Set ADMIN_USER_IDS in the deployment environment.");
+    }
     return NextResponse.json(
       { detail: "Admin access required" },
       { status: 403 },
