@@ -62,6 +62,19 @@ interface EvalDetail {
   }[];
 }
 
+interface RunEvalResponse {
+  evaluation_id: string;
+  summary: {
+    retrieval_hit_rate: number | null;
+    response_keyword_rate: number | null;
+  };
+}
+
+// TODO: Replace with a real admin clients endpoint when available
+const EVAL_CLIENTS = [
+  { id: "92574da3-13ca-4017-a233-54c99d2ae2ae", name: "Michael Tjahjadi" },
+] as const;
+
 async function apiFetch<T>(token: string | null, path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: token ? { "X-Admin-Key": token } : {},
@@ -71,6 +84,32 @@ async function apiFetch<T>(token: string | null, path: string): Promise<T> {
     try {
       const body = await res.json();
       if (typeof body.detail === "string") msg = body.detail;
+    } catch {}
+    throw new Error(msg);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function apiPost<T>(
+  token: string | null,
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "X-Admin-Key": token } : {}),
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const data = await res.json();
+      if (typeof data.detail === "string") msg = data.detail;
     } catch {}
     throw new Error(msg);
   }
@@ -277,6 +316,160 @@ function EvalDetailModal({
   );
 }
 
+function RunEvalModal({
+  token,
+  onClose,
+  onSuccess,
+}: {
+  token: string;
+  onClose: () => void;
+  onSuccess: (evalId: string, retrieval: number | null, keyword: number | null) => void;
+}) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [clientId, setClientId] = useState<string>(EVAL_CLIENTS[0].id);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !running) onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, running]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  async function handleRun() {
+    setRunning(true);
+    setRunError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 180_000);
+
+    try {
+      const result = await apiPost<RunEvalResponse>(
+        token,
+        "/admin/rag-analytics/run-eval",
+        { client_id: clientId },
+        controller.signal,
+      );
+      clearTimeout(timeout);
+      onSuccess(
+        result.evaluation_id,
+        result.summary.retrieval_hit_rate,
+        result.summary.response_keyword_rate,
+      );
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setRunError("Eval timed out after 180s — check server logs");
+      } else {
+        setRunError(err instanceof Error ? err.message : "Eval failed");
+      }
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={(e) => {
+        if (e.target === overlayRef.current && !running) onClose();
+      }}
+    >
+      <div
+        className="relative w-full bg-white rounded-2xl shadow-2xl mx-4 flex flex-col"
+        style={{ maxWidth: 480 }}
+      >
+        {/* Header */}
+        <div className="border-b border-gray-100 px-6 py-4 pr-12">
+          <h2 className="text-lg font-bold text-gray-900">
+            Run Ground-Truth Evaluation
+          </h2>
+        </div>
+
+        {/* Close button */}
+        {!running && (
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none z-10"
+          >
+            ✕
+          </button>
+        )}
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          {/* Client picker */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Client
+            </label>
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              disabled={running}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-200 disabled:opacity-50"
+            >
+              {EVAL_CLIENTS.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Running hint */}
+          {running && (
+            <div className="flex items-center gap-3 rounded-lg bg-blue-50 px-4 py-3">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600 shrink-0" />
+              <p className="text-xs text-blue-700">
+                This takes ~1-2 minutes. Running all ground-truth questions against the RAG pipeline…
+              </p>
+            </div>
+          )}
+
+          {/* Error */}
+          {runError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-xs text-red-700">{runError}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
+          <button
+            onClick={onClose}
+            disabled={running}
+            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleRun}
+            disabled={running}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+          >
+            {running && (
+              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            )}
+            {running ? "Running eval…" : "Run"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function RagAnalyticsPage() {
@@ -290,6 +483,23 @@ export default function RagAnalyticsPage() {
   const [evalDetail, setEvalDetail] = useState<EvalDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+
+  // Run eval modal state
+  const [showRunModal, setShowRunModal] = useState(false);
+
+  const refreshData = useCallback(async () => {
+    if (!token) return;
+    try {
+      const [s, e] = await Promise.all([
+        apiFetch<EvalSummary>(token, "/admin/rag-analytics/summary?days=30"),
+        apiFetch<EvalListItem[]>(token, "/admin/rag-analytics/evaluations?limit=20"),
+      ]);
+      setSummary(s);
+      setEvals(e);
+    } catch {
+      // Silently fail on refresh — page already has data
+    }
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -343,6 +553,24 @@ export default function RagAnalyticsPage() {
     setEvalDetail(null);
     setDetailError(null);
   }, []);
+
+  const handleEvalSuccess = useCallback(
+    async (evalId: string, retrieval: number | null, keyword: number | null) => {
+      // Close run modal
+      setShowRunModal(false);
+
+      // Toast (alert fallback)
+      const msg = `Eval complete: ${fmtPct(retrieval)} retrieval, ${fmtPct(keyword)} keyword`;
+      alert(msg);
+
+      // Refresh data so new run appears
+      await refreshData();
+
+      // Auto-open drilldown for the new eval
+      openDetail(evalId);
+    },
+    [refreshData, openDetail],
+  );
 
   // ── No token ──────────────────────────────────────────────────────────
 
@@ -399,19 +627,35 @@ export default function RagAnalyticsPage() {
   if (summary.total_runs === 0) {
     return (
       <div className="px-8 py-8 space-y-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-            Admin
-          </p>
-          <h1 className="mt-1 text-2xl font-bold text-gray-900">
-            RAG Analytics
-          </h1>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+              Admin
+            </p>
+            <h1 className="mt-1 text-2xl font-bold text-gray-900">
+              RAG Analytics
+            </h1>
+          </div>
+          <button
+            onClick={() => setShowRunModal(true)}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            Run Eval
+          </button>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-12 text-center">
           <p className="text-sm text-gray-500">
             No eval runs yet — click Run Eval to start
           </p>
         </div>
+
+        {showRunModal && (
+          <RunEvalModal
+            token={token}
+            onClose={() => setShowRunModal(false)}
+            onSuccess={handleEvalSuccess}
+          />
+        )}
       </div>
     );
   }
@@ -423,13 +667,21 @@ export default function RagAnalyticsPage() {
   return (
     <div className="px-8 py-8 space-y-6">
       {/* Header */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-          Admin
-        </p>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900">
-          RAG Analytics
-        </h1>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+            Admin
+          </p>
+          <h1 className="mt-1 text-2xl font-bold text-gray-900">
+            RAG Analytics
+          </h1>
+        </div>
+        <button
+          onClick={() => setShowRunModal(true)}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+        >
+          Run Eval
+        </button>
       </div>
 
       {/* Metric cards */}
@@ -546,6 +798,15 @@ export default function RagAnalyticsPage() {
           loading={detailLoading}
           error={detailError}
           onClose={closeDetail}
+        />
+      )}
+
+      {/* Run eval modal */}
+      {showRunModal && (
+        <RunEvalModal
+          token={token}
+          onClose={() => setShowRunModal(false)}
+          onSuccess={handleEvalSuccess}
         />
       )}
     </div>
