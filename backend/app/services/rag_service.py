@@ -158,6 +158,24 @@ LINE-ITEM PRECISION:
 - Quote exact dollar amounts as they appear — never round or approximate (e.g., "$142,350" not "about $142k").
 - If the exact line asked about is not in the chunks but a related figure is, provide what IS available and explain which line it comes from and how it differs.
 - For W-2s and K-1s, cite box numbers (e.g., "Box 1: $95,000").
+
+Response formatting — IMPORTANT:
+
+The retrieved context includes bracketed metadata headers like
+"[TAX YEAR 2024 | Document: filename.pdf | Page 5 | Relevance: 100.0% | Type: ... | Period: ...]"
+at the start of each excerpt. These headers are for your reasoning only.
+
+NEVER copy, quote, or paraphrase these brackets in your response.
+NEVER write "Relevance:", "Period:", "Type:", or bracketed tags in your answer.
+NEVER begin a citation with "[".
+
+Instead, when citing a source, write naturally:
+  ✓ "According to page 5 of the 2024 Tax Return, ..."
+  ✓ "The 2024 Form 1040 shows ..."
+  ✗ "[TAX YEAR 2024 | Document: ...] shows ..."
+  ✗ "Page 5 (Relevance: 100%) indicates ..."
+
+Use the header information as prose only.
 """
 
 
