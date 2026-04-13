@@ -60,7 +60,7 @@ advisoryboard-mvp-code/
 │   ├── alembic/               # Database migrations (30+ versions)
 │   └── tests/                 # pytest test files
 │
-├── admin-dashboard/           # Separate admin Next.js app (port 3001)
+├── admin-dashboard/           # DEPRECATED 2026-04-13 — replaced by frontend/app/admin/ (local safety fallback, do not add new code here)
 ├── docs/                      # API documentation
 ├── Procfile                   # Railway/Heroku process definition
 └── nixpacks.toml              # Nix deployment config (Python 3.13, FFmpeg, Tesseract)

@@ -4,7 +4,6 @@
 
 **Prerequisites before starting this session:**
 - `client-linking-architecture.md` exists in the project root and has been read
-- The `admin-dashboard/` deploy path question from the April 12 session is **resolved** (otherwise Part 5 is unverifiable)
 - Michael Tjahjadi's baseline eval is holding at 9/10 real correctness, 10/10 header-clean (reference: `a8552383-f908-476b-b51f-286f7131abb6`)
 - The voucher classifier fix (Priority 3 from April 12) has shipped — otherwise Michael's classifier row contamination will confuse cross-entity testing later
 - Clean branch: `git checkout -b feat/client-linking-stage-1` off main
@@ -121,9 +120,7 @@ Commit: `feat(api): add client link management endpoints`
 
 ## Part 5 — Frontend: Link Management UI
 
-**Precondition:** Confirm `admin-dashboard/` deploy path is resolved before touching UI. If the April 12 investigation is still outstanding, stop and resolve it first.
-
-On the client detail page in `admin-dashboard/`, add a "Linked Clients" section showing the current group members and a "+ Link Client" button.
+On the client detail page in `frontend/app/admin/`, add a "Linked Clients" section showing the current group members and a "+ Link Client" button.
 
 The link picker is a searchable dropdown of other clients in the firm, filtered by `client_kind` (if you're on a human client, only entity-kind clients appear; if you're on an entity, only individual clients appear). Form fields: link type, ownership percentage, filing responsibility. Submit hits the POST endpoint.
 
@@ -174,8 +171,6 @@ Commit: `test(rag): add cross-entity evaluation fixture`
 ## Expected Failure Modes (so you recognize them)
 
 **Part 3 — retriever regression.** If Michael's eval drops below 9/10, the most likely causes in order: (1) the CTE is returning duplicates and the ANY clause is pulling noise from other clients; (2) there's a second retrieval path you didn't update; (3) request-scoped caching is returning stale groups across test runs. Diagnose in that order.
-
-**Part 5 — admin-dashboard deploy.** If the deploy path is still unknown, the UI work is unverifiable. Do not proceed. Resolve it first.
 
 **Part 7 — classifier gaps.** Cross-entity questions about specific line items on the 1120S may fail because the classifier doesn't yet extract structured fields from business returns (that's Stage 2). This is expected and is **not a Stage 1 blocker** as long as the *retrieval* works — i.e., the 1120S chunks are reaching the LLM and the LLM can read them. If chunks aren't reaching the LLM at all, that's a Stage 1 bug. If they are and the LLM is just missing a specific number, that's a Stage 2 classifier issue. Document the gap and ship.
 

@@ -254,6 +254,6 @@ run_tests.sh
 # ─── Uploads directory (local dev file storage) ───────────
 backend/uploads/
 
-# ─── Local-only admin dashboard ──────────────
+# ─── Local-only admin dashboard (DEPRECATED 2026-04-13 — see CLAUDE.md) ──────────────
 admin-dashboard/
 .gstack/
