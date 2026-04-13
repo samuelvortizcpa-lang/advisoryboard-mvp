@@ -4,7 +4,44 @@ import { NextRequest, NextResponse, NextFetchEvent } from "next/server";
 const CLERK_FAPI = "https://clerk.callwen.com";
 const PROXY_URL = "https://callwen.com/__clerk";
 
-const clerkHandler = clerkMiddleware();
+function getAdminUserIds(): Set<string> {
+  const raw = process.env.ADMIN_USER_IDS ?? "";
+  return new Set(
+    raw
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+}
+
+// clerkMiddleware with a handler — the handler runs after Clerk has
+// authenticated the request, giving us access to auth() for route-specific
+// checks like the admin gate.
+const clerkHandler = clerkMiddleware(async (auth, request) => {
+  const isAdminPage = request.nextUrl.pathname.startsWith("/admin");
+  // /api/admin/* is handled by the Route Handler's own auth() call,
+  // so we only gate page routes here.
+  if (!isAdminPage) {
+    return NextResponse.next();
+  }
+
+  // Admin page route — require authentication + admin allowlist
+  const { userId, redirectToSignIn } = await auth();
+
+  if (!userId) {
+    return redirectToSignIn({ returnBackUrl: request.url });
+  }
+
+  const adminIds = getAdminUserIds();
+  // TODO: Replace ADMIN_USER_IDS env var check with Clerk organization
+  // roles or user metadata once role-based access is set up.
+  if (adminIds.size > 0 && !adminIds.has(userId)) {
+    // Non-admin authenticated user — redirect to home
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  return NextResponse.next();
+});
 
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
   // Public pages — skip Clerk auth entirely
