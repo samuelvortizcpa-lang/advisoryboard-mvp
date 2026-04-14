@@ -130,7 +130,7 @@ class AdminOverviewResponse(BaseModel):
 class AdminClientResponse(BaseModel):
     id: str
     name: str
-    owner_email: str
+    owner_email: str | None = None
     document_count: int = 0
 
     class Config:
