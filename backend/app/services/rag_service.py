@@ -459,7 +459,40 @@ async def process_document(db: Session, document: Document) -> None:
         # 1b. Classify document (best-effort — never fails the pipeline)
         try:
             from app.services.document_classifier import classify_document
-            classification = await classify_document(text)
+
+            # Filter 1040-ES voucher pages before classification.
+            # Voucher pages contain strong signals for the NEXT tax year
+            # ("Form 1040-ES", future due dates) that contaminate the
+            # classifier's first-2000-char snippet and cause the document
+            # to be mis-classified as 1040-ES / future year. Filter them
+            # out so the classifier sees the actual return content.
+            classify_text = text
+            try:
+                pages = re.split(r'(?=\[Page \d+\])', text)
+                pages = [p for p in pages if p.strip()]
+                non_voucher_pages = [
+                    p for p in pages
+                    if not detect_voucher_chunk(p).get("is_voucher")
+                ]
+                filtered_count = len(pages) - len(non_voucher_pages)
+                if non_voucher_pages and filtered_count > 0:
+                    classify_text = "\n\n".join(non_voucher_pages)
+                    logger.info(
+                        "RAG: filtered %d voucher page(s) from classifier input for %s (%d pages remain)",
+                        filtered_count, doc_label, len(non_voucher_pages),
+                    )
+                elif filtered_count > 0 and not non_voucher_pages:
+                    logger.warning(
+                        "RAG: all %d pages flagged as vouchers for %s — falling back to unfiltered text",
+                        filtered_count, doc_label,
+                    )
+            except Exception as filter_exc:
+                logger.warning(
+                    "RAG: voucher page filter failed for %s (falling back to unfiltered text): %s",
+                    doc_label, filter_exc,
+                )
+
+            classification = await classify_document(classify_text)
             document.document_type = classification["document_type"]
             document.document_subtype = classification["document_subtype"]
             document.document_period = classification["document_period"]
