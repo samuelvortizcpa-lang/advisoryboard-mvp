@@ -68,10 +68,14 @@ interface RunEvalResponse {
   };
 }
 
-// TODO: Replace with a real admin clients endpoint when available
-const EVAL_CLIENTS = [
-  { id: "92574da3-13ca-4017-a233-54c99d2ae2ae", name: "Michael Tjahjadi" },
-] as const;
+interface AdminClient {
+  id: string;
+  name: string;
+  owner_email: string | null;
+  document_count: number;
+}
+
+const DEFAULT_CLIENT_ID = "92574da3-13ca-4017-a233-54c99d2ae2ae";
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`/api/admin${path}`);
@@ -317,9 +321,35 @@ function RunEvalModal({
 }) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const [clientId, setClientId] = useState<string>(EVAL_CLIENTS[0].id);
+  const [clientId, setClientId] = useState<string>("");
+  const [clients, setClients] = useState<AdminClient[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(true);
+  const [clientsError, setClientsError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setClientsLoading(true);
+    setClientsError(null);
+    apiFetch<AdminClient[]>("/clients")
+      .then((data) => {
+        if (cancelled) return;
+        setClients(data);
+        const michael = data.find((c) => c.id === DEFAULT_CLIENT_ID);
+        setClientId(michael?.id ?? data[0]?.id ?? "");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setClientsError(err instanceof Error ? err.message : "Failed to load clients");
+      })
+      .finally(() => {
+        if (!cancelled) setClientsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -405,15 +435,25 @@ function RunEvalModal({
             <select
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              disabled={running}
+              disabled={running || clientsLoading || !!clientsError || clients.length === 0}
               className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-200 disabled:opacity-50"
             >
-              {EVAL_CLIENTS.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {clientsLoading && <option value="">Loading clients…</option>}
+              {clientsError && <option value="">Failed to load clients</option>}
+              {!clientsLoading && !clientsError && clients.length === 0 && (
+                <option value="">No clients found</option>
+              )}
+              {!clientsLoading &&
+                !clientsError &&
+                clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
             </select>
+            {clientsError && (
+              <p className="mt-1 text-xs text-red-600">{clientsError}</p>
+            )}
           </div>
 
           {/* Running hint */}
