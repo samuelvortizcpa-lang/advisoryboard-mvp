@@ -155,6 +155,29 @@ TERM_EXPANSIONS: dict[str, dict] = {
         "forms": ["w-2"],
     },
 
+    # ── HSA / Form 8889 ─────────────────────────────────────────────
+    "hsa": {
+        "expansions": [
+            "health savings account",
+            "form 8889",
+            "hsa contribution",
+            "hsa deduction",
+            "line 13",
+            "schedule 1",
+        ],
+        "forms": ["8889", "schedule 1"],
+    },
+    "health savings account": {
+        "expansions": [
+            "hsa",
+            "form 8889",
+            "hsa contribution",
+            "line 13",
+            "schedule 1",
+        ],
+        "forms": ["8889", "schedule 1"],
+    },
+
     # ── K-1 ──────────────────────────────────────────────────────────
     "k-1": {
         "expansions": [

@@ -1230,10 +1230,17 @@ async def answer_question(
 
     # Add financial term expansions to the keyword search
     _expansion_terms, _relevant_forms = expand_financial_terms(question)
-    _kw_search_phrases = list(_kw_bigrams)
+    # Expansion terms FIRST (domain-specific IRS vocabulary — high signal on tax forms).
+    # Bigrams SECOND (colloquial English — lower signal, but broader coverage).
+    # The [:8] slice below caps total phrases searched; putting expansions first
+    # guarantees they are searched before bigrams crowd them out on long queries.
+    _kw_search_phrases: list[str] = []
     for term in _expansion_terms:
-        if len(term) >= 4 and term.lower() not in {b.lower() for b in _kw_search_phrases}:
+        if len(term) >= 4 and term.lower() not in {p.lower() for p in _kw_search_phrases}:
             _kw_search_phrases.append(term.lower())
+    for bigram in _kw_bigrams:
+        if bigram.lower() not in {p.lower() for p in _kw_search_phrases}:
+            _kw_search_phrases.append(bigram.lower())
 
     # Track which keyword phrase matched each fallback chunk (for page matching)
     _keyword_for_chunk: dict[int, str] = {}
