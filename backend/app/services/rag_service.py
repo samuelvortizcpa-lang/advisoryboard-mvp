@@ -820,11 +820,11 @@ async def search_chunks(
     all_rows: list[tuple[DocumentChunk, float, str]] = []  # (chunk, distance, source)
 
     # Build voucher exclusion filter (exclude chunks with chunk_metadata->>'is_voucher' = 'true')
+    # Uses IS DISTINCT FROM to correctly handle SQL NULL, JSONB null, and JSONB objects
+    # without an is_voucher key — all of which should be treated as "not a voucher."
+    # Previous OR-based filter silently dropped JSONB null rows due to three-valued logic.
     _voucher_filter = (
-        sa.or_(
-            DocumentChunk.chunk_metadata.is_(None),
-            DocumentChunk.chunk_metadata["is_voucher"].astext != "true",
-        )
+        DocumentChunk.chunk_metadata["is_voucher"].astext.is_distinct_from("true")
         if not include_vouchers
         else sa.true()
     )
