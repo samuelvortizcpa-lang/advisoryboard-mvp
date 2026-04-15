@@ -74,7 +74,7 @@ class DocumentChunk(Base):
     # Optional JSONB metadata (e.g., {"is_voucher": true, "voucher_type": "1040-ES"})
     chunk_metadata: Mapped[Optional[dict]] = mapped_column(
         "chunk_metadata",
-        JSONB,
+        JSONB(none_as_null=True),
         nullable=True,
     )
 
