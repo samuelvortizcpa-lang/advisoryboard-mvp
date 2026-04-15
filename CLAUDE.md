@@ -111,6 +111,7 @@ advisoryboard-mvp-code/
 - Platform: Railway (backend) + Vercel (frontend)
 - Production URL: https://callwen.com
 - Deploy workflow: auto-deploy on push (Railway watches main, Vercel watches vercel-deploy remote)
+- Git remotes use split credentials: `origin` authenticates via SSH (`~/.ssh/id_ed25519_lang`), `vercel-deploy` authenticates via HTTPS (macOS Keychain). Pushing to `origin` uses SSH; pushing to `vercel-deploy` uses HTTPS. Do not try to unify — they are intentionally split.
 - Deploy status command: `make health`
 - Merge method: direct push to main
 - Project type: web app (SPA frontend + API backend)
