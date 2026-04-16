@@ -53,10 +53,10 @@ MICHAEL_TJAHJADI_2024: list[GroundTruthItem] = [
     {
         "question": "How much taxable interest did Michael report in 2024?",
         "expected_page": 5,
-        "expected_answer_contains": ["$136", "136"],
+        "expected_answer_contains": ["$7", "7"],
         "category": "factual_lookup",
         "difficulty": "medium",
-        "notes": "Form 1040 line 2b — small number, harder to retrieve",
+        "notes": "Form 1040 line 2b ($7 taxable interest) — adjacent to tax-exempt interest ($136 on line 2a). Previous rubric had these swapped.",
     },
     {
         "question": "What were Michael's ordinary dividends in 2024?",
@@ -85,18 +85,18 @@ MICHAEL_TJAHJADI_2024: list[GroundTruthItem] = [
     {
         "question": "What was Michael's total tax for 2024?",
         "expected_page": 6,
-        "expected_answer_contains": ["$43,141", "43,141", "43141"],
+        "expected_answer_contains": ["$42,645", "42,645", "42645"],
         "category": "factual_lookup",
         "difficulty": "easy",
-        "notes": "Form 1040 line 24",
+        "notes": "Form 1040 line 24 (total tax) — adjacent to line 25a withholding ($43,141). Previous rubric confused withholding with total tax.",
     },
     {
-        "question": "How much did Michael contribute to his HSA in 2024?",
+        "question": "What was Michael's HSA contribution limit for 2024?",
         "expected_page": 24,
         "expected_answer_contains": ["$4,150", "4,150", "4150"],
         "category": "factual_lookup",
         "difficulty": "hard",
-        "notes": "Form 8889 — deep in document, tests retrieval of later pages",
+        "notes": "Form 8889 line 3/8 — contribution limit for self-only HDHP coverage. Michael's personal contribution was $0 (line 2); employer contributed $420 (line 9).",
     },
     {
         "question": "Did Michael have an excess Roth IRA contribution in 2024? If so, how much?",
