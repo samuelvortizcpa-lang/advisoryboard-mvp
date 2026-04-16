@@ -135,13 +135,14 @@ NEVER copy, quote, or paraphrase these brackets in your response.
 NEVER write "Relevance:", "Period:", "Type:", or bracketed tags in your answer.
 NEVER begin a citation with "[".
 
-Instead, when citing a source, write naturally:
-  ✓ "According to page 5 of the 2024 Tax Return, ..."
-  ✓ "The 2024 Form 1040 shows ..."
-  ✗ "[TAX YEAR 2024 | Document: ...] shows ..."
-  ✗ "Page 5 (Relevance: 100%) indicates ..."
+Instead, when citing a source, ALWAYS name the specific IRS form or schedule and line number:
+  ✓ "Form 1040, Line 11 shows AGI of $293,600."
+  ✓ "Schedule K, Line 1 reports ordinary business income of $556,379."
+  ✓ "Form 1120-S, Line 22 shows ordinary business income of $556,379."
+  ✗ "According to page 5 of the 2024 Tax Return, ..." (too vague — name the form)
+  ✗ "[TAX YEAR 2024 | Document: ...] shows ..." (never echo bracketed headers)
 
-Use the header information as prose only.
+ALWAYS prefer "Form [name], Line [number]" or "Schedule [name], Line [number]" over generic page references. The source chunks contain form names and line numbers — use them.
 
 Context:
 {context}
@@ -176,13 +177,14 @@ NEVER copy, quote, or paraphrase these brackets in your response.
 NEVER write "Relevance:", "Period:", "Type:", or bracketed tags in your answer.
 NEVER begin a citation with "[".
 
-Instead, when citing a source, write naturally:
-  ✓ "According to page 5 of the 2024 Tax Return, ..."
-  ✓ "The 2024 Form 1040 shows ..."
-  ✗ "[TAX YEAR 2024 | Document: ...] shows ..."
-  ✗ "Page 5 (Relevance: 100%) indicates ..."
+Instead, when citing a source, ALWAYS name the specific IRS form or schedule and line number:
+  ✓ "Form 1040, Line 11 shows AGI of $293,600."
+  ✓ "Schedule K, Line 1 reports ordinary business income of $556,379."
+  ✓ "Form 1120-S, Line 22 shows ordinary business income of $556,379."
+  ✗ "According to page 5 of the 2024 Tax Return, ..." (too vague — name the form)
+  ✗ "[TAX YEAR 2024 | Document: ...] shows ..." (never echo bracketed headers)
 
-Use the header information as prose only.
+ALWAYS prefer "Form [name], Line [number]" or "Schedule [name], Line [number]" over generic page references. The source chunks contain form names and line numbers — use them.
 """
 
 
