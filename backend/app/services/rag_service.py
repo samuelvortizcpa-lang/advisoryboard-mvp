@@ -771,6 +771,36 @@ async def process_document(db: Session, document: Document) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _build_bm25_or_tsquery_string(query: str) -> str | None:
+    """Build an OR-joined tsquery string from a natural-language query.
+
+    Returns a string suitable for to_tsquery('english', ...), or None
+    if the query has no usable tokens.
+
+    Example:
+        'What is Michael's AGI for 2024?' -> 'what | michael | agi | 2024'
+
+    Note: tokens are passed through to_tsquery, which applies english
+    config (stopword removal, stemming). So 'what' will be dropped as a
+    stopword by to_tsquery itself; we don't pre-filter stopwords here.
+    We do filter pure single-character tokens to avoid degenerate queries.
+    """
+    # Extract alphanumeric tokens, lowercase
+    raw_tokens = re.findall(r"[a-zA-Z0-9]+", query.lower())
+    # Drop single-character tokens (won't help, may degrade ranking)
+    tokens = [t for t in raw_tokens if len(t) >= 2]
+    if not tokens:
+        return None
+    # Deduplicate while preserving order (helps ts_rank_cd stability)
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for t in tokens:
+        if t not in seen:
+            seen.add(t)
+            deduped.append(t)
+    return " | ".join(deduped)
+
+
 async def search_chunks(
     db: Session,
     client_id: UUID,
@@ -852,27 +882,35 @@ async def search_chunks(
                 seen_chunk_ids.add(chunk.id)
                 all_rows.append((chunk, distance, source))
 
-    # --- BM25 full-text search via tsvector ---
+    # --- BM25 full-text search via tsvector (OR-joined ranker) ---
     bm25_results: list[dict] = []
     try:
-        tsquery = func.plainto_tsquery("english", query)
-        bm25_score_col = func.ts_rank_cd(
-            DocumentChunk.search_vector, tsquery
-        ).label("bm25_score")
+        # Build OR-joined tsquery so BM25 acts as a ranker (any term matches)
+        # rather than a filter (all terms must match). ts_rank_cd scores by
+        # how many terms hit and their proximity — more matches rank higher.
+        or_query_str = _build_bm25_or_tsquery_string(query)
+        if or_query_str is None:
+            # No usable tokens; skip BM25 entirely (vector + keyword carry)
+            bm25_rows = []
+        else:
+            tsquery = func.to_tsquery("english", or_query_str)
+            bm25_score_col = func.ts_rank_cd(
+                DocumentChunk.search_vector, tsquery
+            ).label("bm25_score")
 
-        bm25_rows = (
-            db.query(DocumentChunk, bm25_score_col)
-            .join(Document, DocumentChunk.document_id == Document.id)
-            .filter(
-                DocumentChunk.client_id == client_id,
-                Document.client_id == client_id,
-                DocumentChunk.search_vector.op("@@")(tsquery),
-                _voucher_filter,
+            bm25_rows = (
+                db.query(DocumentChunk, bm25_score_col)
+                .join(Document, DocumentChunk.document_id == Document.id)
+                .filter(
+                    DocumentChunk.client_id == client_id,
+                    Document.client_id == client_id,
+                    DocumentChunk.search_vector.op("@@")(tsquery),
+                    _voucher_filter,
+                )
+                .order_by(bm25_score_col.desc())
+                .limit(FETCH_K)
+                .all()
             )
-            .order_by(bm25_score_col.desc())
-            .limit(FETCH_K)
-            .all()
-        )
 
         for chunk, bm25_score in bm25_rows:
             bm25_results.append({
