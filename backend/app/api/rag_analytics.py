@@ -62,6 +62,7 @@ async def list_eval_runs(
             "created_at": e.created_at.isoformat(),
             "retrieval_hit_rate": e.results.get("retrieval_hit_rate"),
             "response_keyword_rate": e.results.get("response_keyword_rate"),
+            "citation_hit_rate": e.results.get("citation_hit_rate"),
             "avg_latency_ms": e.results.get("avg_latency_ms"),
             "total_questions": e.results.get("total_questions"),
             "commit_sha": e.results.get("commit_sha"),
@@ -122,6 +123,7 @@ async def get_eval_detail(
         "summary": {
             "retrieval_hit_rate": results.get("retrieval_hit_rate"),
             "response_keyword_rate": results.get("response_keyword_rate"),
+            "citation_hit_rate": results.get("citation_hit_rate"),
             "avg_latency_ms": results.get("avg_latency_ms"),
             "total_questions": results.get("total_questions"),
             "errors": results.get("errors", 0),
@@ -170,6 +172,11 @@ async def eval_summary(
     response_rates = [
         e.results.get("response_keyword_rate", 0) for e in evals
     ]
+    citation_rates = [
+        e.results.get("citation_hit_rate")
+        for e in evals
+        if e.results.get("citation_hit_rate") is not None
+    ]
     latencies = [
         e.results.get("avg_latency_ms", 0) for e in evals
     ]
@@ -195,6 +202,7 @@ async def eval_summary(
             "created_at": latest.created_at.isoformat(),
             "retrieval_hit_rate": latest.results.get("retrieval_hit_rate"),
             "response_keyword_rate": latest.results.get("response_keyword_rate"),
+            "citation_hit_rate": latest.results.get("citation_hit_rate"),
             "avg_latency_ms": latest.results.get("avg_latency_ms"),
         },
         "avg_retrieval_hit_rate": round(
@@ -202,6 +210,11 @@ async def eval_summary(
         ),
         "avg_response_keyword_rate": round(
             sum(response_rates) / len(response_rates), 3
+        ),
+        "avg_citation_hit_rate": (
+            round(sum(citation_rates) / len(citation_rates), 3)
+            if citation_rates
+            else None
         ),
         "avg_latency_ms": round(sum(latencies) / len(latencies), 1),
         "trend": trend,
@@ -273,6 +286,7 @@ async def run_eval(
         "summary": {
             "retrieval_hit_rate": results.get("retrieval_hit_rate"),
             "response_keyword_rate": results.get("response_keyword_rate"),
+            "citation_hit_rate": results.get("citation_hit_rate"),
             "avg_latency_ms": results.get("avg_latency_ms"),
             "total_questions": results.get("total_questions"),
             "errors": results.get("errors", 0),

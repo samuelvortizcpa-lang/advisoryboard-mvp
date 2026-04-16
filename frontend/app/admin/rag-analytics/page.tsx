@@ -12,10 +12,12 @@ interface EvalSummary {
     created_at: string;
     retrieval_hit_rate: number;
     response_keyword_rate: number;
+    citation_hit_rate?: number | null;
     avg_latency_ms: number;
   } | null;
   avg_retrieval_hit_rate: number | null;
   avg_response_keyword_rate: number | null;
+  avg_citation_hit_rate?: number | null;
   avg_latency_ms: number | null;
   trend: {
     date: string;
@@ -33,6 +35,7 @@ interface EvalListItem {
   created_at: string;
   retrieval_hit_rate: number;
   response_keyword_rate: number;
+  citation_hit_rate?: number | null;
   avg_latency_ms: number;
   total_questions: number;
   commit_sha: string | null;
@@ -45,6 +48,7 @@ interface EvalDetail {
   summary: {
     retrieval_hit_rate: number | null;
     response_keyword_rate: number | null;
+    citation_hit_rate?: number | null;
     avg_latency_ms: number | null;
     total_questions: number | null;
     errors: number;
@@ -220,7 +224,7 @@ function EvalDetailModal({
             </div>
 
             {/* Summary stats */}
-            <div className="grid grid-cols-2 gap-3 px-6 py-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 px-6 py-4 sm:grid-cols-5">
               <MetricCard
                 label="Questions"
                 value={String(detail.summary.total_questions ?? 0)}
@@ -232,6 +236,10 @@ function EvalDetailModal({
               <MetricCard
                 label="Keyword Hit Rate"
                 value={fmtPct(detail.summary.response_keyword_rate)}
+              />
+              <MetricCard
+                label="Citation Hit Rate"
+                value={fmtPct(detail.summary.citation_hit_rate)}
               />
               <MetricCard
                 label="Avg Latency"
@@ -616,8 +624,8 @@ export default function RagAnalyticsPage() {
       <div className="px-8 py-8">
         <div className="animate-pulse space-y-6">
           <div className="h-6 w-48 rounded bg-gray-200" />
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {[...Array(6)].map((_, i) => (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {[...Array(8)].map((_, i) => (
               <div
                 key={i}
                 className="rounded-xl border border-gray-200 bg-white p-5"
@@ -695,7 +703,7 @@ export default function RagAnalyticsPage() {
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <MetricCard
           label="Total Eval Runs"
           value={String(summary.total_runs)}
@@ -709,6 +717,10 @@ export default function RagAnalyticsPage() {
           value={fmtPct(latest_run?.response_keyword_rate)}
         />
         <MetricCard
+          label="Latest Citation"
+          value={fmtPct(latest_run?.citation_hit_rate)}
+        />
+        <MetricCard
           label="Avg Latency"
           value={fmtMs(latest_run?.avg_latency_ms)}
         />
@@ -719,6 +731,10 @@ export default function RagAnalyticsPage() {
         <MetricCard
           label="30-Day Avg Keyword"
           value={fmtPct(summary.avg_response_keyword_rate)}
+        />
+        <MetricCard
+          label="30-Day Avg Citation"
+          value={fmtPct(summary.avg_citation_hit_rate)}
         />
       </div>
 
@@ -765,6 +781,7 @@ export default function RagAnalyticsPage() {
                   <th className="px-5 py-2">Questions</th>
                   <th className="px-5 py-2">Retrieval</th>
                   <th className="px-5 py-2">Keyword</th>
+                  <th className="px-5 py-2">Citation</th>
                   <th className="px-5 py-2">Latency</th>
                 </tr>
               </thead>
@@ -789,6 +806,9 @@ export default function RagAnalyticsPage() {
                     </td>
                     <td className="px-5 py-2 font-medium text-gray-900">
                       {fmtPct(e.response_keyword_rate)}
+                    </td>
+                    <td className="px-5 py-2 font-medium text-gray-900">
+                      {fmtPct(e.citation_hit_rate)}
                     </td>
                     <td className="px-5 py-2 text-gray-600">
                       {fmtMs(e.avg_latency_ms)}
