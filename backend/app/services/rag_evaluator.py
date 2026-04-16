@@ -382,6 +382,7 @@ async def run_ground_truth_evaluation(
     for item in ground_truth:
         question = item["question"]
         expected_page = item["expected_page"]
+        expected_pages: list[int] = item.get("expected_pages") or [expected_page]
         expected_answers = item["expected_answer_contains"]
 
         start = time.monotonic()
@@ -405,8 +406,8 @@ async def run_ground_truth_evaluation(
             ]
             retrieved_pages = _extract_pages_from_chunks(chunk_texts)
 
-            # Retrieval scoring: exact page match
-            retrieval_hit = expected_page in retrieved_pages
+            # Retrieval scoring: any acceptable page found in retrieved chunks
+            retrieval_hit = any(p in retrieved_pages for p in expected_pages)
 
             # Response scoring: normalized substring match
             norm_answer = _normalize_for_match(answer)

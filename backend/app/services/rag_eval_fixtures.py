@@ -15,7 +15,7 @@ Each test item specifies:
 - notes: optional free-text explanation for maintainers
 """
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class ExpectedCitation(TypedDict):
@@ -26,7 +26,8 @@ class ExpectedCitation(TypedDict):
 
 class GroundTruthItem(TypedDict):
     question: str
-    expected_page: int
+    expected_page: int                              # primary page
+    expected_pages: NotRequired[list[int]]           # all acceptable pages (overrides expected_page for scoring)
     expected_answer_contains: list[str]
     expected_citations: list[ExpectedCitation]
     category: str
@@ -160,6 +161,7 @@ TRACY_CHEN_DO_INC_2024: list[GroundTruthItem] = [
     {
         "question": "What was Tracy Chen DO, Inc's ordinary business income in 2024?",
         "expected_page": 16,
+        "expected_pages": [16, 18, 52],
         "expected_answer_contains": ["$556,379", "556,379"],
         "expected_citations": [
             {"form": "Form 1120-S", "line": "22", "page": 16},
@@ -167,7 +169,7 @@ TRACY_CHEN_DO_INC_2024: list[GroundTruthItem] = [
         ],
         "category": "factual_lookup",
         "difficulty": "easy",
-        "notes": "Ordinary business income. S-corp equivalent of total-income baseline.",
+        "notes": "Ordinary business income. S-corp equivalent of total-income baseline. Also on Schedule K (p18) and reconciliation (p52).",
     },
     {
         "question": "What were the gross receipts for Tracy Chen DO, Inc in 2024?",
@@ -196,24 +198,26 @@ TRACY_CHEN_DO_INC_2024: list[GroundTruthItem] = [
     {
         "question": "What were the total deductions on Tracy Chen DO, Inc's 2024 1120-S?",
         "expected_page": 16,
+        "expected_pages": [16, 17],
         "expected_answer_contains": ["$364,521", "364,521"],
         "expected_citations": [
             {"form": "Form 1120-S", "line": "21", "page": 16},
         ],
         "category": "factual_lookup",
         "difficulty": "medium",
-        "notes": "Aggregation retrieval. Sum of Lines 7-20.",
+        "notes": "Aggregation retrieval. Sum of Lines 7-20. Also on 1120-S continuation (p17).",
     },
     {
         "question": "How much was Tracy Chen paid as an officer of Tracy Chen DO, Inc in 2024?",
         "expected_page": 21,
+        "expected_pages": [16, 21, 49],
         "expected_answer_contains": ["$96,000", "96,000"],
         "expected_citations": [
             {"form": "Form 1125-E", "line": "2", "page": 21},
         ],
         "category": "factual_lookup",
         "difficulty": "medium",
-        "notes": "Individual officer comp. Sole officer so $ = Q3. Citation weak spot: 1125-E table row unnumbered, Line 2 (total) used as acceptable cite.",
+        "notes": "Individual officer comp. Sole officer so $ = Q3. Also on 1120-S Line 7 (p16) and CA statement (p49). Citation weak spot: 1125-E table row unnumbered, Line 2 (total) used as acceptable cite.",
     },
     {
         "question": "What were Tracy Chen DO, Inc's retained earnings at the end of 2024?",
@@ -242,6 +246,7 @@ TRACY_CHEN_DO_INC_2024: list[GroundTruthItem] = [
     {
         "question": "How much California state tax does Tracy Chen DO, Inc owe for 2024?",
         "expected_page": 41,
+        "expected_pages": [39, 41],
         "expected_answer_contains": ["$8,354", "8,354"],
         "expected_citations": [
             {"form": "Form 100S", "line": "30", "page": 41},
@@ -249,7 +254,7 @@ TRACY_CHEN_DO_INC_2024: list[GroundTruthItem] = [
         ],
         "category": "factual_lookup",
         "difficulty": "hard",
-        "notes": "Federal/state disambiguation. Watch for confusion with $8,780 (total due) or $556,904 (CA taxable income).",
+        "notes": "Federal/state disambiguation. Also on Form 5806 (p39). Watch for confusion with $8,780 (total due) or $556,904 (CA taxable income).",
     },
     {
         "question": "What was the California estimated tax underpayment penalty on Tracy Chen DO, Inc's 2024 return?",
