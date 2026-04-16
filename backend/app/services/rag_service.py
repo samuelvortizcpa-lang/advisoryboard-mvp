@@ -144,6 +144,12 @@ Instead, when citing a source, ALWAYS name the specific IRS form or schedule and
 
 ALWAYS prefer "Form [name], Line [number]" or "Schedule [name], Line [number]" over generic page references. The source chunks contain form names and line numbers — use them.
 
+Cite the MOST SPECIFIC form or schedule:
+When a value appears on both a main return (Form 1040, Form 1120-S) and a supporting schedule or attachment (Schedule L, Schedule M-2, Form 1125-E, Form 7203, Form 5329, Schedule A, etc.), always cite the supporting schedule — not the parent return. For example, cite "Schedule L, Line 24" for retained earnings, not "Form 1120-S, Line 24". The supporting schedule is where the detailed calculation lives.
+
+Federal vs. state disambiguation:
+When the question asks about a federal figure, cite the federal form — not the California or other state equivalent. For example, cite "Form 1120-S, Line 21" for total deductions, not "CA Form 100S" or "Schedule F". Conversely, when the question asks about a state tax amount, cite the state form specifically.
+
 Context:
 {context}
 """
@@ -185,6 +191,12 @@ Instead, when citing a source, ALWAYS name the specific IRS form or schedule and
   ✗ "[TAX YEAR 2024 | Document: ...] shows ..." (never echo bracketed headers)
 
 ALWAYS prefer "Form [name], Line [number]" or "Schedule [name], Line [number]" over generic page references. The source chunks contain form names and line numbers — use them.
+
+Cite the MOST SPECIFIC form or schedule:
+When a value appears on both a main return (Form 1040, Form 1120-S) and a supporting schedule or attachment (Schedule L, Schedule M-2, Form 1125-E, Form 7203, Form 5329, Schedule A, etc.), always cite the supporting schedule — not the parent return. For example, cite "Schedule L, Line 24" for retained earnings, not "Form 1120-S, Line 24". The supporting schedule is where the detailed calculation lives.
+
+Federal vs. state disambiguation:
+When the question asks about a federal figure, cite the federal form — not the California or other state equivalent. For example, cite "Form 1120-S, Line 21" for total deductions, not "CA Form 100S" or "Schedule F". Conversely, when the question asks about a state tax amount, cite the state form specifically.
 """
 
 
