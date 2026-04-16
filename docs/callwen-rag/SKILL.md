@@ -21,12 +21,12 @@ Read this first. Then decide which reference file to load for the task at hand.
 
 The retrieval layer is structurally sound end-to-end. Eval on the reference client (Michael Tjahjadi, 2024 Form 1040, `client_id 92574da3-13ca-4017-a233-54c99d2ae2ae`, 236 chunks) now measures three metrics across the 10-question ground-truth set:
 
-- **Retrieval hit rate: 1.0** — holds steady. Every expected page appears in the retrieved chunks.
+- **Retrieval hit rate: 1.0** — holds steady. The expected page for each question appears somewhere in the top-K retrieved chunks (current scorer checks page-level presence, not chunk rank).
 - **Keyword hit rate: 0.9–1.0** — hovers depending on Q4's LLM nondeterminism (see caveats). The prior 100% floor was partly artifact: Q4's old rubric `["$7", "7"]` matched bare "7" in incidental text. Tightened to `["$7.00", "$7."]` in `e641cb8`.
 - **Citation hit rate: 0.6** — new metric as of `4b53a59`. Measures whether the LLM's emitted (Form X, Line Y) pair matches the ground-truthed `expected_citations` in `rag_eval_fixtures.py`. Strict: line-only or page-only = miss.
 - **Avg latency: ~2.9s** (≤4.3s floor).
 
-Latest eval: `d1fb0a2e` (Apr 16 04:25 UTC). Latest Railway deploy: commit `4b53a59`. Previous reference eval `17b8ee57` (100/100/3.8s on commit `7b876f0`) remains valid for retrieval/keyword comparison but predates the citation metric.
+Latest eval: `d1fb0a2e` (Apr 16 04:25 UTC). Latest Railway deploy: commit `4b53a59`. Previous reference eval `17b8ee57` (100/100/3.8s on commit `7b876f0`) is superseded — it predates both the citation metric and the Q4 rubric tightening (`e641cb8`), so its keyword=1.0 is not directly comparable to current runs.
 
 What these numbers mean and how to trust them is covered in `references/eval.md`. The short version: the eval is real signal, not rubric noise, because the rubric itself was ground-truthed against the source document. The citation metric is the newest addition — it catches cases where the LLM gives the right number but cites the wrong form or line.
 
@@ -105,8 +105,3 @@ Load these only when the task demands them. They exist so this top-level file st
 - **Don't skip the eval after a retrieval-layer change.** The eval is real signal now. An unverified change lands without knowing whether the score moved.
 - **Don't ship an embedding model swap casually.** Vector column is 1536 dims. Switching models is a migration + full re-embed. Defer until user volume or quality justifies it; see `AdvisoryBoard_OpenSource_FineTuning_Strategy.docx` for the full analysis.
 - **Don't use bare single-digit keywords in `expected_answer_contains`.** A value like `"7"` matches incidental 7s in page numbers, line numbers, and other numeric text — producing false positives that inflate `keyword_hit_rate`. Include the `$` prefix or trailing punctuation (`"$7.00"`, `"$7."`) so normalization doesn't collapse to a single-digit substring. This bit the Q4 rubric; fixed in `e641cb8`.
-
-## Recent commits (eval layer)
-
-- `e641cb8` — feat(eval): add expected_citations to ground-truth rubric
-- `4b53a59` — feat(eval): add citation_hit_rate as third eval metric
