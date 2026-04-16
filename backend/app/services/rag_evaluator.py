@@ -119,7 +119,10 @@ _FORM_PATTERN = re.compile(
     r"(?:Form|Schedule)\s+[A-Z0-9][\w-]*",
     re.IGNORECASE,
 )
-_LINE_PATTERN = re.compile(r"\b[Ll]ine\s+(\d{1,3}[a-z]?)\b")
+# Matches "Line 11", "Line 44a", "Box 17", "Box 1a" — captures the number+suffix.
+_LINE_OR_BOX_PATTERN = re.compile(
+    r"\b(?:[Ll]ine|[Bb]ox)\s+(\d{1,3}[a-z]?)\b"
+)
 
 
 def _normalize_form(form: str) -> str:
@@ -128,9 +131,13 @@ def _normalize_form(form: str) -> str:
 
 
 def _extract_citations(text: str) -> list[dict[str, str]]:
-    """Extract (form, line) pairs via Cartesian product. Strict: both required."""
+    """Extract (form, line) pairs via Cartesian product. Strict: both required.
+
+    "Box N" references (K-1, W-2) are normalized to the same "line" key
+    so downstream matching is uniform.
+    """
     forms_raw = _FORM_PATTERN.findall(text)
-    lines_raw = _LINE_PATTERN.findall(text)
+    lines_raw = _LINE_OR_BOX_PATTERN.findall(text)
     if not forms_raw or not lines_raw:
         return []
     forms_norm = sorted({_normalize_form(f) for f in forms_raw})
@@ -142,16 +149,64 @@ def _extract_citations(text: str) -> list[dict[str, str]]:
     ]
 
 
+def _line_matches(extracted_line: str, expected_line: str) -> bool:
+    """Tolerant line-number comparison.
+
+    Rules:
+    - Exact match (case-insensitive): "44a" == "44a" → True
+    - Base-number match: extracted "44" matches expected "44a" (suffix tolerance)
+    - But NOT prefix match: extracted "4" must NOT match expected "44"
+    """
+    ext = extracted_line.lower()
+    exp = expected_line.lower()
+    if ext == exp:
+        return True
+    # Allow extracted base number to match expected number+suffix.
+    # "44" matches "44a" but "4" must not match "44".
+    # Strip trailing letters from expected to get its base number.
+    exp_base = re.sub(r"[a-z]+$", "", exp)
+    ext_base = re.sub(r"[a-z]+$", "", ext)
+    if ext_base == exp_base:
+        return True
+    return False
+
+
+def _form_matches(extracted_form: str, expected_form: str) -> bool:
+    """Tolerant form-name comparison.
+
+    Rules:
+    - Exact match (already normalized to lowercase): always wins
+    - Suffix tolerance: extracted "form 100" matches expected "form 100s"
+      (the LLM sometimes drops the S-corp suffix)
+    - But "schedule k" must NOT match "schedule k-1" (different forms)
+    """
+    if extracted_form == expected_form:
+        return True
+    # Allow extracted to match if expected = extracted + single letter suffix.
+    # "form 100" → "form 100s" OK.  "form 1120" → "form 1120-s" needs dash handling.
+    # Check: expected starts with extracted AND the remainder is just a letter or -letter.
+    if expected_form.startswith(extracted_form):
+        remainder = expected_form[len(extracted_form):]
+        # Allow: "s", "-s", "-e" (single letter or dash+letter)
+        if re.fullmatch(r"-?[a-z]", remainder):
+            return True
+    return False
+
+
 def _citation_match(
     extracted: list[dict[str, str]],
     expected: list[dict],
 ) -> bool:
-    """Return True if any extracted (form, line) pair matches any expected citation."""
+    """Return True if any extracted (form, line) pair matches any expected citation.
+
+    Uses tolerant matching for both form names and line numbers.
+    """
     for exp in expected:
         exp_form = _normalize_form(exp["form"])
         exp_line = exp["line"].lower()
         for ext in extracted:
-            if ext["form"] == exp_form and ext["line"].lower() == exp_line:
+            if (_form_matches(ext["form"], exp_form)
+                    and _line_matches(ext["line"], exp_line)):
                 return True
     return False
 
