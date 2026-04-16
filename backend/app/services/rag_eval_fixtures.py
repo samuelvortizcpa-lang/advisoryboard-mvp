@@ -155,9 +155,132 @@ MICHAEL_TJAHJADI_2024: list[GroundTruthItem] = [
 ]
 
 
+# Tracy Chen DO, Inc — 2024 Form 1120-S (S-corp, single document)
+TRACY_CHEN_DO_INC_2024: list[GroundTruthItem] = [
+    {
+        "question": "What was Tracy Chen DO, Inc's ordinary business income in 2024?",
+        "expected_page": 16,
+        "expected_answer_contains": ["$556,379", "556,379"],
+        "expected_citations": [
+            {"form": "Form 1120-S", "line": "22", "page": 16},
+            {"form": "Schedule K", "line": "1", "page": 18},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "easy",
+        "notes": "Ordinary business income. S-corp equivalent of total-income baseline.",
+    },
+    {
+        "question": "What were the gross receipts for Tracy Chen DO, Inc in 2024?",
+        "expected_page": 16,
+        "expected_answer_contains": ["$920,900", "920,900"],
+        "expected_citations": [
+            {"form": "Form 1120-S", "line": "1a", "page": 16},
+            {"form": "Form 1120-S", "line": "1c", "page": 16},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "easy",
+        "notes": "Gross receipts top line. Line 1a and 1c both $920,900 (no returns/allowances).",
+    },
+    {
+        "question": "What was the total compensation of officers reported on the 2024 1120-S for Tracy Chen DO, Inc?",
+        "expected_page": 16,
+        "expected_answer_contains": ["$96,000", "96,000"],
+        "expected_citations": [
+            {"form": "Form 1120-S", "line": "7", "page": 16},
+            {"form": "Form 1125-E", "line": "2", "page": 21},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "easy",
+        "notes": "Officer comp. Same $ as Q5 (sole officer). Citation metric differentiates.",
+    },
+    {
+        "question": "What were the total deductions on Tracy Chen DO, Inc's 2024 1120-S?",
+        "expected_page": 16,
+        "expected_answer_contains": ["$364,521", "364,521"],
+        "expected_citations": [
+            {"form": "Form 1120-S", "line": "21", "page": 16},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "medium",
+        "notes": "Aggregation retrieval. Sum of Lines 7-20.",
+    },
+    {
+        "question": "How much was Tracy Chen paid as an officer of Tracy Chen DO, Inc in 2024?",
+        "expected_page": 21,
+        "expected_answer_contains": ["$96,000", "96,000"],
+        "expected_citations": [
+            {"form": "Form 1125-E", "line": "2", "page": 21},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "medium",
+        "notes": "Individual officer comp. Sole officer so $ = Q3. Citation weak spot: 1125-E table row unnumbered, Line 2 (total) used as acceptable cite.",
+    },
+    {
+        "question": "What were Tracy Chen DO, Inc's retained earnings at the end of 2024?",
+        "expected_page": 19,
+        "expected_answer_contains": ["$333,706", "333,706"],
+        "expected_citations": [
+            {"form": "Schedule L", "line": "24", "page": 19},
+            {"form": "Schedule M-2", "line": "8", "page": 20},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "medium",
+        "notes": "Balance sheet test. Schedule L Line 24 end-of-year or Schedule M-2 Line 8 AAA.",
+    },
+    {
+        "question": "What were the total shareholder distributions from Tracy Chen DO, Inc in 2024?",
+        "expected_page": 20,
+        "expected_answer_contains": ["$294,484", "294,484"],
+        "expected_citations": [
+            {"form": "Schedule M-2", "line": "7", "page": 20},
+            {"form": "Schedule K", "line": "16d", "page": 18},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "medium",
+        "notes": "S-corp AAA distributions. High-signal for CPAs (affects basis).",
+    },
+    {
+        "question": "How much California state tax does Tracy Chen DO, Inc owe for 2024?",
+        "expected_page": 41,
+        "expected_answer_contains": ["$8,354", "8,354"],
+        "expected_citations": [
+            {"form": "Form 100S", "line": "30", "page": 41},
+            {"form": "Form 100S", "line": "21", "page": 41},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "hard",
+        "notes": "Federal/state disambiguation. Watch for confusion with $8,780 (total due) or $556,904 (CA taxable income).",
+    },
+    {
+        "question": "What was the California estimated tax underpayment penalty on Tracy Chen DO, Inc's 2024 return?",
+        "expected_page": 39,
+        "expected_answer_contains": ["$426", "$426."],
+        "expected_citations": [
+            {"form": "Form 5806", "line": "22b", "page": 39},
+            {"form": "Form 100S", "line": "44a", "page": 41},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "hard",
+        "notes": "State supporting form retrieval. Tightened keywords per Q4 lesson (bare '426' would false-match).",
+    },
+    {
+        "question": "What was Tracy Chen's stock basis in Tracy Chen DO, Inc at the end of 2024?",
+        "expected_page": 30,
+        "expected_answer_contains": ["$420,490", "420,490"],
+        "expected_citations": [
+            {"form": "Form 7203", "line": "15", "page": 30},
+        ],
+        "category": "factual_lookup",
+        "difficulty": "hard",
+        "notes": "Shareholder basis. Form 7203 Line 15 end-of-year stock basis. Advanced S-corp topic. Avoids K-1 Box blind spot.",
+    },
+]
+
+
 # Registry keyed by client_id (UUID as string)
 CLIENT_GROUND_TRUTH: dict[str, list[GroundTruthItem]] = {
     "92574da3-13ca-4017-a233-54c99d2ae2ae": MICHAEL_TJAHJADI_2024,
+    "b9708054-0b27-4041-9e69-93b20f75b1ac": TRACY_CHEN_DO_INC_2024,
 }
 
 
