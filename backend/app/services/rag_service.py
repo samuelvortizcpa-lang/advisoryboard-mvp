@@ -1126,6 +1126,84 @@ def extract_tax_year_from_filename(filename: str) -> int | None:
     return int(matches[-1])
 
 
+# ---------------------------------------------------------------------------
+# Form detection for chunk header enrichment
+# ---------------------------------------------------------------------------
+
+# Ordered: more-specific patterns first so "Form 1120-S" beats "Form 1120".
+_FORM_DETECT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Federal forms — specific variants before base forms
+    (re.compile(r"Form\s+1120[\s-]?S\b", re.IGNORECASE), "Form 1120-S"),
+    (re.compile(r"Form\s+1120\b", re.IGNORECASE), "Form 1120"),
+    (re.compile(r"Form\s+1040[\s-]?SR\b", re.IGNORECASE), "Form 1040-SR"),
+    (re.compile(r"Form\s+1040[\s-]?NR\b", re.IGNORECASE), "Form 1040-NR"),
+    (re.compile(r"Form\s+1040\b", re.IGNORECASE), "Form 1040"),
+    (re.compile(r"Form\s+1065\b", re.IGNORECASE), "Form 1065"),
+    (re.compile(r"Form\s+990\b", re.IGNORECASE), "Form 990"),
+    # Supporting federal forms
+    (re.compile(r"Form\s+8889\b", re.IGNORECASE), "Form 8889"),
+    (re.compile(r"Form\s+5329\b", re.IGNORECASE), "Form 5329"),
+    (re.compile(r"Form\s+7203\b", re.IGNORECASE), "Form 7203"),
+    (re.compile(r"Form\s+5806\b", re.IGNORECASE), "Form 5806"),
+    (re.compile(r"Form\s+4562\b", re.IGNORECASE), "Form 4562"),
+    (re.compile(r"Form\s+1125[\s-]?E\b", re.IGNORECASE), "Form 1125-E"),
+    (re.compile(r"Form\s+8879", re.IGNORECASE), "Form 8879"),
+    # Schedules (federal)
+    (re.compile(r"Schedule\s+K-1\b", re.IGNORECASE), "Schedule K-1"),
+    (re.compile(r"Schedule\s+K\b", re.IGNORECASE), "Schedule K"),
+    (re.compile(r"Schedule\s+L\b", re.IGNORECASE), "Schedule L"),
+    (re.compile(r"Schedule\s+M-2\b", re.IGNORECASE), "Schedule M-2"),
+    (re.compile(r"Schedule\s+M-1\b", re.IGNORECASE), "Schedule M-1"),
+    (re.compile(r"Schedule\s+A\b", re.IGNORECASE), "Schedule A"),
+    (re.compile(r"Schedule\s+B\b", re.IGNORECASE), "Schedule B"),
+    (re.compile(r"Schedule\s+C\b", re.IGNORECASE), "Schedule C"),
+    (re.compile(r"Schedule\s+D\b", re.IGNORECASE), "Schedule D"),
+    (re.compile(r"Schedule\s+E\b", re.IGNORECASE), "Schedule E"),
+    # California state forms
+    (re.compile(r"Form\s+100S\b", re.IGNORECASE), "Form 100S"),
+    (re.compile(r"Form\s+100\b", re.IGNORECASE), "Form 100"),
+    (re.compile(r"Form\s+568\b", re.IGNORECASE), "Form 568"),
+    (re.compile(r"Form\s+540\b", re.IGNORECASE), "Form 540"),
+    (re.compile(r"Form\s+3893\b", re.IGNORECASE), "Form 3893"),
+]
+
+# California state forms — used for federal/state tagging
+_CA_FORM_NAMES = frozenset({
+    "Form 100S", "Form 100", "Form 568", "Form 540", "Form 3893",
+    "Form 5806",
+})
+
+# If the chunk text mentions California explicitly, that's a state signal too
+_CA_TEXT_RE = re.compile(
+    r"\bCalifornia\s+(?:Franchise\s+Tax|FTB|Secretary\s+of\s+State)\b"
+    r"|\bFranchise\s+Tax\s+Board\b"
+    r"|\bFTB\b",
+    re.IGNORECASE,
+)
+
+
+def _detect_form_name(chunk_text: str) -> str | None:
+    """
+    Best-effort detection of the primary IRS/state form referenced in a chunk.
+
+    Returns a canonical form name (e.g. "Form 1120-S", "Schedule K") or None.
+    First match wins — patterns are ordered most-specific-first.
+    """
+    for pattern, canonical_name in _FORM_DETECT_PATTERNS:
+        if pattern.search(chunk_text):
+            return canonical_name
+    return None
+
+
+def _is_state_form(form_name: str | None, chunk_text: str) -> bool:
+    """Return True if the chunk appears to be from a state (not federal) form."""
+    if form_name and form_name in _CA_FORM_NAMES:
+        return True
+    if _CA_TEXT_RE.search(chunk_text):
+        return True
+    return False
+
+
 def _build_context_with_attribution(
     chunk_results: list[tuple[DocumentChunk, float]],
     checkin_context_parts: list[str] | None = None,
@@ -1133,9 +1211,13 @@ def _build_context_with_attribution(
     """
     Build the text context string sent to the LLM with document attribution.
 
-    Each chunk is prefixed with ``[TAX YEAR YYYY | Document: <filename> | Page N]``
-    so the LLM can anchor on the filename for tax-year disambiguation.  A preamble
-    listing distinct source documents is prepended.
+    Each chunk is prefixed with a header like::
+
+        [TAX YEAR YYYY | FEDERAL Form 1120-S | Document: <filename> | Page N | Relevance: X%]
+
+    When a form name is detected in the chunk text, it is included with a
+    FEDERAL/STATE jurisdiction tag.  A preamble listing distinct source
+    documents is prepended.
     """
     if not chunk_results and not checkin_context_parts:
         return ""
@@ -1179,9 +1261,20 @@ def _build_context_with_attribution(
         else:
             header = f"[Document: {filename} | Relevance: {score:.1f}%]"
 
-        # Prepend TAX YEAR tag
+        # Detect form name and federal/state jurisdiction
+        detected_form = _detect_form_name(chunk_text)
+        is_state = _is_state_form(detected_form, chunk_text)
+        if detected_form:
+            jurisdiction = "STATE " if is_state else "FEDERAL "
+            form_tag = f"{jurisdiction}{detected_form} | "
+        else:
+            form_tag = ""
+
+        # Prepend TAX YEAR tag (and form tag if detected)
         if tax_year:
-            header = f"[TAX YEAR {tax_year} | " + header[1:]
+            header = f"[TAX YEAR {tax_year} | {form_tag}" + header[1:]
+        elif form_tag:
+            header = f"[{form_tag}" + header[1:]
 
         if doc and doc.document_type:
             type_info = f" | Type: {doc.document_type}"
