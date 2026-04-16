@@ -115,6 +115,47 @@ def _extract_pages_from_chunks(chunk_texts: list[str]) -> list[int]:
     return sorted(pages)
 
 
+_FORM_PATTERN = re.compile(
+    r"(?:Form|Schedule)\s+[A-Z0-9][\w-]*",
+    re.IGNORECASE,
+)
+_LINE_PATTERN = re.compile(r"\b[Ll]ine\s+(\d{1,3}[a-z]?)\b")
+
+
+def _normalize_form(form: str) -> str:
+    """Normalize a form name: lowercase + collapse whitespace."""
+    return re.sub(r"\s+", " ", form.strip().lower())
+
+
+def _extract_citations(text: str) -> list[dict[str, str]]:
+    """Extract (form, line) pairs via Cartesian product. Strict: both required."""
+    forms_raw = _FORM_PATTERN.findall(text)
+    lines_raw = _LINE_PATTERN.findall(text)
+    if not forms_raw or not lines_raw:
+        return []
+    forms_norm = sorted({_normalize_form(f) for f in forms_raw})
+    lines_dedup = sorted(set(lines_raw))
+    return [
+        {"form": f, "line": l}
+        for f in forms_norm
+        for l in lines_dedup
+    ]
+
+
+def _citation_match(
+    extracted: list[dict[str, str]],
+    expected: list[dict],
+) -> bool:
+    """Return True if any extracted (form, line) pair matches any expected citation."""
+    for exp in expected:
+        exp_form = _normalize_form(exp["form"])
+        exp_line = exp["line"].lower()
+        for ext in extracted:
+            if ext["form"] == exp_form and ext["line"].lower() == exp_line:
+                return True
+    return False
+
+
 # ── Main evaluation runner (keyword) ─────────────────────────────────────────
 
 
@@ -319,6 +360,15 @@ async def run_ground_truth_evaluation(
                 for variant in expected_answers
             )
 
+            # Citation scoring: regex extraction + strict form+line match
+            expected_citations = item.get("expected_citations", [])
+            extracted_citations = _extract_citations(answer)
+            citation_hit = (
+                _citation_match(extracted_citations, expected_citations)
+                if expected_citations
+                else False
+            )
+
             # Build top-5 chunk rank/page debug info
             top_chunk_ranks_and_pages = []
             for c in debug_chunks[:5]:
@@ -341,6 +391,9 @@ async def run_ground_truth_evaluation(
                 "expected_answer_contains": expected_answers,
                 "response_snippet": answer[:300],
                 "response_hit": response_hit,
+                "expected_citations": expected_citations,
+                "extracted_citations": extracted_citations,
+                "citation_hit": citation_hit,
                 "latency_ms": round(latency_ms, 1),
                 "retrieved_chunk_count": len(debug_chunks),
                 "top_chunk_ranks_and_pages": top_chunk_ranks_and_pages,
@@ -363,6 +416,9 @@ async def run_ground_truth_evaluation(
                 "expected_answer_contains": expected_answers,
                 "response_snippet": "",
                 "response_hit": False,
+                "expected_citations": item.get("expected_citations", []),
+                "extracted_citations": [],
+                "citation_hit": False,
                 "latency_ms": round(latency_ms, 1),
                 "retrieved_chunk_count": 0,
                 "top_chunk_ranks_and_pages": [],
@@ -376,6 +432,7 @@ async def run_ground_truth_evaluation(
     total = len(per_question)
     retrieval_hits = sum(1 for q in per_question if q["retrieval_hit"])
     response_hits = sum(1 for q in per_question if q["response_hit"])
+    citation_hits = sum(1 for q in per_question if q.get("citation_hit"))
     errors = sum(1 for q in per_question if q["error"])
 
     by_category: dict[str, dict[str, Any]] = {}
@@ -405,6 +462,7 @@ async def run_ground_truth_evaluation(
         "total_questions": total,
         "retrieval_hit_rate": round(retrieval_hits / total, 3) if total else 0,
         "response_keyword_rate": round(response_hits / total, 3) if total else 0,
+        "citation_hit_rate": round(citation_hits / total, 3) if total else 0,
         "avg_latency_ms": round(total_latency_ms / total, 1) if total else 0,
         "total_latency_ms": round(total_latency_ms, 1),
         "errors": errors,
@@ -425,6 +483,7 @@ def compare_evaluations(eval_a: dict, eval_b: dict) -> dict[str, Any]:
     """
     retrieval_delta = eval_b.get("retrieval_hit_rate", 0) - eval_a.get("retrieval_hit_rate", 0)
     response_delta = eval_b.get("response_keyword_rate", 0) - eval_a.get("response_keyword_rate", 0)
+    citation_delta = eval_b.get("citation_hit_rate", 0) - eval_a.get("citation_hit_rate", 0)
     latency_delta = eval_b.get("avg_latency_ms", 0) - eval_a.get("avg_latency_ms", 0)
 
     # Per-category comparison
@@ -446,6 +505,7 @@ def compare_evaluations(eval_a: dict, eval_b: dict) -> dict[str, Any]:
     result: dict[str, Any] = {
         "retrieval_improvement": round(retrieval_delta, 3),
         "response_improvement": round(response_delta, 3),
+        "citation_improvement": round(citation_delta, 3),
         "latency_change_ms": round(latency_delta, 1),
         "by_category": by_category,
     }
