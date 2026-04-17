@@ -42,6 +42,7 @@ from app.models.data_contradiction import DataContradiction
 from app.models.checkin_template import CheckinTemplate
 from app.models.checkin_response import CheckinResponse
 from app.models.rag_evaluation import RagEvaluation
+from app.models.client_link import ClientLink
 
 __all__ = [
     "User",
@@ -88,4 +89,5 @@ __all__ = [
     "CheckinTemplate",
     "CheckinResponse",
     "RagEvaluation",
+    "ClientLink",
 ]
