@@ -56,11 +56,9 @@ The `human_client_id` side must resolve to a client whose primary document is an
 
 **Spouses:** if Jane has her own Schedule C LLC, she exists as her own `client` row. Jane is linked to her LLC (`human → entity`). Michael is linked to his own entities. Michael and Jane are **not** linked directly — they are each the human end of their own links. When retrieval resolves Michael's group, it does not traverse to Jane. If the firm wants Michael's chat to see Jane's docs, that's a separate product decision (explicit MFJ household grouping) and is **out of scope** for this note.
 
-### `clients` table — `client_kind` column (Stage 1)
+### `clients` table — no changes required
 
-A `client_kind` column (TEXT, NOT NULL, default `'unknown'`) is added to `clients` with a CHECK constraint restricting values to: `individual`, `s_corp`, `partnership`, `c_corp`, `trust`, `disregarded_llc`, `sole_prop`, `unknown`. This column is enforced at link creation by a `BEFORE INSERT OR UPDATE` trigger on `client_links` that validates `human_client_id` resolves to `client_kind = 'individual'` and `entity_client_id` resolves to a business/trust kind.
-
-Backfill: clients with any document chunk mentioning "Form 1040" are set to `individual`. All others remain `unknown` pending manual update or Stage 2 classifier expansion.
+Existing `clients` rows keep their structure. A client is classified as "human" or "entity" implicitly by the documents filed under it. No new column is strictly needed, though a computed `client_kind` field (`individual` | `business_entity` | `trust` | `unknown`) may be useful for UI filtering — defer this until the classifier expansion lands.
 
 ### `documents` table — no changes required
 
@@ -71,24 +69,21 @@ Documents stay filed under their original `client_id`. A 1120S uploaded under Sm
 Given a starting `client_id`, the full linked group is computed as:
 
 ```sql
-SELECT :start_id AS client_id
-UNION
-SELECT cl.entity_client_id FROM client_links cl
-  WHERE cl.human_client_id = :start_id
-    AND cl.confirmed_by_user = TRUE
-    AND cl.dismissed_at IS NULL
-UNION
-SELECT cl.human_client_id FROM client_links cl
-  WHERE cl.entity_client_id = :start_id
-    AND cl.confirmed_by_user = TRUE
-    AND cl.dismissed_at IS NULL
+WITH RECURSIVE group_members AS (
+    SELECT $1::uuid AS client_id
+    UNION
+    SELECT cl.entity_client_id FROM client_links cl
+        INNER JOIN group_members gm ON cl.human_client_id = gm.client_id
+        WHERE cl.confirmed_by_user = TRUE
+    UNION
+    SELECT cl.human_client_id FROM client_links cl
+        INNER JOIN group_members gm ON cl.entity_client_id = gm.client_id
+        WHERE cl.confirmed_by_user = TRUE
+)
+SELECT DISTINCT client_id FROM group_members;
 ```
 
-Non-recursive by design. Because links are structurally human→entity (enforced by the `client_kind` trigger), the topology is always a star with at most one hop. A recursive CTE would traverse Michael → Acme → Bob when Michael and Bob share a linked entity, violating the privacy invariant stated below. If the human→entity invariant is ever relaxed in a future stage, this query must be re-examined.
-
-A link is considered **active** only when `confirmed_by_user = TRUE` AND `dismissed_at IS NULL`. Dismissed links (even if still marked confirmed) are excluded from group resolution — this is the safer default for Stage 1.
-
-Because links are human→entity only and a human cannot be linked to another human, the resulting group is always a **star** with one human at the center and N entities as leaves. No cycles are possible.
+Because links are human→entity only and a human cannot be linked to another human, the resulting group is always a **star** with one human at the center and N entities as leaves. Traversal terminates in at most two hops. No cycles are possible.
 
 **Edge case — shared entity:** if two humans (Michael and his business partner Bob) are both linked as `owner_of` to Acme Partners LP, and both are Callwen clients, then Michael's group contains {Michael, Acme} and Bob's group contains {Bob, Acme}. **Michael's group does not contain Bob.** Acme is shared, but the humans stay isolated. This is the correct privacy posture.
 
@@ -106,7 +101,7 @@ to:
 WHERE d.client_id = ANY(:group_client_ids)
 ```
 
-where `group_client_ids` is resolved from the starting client via the group resolution query above.
+where `group_client_ids` is resolved from the starting client via the recursive CTE above, cached per-request.
 
 **Default scope:** full group. When the CPA opens the chat on Michael, retrieval pulls from Michael + all confirmed-linked entities.
 
@@ -138,7 +133,7 @@ Detection runs **after** document classification completes (so the classifier ha
 - **Confidence ≥ 0.85:** surface as a high-confidence suggestion banner on the client detail page
 - **Confidence 0.6–0.85:** surface in a "Possible links" section in a less prominent location
 - **Confidence < 0.6:** store but do not surface; available via a "Show all possible links" power-user view
-- **Dismissed links:** never re-suggest the same pair unless a new signal of strictly higher confidence arrives. A dismissed link (`dismissed_at IS NOT NULL`) is excluded from group resolution even if `confirmed_by_user` remains `TRUE`.
+- **Dismissed links:** never re-suggest the same pair unless a new signal of strictly higher confidence arrives
 
 ### UI moment
 

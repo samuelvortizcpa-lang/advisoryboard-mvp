@@ -55,7 +55,6 @@ from app.services.query_router import classify_query, route_completion, route_co
 from app.services.tax_terms import expand_query as expand_financial_terms
 from app.services.hybrid_search import reciprocal_rank_fusion
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
-from app.services.client_groups import resolve_client_group
 
 logger = logging.getLogger(__name__)
 pipeline_logger = logging.getLogger("rag_pipeline")
@@ -834,15 +833,10 @@ async def search_chunks(
     limit: int = TOP_K,
     *,
     include_vouchers: bool = False,
-    group_client_ids: list[UUID] | None = None,
 ) -> list[tuple[DocumentChunk, float]]:
     """
     Return the *limit* most semantically similar DocumentChunks for *query*
     within the given client's documents, along with a confidence score (0–100).
-
-    When *group_client_ids* is provided, retrieval spans all clients in the
-    linked group (see client-linking architecture).  When ``None``, falls
-    back to ``[client_id]`` (the solo-client case).
 
     Uses multi-query retrieval for financial terms: the original query is
     searched alongside an expanded query that includes synonym/line-number
@@ -850,8 +844,6 @@ async def search_chunks(
     Results are merged, deduplicated, and re-ranked with keyword + form
     boosting so that the chunk containing the actual answer rises to the top.
     """
-    # Resolve scope: use provided group or fall back to solo client
-    scope_ids = group_client_ids if group_client_ids is not None else [client_id]
     if not query.strip():
         return []
 
@@ -900,8 +892,8 @@ async def search_chunks(
             db.query(DocumentChunk, distance_col)
             .join(Document, DocumentChunk.document_id == Document.id)
             .filter(
-                DocumentChunk.client_id.in_(scope_ids),
-                Document.client_id.in_(scope_ids),
+                DocumentChunk.client_id == client_id,
+                Document.client_id == client_id,
                 DocumentChunk.embedding.isnot(None),
                 _voucher_filter,
             )
@@ -935,8 +927,8 @@ async def search_chunks(
                 db.query(DocumentChunk, bm25_score_col)
                 .join(Document, DocumentChunk.document_id == Document.id)
                 .filter(
-                    DocumentChunk.client_id.in_(scope_ids),
-                    Document.client_id.in_(scope_ids),
+                    DocumentChunk.client_id == client_id,
+                    Document.client_id == client_id,
                     DocumentChunk.search_vector.op("@@")(tsquery),
                     _voucher_filter,
                 )
@@ -1096,11 +1088,11 @@ async def search_chunks(
         results.append((chunk, round(confidence, 2)))
 
         # Defensive log: should never fire if data is consistent
-        if chunk.client_id not in scope_ids:
+        if chunk.client_id != client_id:
             logger.error(
                 "ISOLATION BREACH: chunk %s has client_id=%s but query "
-                "scope is %s",
-                chunk.id, chunk.client_id, scope_ids,
+                "requested client_id=%s",
+                chunk.id, chunk.client_id, client_id,
             )
 
     # Re-rank by boosted confidence and return top *limit*
@@ -1366,20 +1358,16 @@ async def answer_question(
     """
     _pipeline_start = _time.monotonic()
     question = _sanitize_user_input(question)
-
-    # Resolve linked-client group once per request
-    group_client_ids = resolve_client_group(client_id, db)
-
     pipeline_logger.info(
-        "RAG query: '%s' | client=%s | group=%s",
-        question[:80], client_id, [str(g) for g in group_client_ids],
+        "RAG query: '%s' | client=%s",
+        question[:80], client_id,
     )
 
     # Check if user is explicitly asking about estimated tax / vouchers
     _voucher_keywords = ["1040-es", "1040es", "estimated tax", "estimated payment", "quarterly payment", "voucher"]
     _include_vouchers = any(kw in question.lower() for kw in _voucher_keywords)
 
-    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K, include_vouchers=_include_vouchers, group_client_ids=group_client_ids)
+    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K, include_vouchers=_include_vouchers)
 
     # ---- Keyword fallback: direct text search for specific phrases ----
     # Vector search alone struggles with structured forms (tax returns) where
@@ -1421,8 +1409,8 @@ async def answer_question(
                 db.query(DocumentChunk)
                 .join(Document, DocumentChunk.document_id == Document.id)
                 .filter(
-                    DocumentChunk.client_id.in_(group_client_ids),
-                    Document.client_id.in_(group_client_ids),
+                    DocumentChunk.client_id == client_id,
+                    Document.client_id == client_id,
                     DocumentChunk.chunk_text.ilike(pattern),
                 )
                 .limit(5)
@@ -1464,7 +1452,7 @@ async def answer_question(
             db.query(CheckinResponse, CheckinTemplate.name, ci_distance)
             .join(CheckinTemplate, CheckinResponse.template_id == CheckinTemplate.id)
             .filter(
-                CheckinResponse.client_id.in_(group_client_ids),
+                CheckinResponse.client_id == client_id,
                 CheckinResponse.status == "completed",
                 CheckinResponse.response_embedding.isnot(None),
             )
@@ -1869,13 +1857,10 @@ async def answer_question_stream(
 
     question = _sanitize_user_input(question)
 
-    # Resolve linked-client group once per request
-    group_client_ids = resolve_client_group(client_id, db)
-
     # ── Retrieval phase (identical to answer_question) ──
     _voucher_keywords = ["1040-es", "1040es", "estimated tax", "estimated payment", "quarterly payment", "voucher"]
     _include_vouchers = any(kw in question.lower() for kw in _voucher_keywords)
-    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K, include_vouchers=_include_vouchers, group_client_ids=group_client_ids)
+    chunk_results = await search_chunks(db, client_id, question, limit=TOP_K, include_vouchers=_include_vouchers)
 
     logger.info("STREAM SOURCE DEBUG: search_chunks returned %d results, reranked=%s, rerank_model=%s",
                 len(chunk_results), _last_search_stats.get("reranked"),
@@ -1903,8 +1888,8 @@ async def answer_question_stream(
                 db.query(DocumentChunk)
                 .join(Document, DocumentChunk.document_id == Document.id)
                 .filter(
-                    DocumentChunk.client_id.in_(group_client_ids),
-                    Document.client_id.in_(group_client_ids),
+                    DocumentChunk.client_id == client_id,
+                    Document.client_id == client_id,
                     DocumentChunk.chunk_text.ilike(pattern),
                 )
                 .limit(5)
@@ -1933,7 +1918,7 @@ async def answer_question_stream(
             db.query(CheckinResponse, CheckinTemplate.name, ci_distance)
             .join(CheckinTemplate, CheckinResponse.template_id == CheckinTemplate.id)
             .filter(
-                CheckinResponse.client_id.in_(group_client_ids),
+                CheckinResponse.client_id == client_id,
                 CheckinResponse.status == "completed",
                 CheckinResponse.response_embedding.isnot(None),
             )

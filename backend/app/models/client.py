@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -65,12 +65,6 @@ class Client(Base):
     # Valid values: LLC, S-Corp, C-Corp, Partnership, Sole Proprietorship,
     # Individual, Non-Profit, Trust, Other
     entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-
-    # Classification for client-linking: 'individual', 's_corp', 'partnership',
-    # 'c_corp', 'trust', 'disregarded_llc', 'sole_prop', 'unknown'
-    client_kind: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default="unknown"
-    )
 
     industry: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

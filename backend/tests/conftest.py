@@ -25,8 +25,7 @@ from app.models.client import Client  # noqa: F401
 from app.models.client_consent import ClientConsent  # noqa: F401
 from app.models.user_subscription import UserSubscription  # noqa: F401
 from app.models.processed_webhook_event import ProcessedWebhookEvent  # noqa: F401
-from app.models.organization import Organization
-from app.models.client_link import ClientLink  # noqa: F401  # noqa: F401
+from app.models.organization import Organization  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -55,18 +54,13 @@ def _create_test_engine():
     except ImportError:
         VECTOR_TYPE = None
 
-    from sqlalchemy import String
-    from sqlalchemy.dialects.postgresql import TSVECTOR
-
     for table in Base.metadata.tables.values():
         for column in table.columns:
             if isinstance(column.type, JSONB):
                 column.type = JSON()
             # pgvector columns can't be created in SQLite — swap to String
             if VECTOR_TYPE is not None and isinstance(column.type, VECTOR_TYPE):
-                column.type = String()
-            # TSVECTOR columns can't be created in SQLite — swap to String
-            if isinstance(column.type, TSVECTOR):
+                from sqlalchemy import String
                 column.type = String()
 
     return engine
@@ -152,7 +146,6 @@ def make_client(
     is_tax_preparer: bool | None = None,
     consent_status: str = "not_required",
     has_tax_documents: bool = False,
-    client_kind: str = "unknown",
 ) -> Client:
     """Create and persist a Client."""
     client = Client(
@@ -161,7 +154,6 @@ def make_client(
         org_id=org.id if org else None,
         name=name,
         email=f"client-{uuid.uuid4().hex[:8]}@example.com",
-        client_kind=client_kind,
         is_tax_preparer=is_tax_preparer,
         consent_status=consent_status,
         has_tax_documents=has_tax_documents,
