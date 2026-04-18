@@ -279,15 +279,169 @@ Baseline tree:     ddab0ce2550226fb7438feba888d82aceed41b81
 
 ---
 
-## Session End State
+## Post-Close Finding — Prompt Positioning Bug
 
-- [x] Production running pinned `gpt-4o-mini-2024-07-18`, health OK
+After closing the investigation as Outcome 3 (model drift,
+unconfirmable), a prompt hardening pass on Q7 revealed the actual
+root cause: a prompt assembly bug in the client_type branch of
+`rag_service.py`.
+
+### Timeline
+
+- Commit `d4e1fd8` pushed at 22:40 EDT Apr 17
+- Deploy `f936422d` went SUCCESS immediately (cache warm)
+- 5 post-fix evals: citation = 0.7 on all 5 runs
+
+### The Bug
+
+For clients with a `client_type` (all 5 types: Tax Planning,
+Financial Advisory, Business Consulting, Audit & Compliance,
+General), the prompt assembly path at `rag_service.py:1535` was:
+
+```
+1. client_type.system_prompt.format(context=context)  # chunks injected
+2. += _TAX_YEAR_GUIDANCE                              # citation rules AFTER chunks
+```
+
+This placed all citation guidance — including the schedule-over-parent
+preference from commit `7940e7b2` — in a low-attention position after
+potentially thousands of tokens of chunk text. `DEFAULT_SYSTEM_PROMPT`
+(used for clients without a `client_type`) placed the same guidance
+BEFORE the context, in a high-attention position.
+
+### The Fix
+
+```python
+# Before: append after context (low attention)
+system_prompt = db_client.client_type.system_prompt.format(context=context)
+system_prompt += _TAX_YEAR_GUIDANCE
+
+# After: insert before context (high attention)
+patched_template = db_client.client_type.system_prompt.replace(
+    "Context:\n{context}", _TAX_YEAR_GUIDANCE + "\nContext:\n{context}"
+)
+system_prompt = patched_template.format(context=context)
+```
+
+Applied to both the non-streaming path (line 1535) and the streaming
+path (line 1958).
+
+### Evidence
+
+Q10 ("Did Michael have an excess Roth IRA contribution?") flipped
+from deterministic fail (0/15 runs) to deterministic pass (5/5 runs):
+
+| State | Citation | Q10 Extracted | Q10 Pass |
+|-------|----------|---------------|----------|
+| Pre-fix (15 runs) | 0.6 | `form 1040, line 24` | false |
+| Post-fix (5 runs) | 0.7 | `form 5329, line 24` | **true** |
+
+The model now correctly cites Form 5329 (supporting schedule for
+Roth IRA excess contributions) over Form 1040 (parent return) where
+line 24 collides between the two forms. This is exactly the behavior
+the schedule-over-parent instruction was designed to produce — it just
+needed to be in a high-attention position to take effect.
+
+### Reframed Hypothesis Dispositions
+
+| Hypothesis | Original Disposition | Reframed |
+|-----------|---------------------|----------|
+| A — Variance | Falsified (10/10 at 0.6) | **Partially true.** Q10 had real narrow variance from the low-attention instruction position. The original 0.7 baseline was a single-eval capture of Q10's narrow-variance pass state. Subsequent evals caught the fail state. The 10/10 at 0.6 was actually deterministic behavior from the bug, not a regime change. |
+| B — Model drift | Likely but unconfirmable | **Ruled out.** Pin to `gpt-4o-mini-2024-07-18` didn't change behavior because the alias wasn't actually drifting. The behavioral change was prompt-positional, not model-behavioral. Pin stays as drift protection regardless. |
+| C — Deploy/config | Falsified (identical trees) | **Still correct.** Git tree identity proof holds. |
+
+### Actual Root Cause
+
+Commit `7940e7b2` (April 16, 22:37 UTC) added schedule-over-parent
+guidance to both `DEFAULT_SYSTEM_PROMPT` and `_TAX_YEAR_GUIDANCE`.
+For `DEFAULT_SYSTEM_PROMPT`, the guidance was placed before `{context}`
+(high attention) — working correctly. For `_TAX_YEAR_GUIDANCE`, the
+guidance existed but was appended after `{context}` by the client_type
+assembly path — placing it in a low-attention position where the LLM
+inconsistently followed it.
+
+The 0.7 baseline at 01:14 UTC was a lucky single-eval sample where
+Q10 happened to pass despite the low-attention position. All
+subsequent evals (01:14 UTC onward) deterministically failed Q10
+because the instruction wasn't reliably attended to.
+
+### New Learnings
+
+- **Q4/Q7/Q9 are content issues, not position issues.** The prompt
+  position fix did not change Q7 (charity still cites Form 1040
+  Line 11 instead of Schedule A). Q9 shifted worse (now cites Form
+  1040 Line 8 in 4/5 runs instead of Form 8889 Line 6). Q4 shifted
+  from empty to wrong line (Form 1040 Line 1 instead of Line 2b).
+  These need targeted prompt content work, not positional fixes.
+- **DEFAULT_SYSTEM_PROMPT and client_type branches had divergent
+  prompt-instruction attention handling.** The two paths should
+  produce structurally equivalent prompts. They now do for citation
+  guidance, but other divergences may exist (e.g., DEFAULT has the
+  MANDATORY TAX YEAR RULE inline, client_type gets it from
+  _TAX_YEAR_GUIDANCE).
+
+### Remaining Failures (3 questions, P1 prompt content work)
+
+| Q# | Question | Extracted | Expected | Issue Class |
+|----|----------|-----------|----------|-------------|
+| Q4 | Taxable interest | `form 1040, line 1` | `form 1040, 2b` / `schedule B, 4` | Adjacent-number disambiguation not firing |
+| Q7 | Charity | `form 1040, line 11` | `schedule A, 11/14` | Schedule preference not triggering for this question |
+| Q9 | HSA limit | `form 1040, line 8` (4/5) / `form 8889, line 6` (1/5) | `form 8889, 3/8` | Wrong form AND wrong line — needs explicit HSA guidance |
+
+---
+
+## Carryover Queue (Final Update)
+
+### New from post-close fix
+
+- **P1 — Q7 charity citation.** Cites Form 1040 Line 11 instead of
+  Schedule A Line 11/14. Schedule preference instruction exists but
+  doesn't trigger for this question class. Prompt content issue.
+- **P1 — Q9 HSA limit citation.** Cites Form 1040 Line 8 (4/5 runs)
+  or Form 8889 Line 6 (1/5 runs) instead of Form 8889 Line 3/8.
+  Needs explicit "HSA limits are on Form 8889 Line 3" guidance.
+- **P1 — Q4 taxable interest citation.** Extracts Form 1040 Line 1
+  (wages) instead of Line 2b (taxable interest). Adjacent-number
+  disambiguation rule is not firing for this question.
+- **P2 — DEFAULT_SYSTEM_PROMPT lacks MANDATORY TAX YEAR RULE.**
+  `_TAX_YEAR_GUIDANCE` has it; `DEFAULT_SYSTEM_PROMPT` doesn't.
+  Clients with no client_type get weaker guidance.
+- **P2 — Prompt text duplication.** `_TAX_YEAR_GUIDANCE` and
+  `DEFAULT_SYSTEM_PROMPT` have duplicated sections (Response
+  formatting, schedule preference, federal/state disambiguation).
+  Consolidate to a single source of truth.
+
+### Carried forward (unchanged)
+
+- P1 — Admin UI: expose per-question citation pass/fail
+- P2 — Pin Anthropic model aliases to dated snapshots
+- P2 — Orphaned schema cleanup (`client_links`, `client_kind`)
+- P2 — Close -code PR #1, delete orphaned -code branch
+- P3 — Fix stale log labels at query_router.py:103, 398, 608
+- P3 — Update RAG Analytics dashboard baseline (now stays at 0.7)
+- P3 — Patch `de1ea96` hash error in April 17 early morning notes
+- P3 — Two-repo consolidation (-lang / -code → single repo)
+- Credential rotation sweep (overdue, 7+ credentials)
+- REPROCESS_TASKS in-memory → Redis migration
+- Gemini embeddings 3072 → 768 dimension migration
+- §7216 consent UX bug ("processing..." instead of "Awaiting consent")
+- Null-email users (Clerk webhook sync)
+- SQLite/TSVECTOR test infrastructure gap (58 baseline errors)
+- Gmail sync 400 errors on user_3AbIMzEdpzAEUo5qkXp0BnKu2EG
+
+---
+
+## Session End State (Final)
+
+- [x] Production running pinned `gpt-4o-mini-2024-07-18` + prompt
+      position fix, health OK
 - [x] All three hypotheses tested with decision gates
-- [x] Hypothesis A (variance) falsified — 10/10 runs at 0.6
-- [x] Hypothesis B (model drift) — likely but unconfirmable
-- [x] Hypothesis C (deploy/config) falsified — identical git trees
-- [x] 0.6 accepted as new citation baseline
+- [x] Actual root cause identified: prompt positioning bug in
+      client_type assembly path
+- [x] Q10 flipped from deterministic fail to deterministic pass (5/5)
+- [x] Citation deterministically at 0.7 (matches original baseline)
 - [x] Pin commit `4bb2ab42` in production as drift protection
+- [x] Prompt fix commit `d4e1fd8` in production as the actual fix
 - [x] Stage 1 retry architecturally unblocked
-- [ ] Prompt hardening on Q4/Q7/Q9/Q10 (next session P1)
-- [ ] Dashboard baseline update 0.7 → 0.6 (next session P3)
+- [ ] Q4/Q7/Q9 prompt content hardening (next session P1)
+- [ ] Prompt text consolidation (next session P2)
