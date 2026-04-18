@@ -1533,10 +1533,12 @@ async def answer_question(
     )
 
     if db_client and db_client.client_type:
-        system_prompt = db_client.client_type.system_prompt.format(context=context)
-        # Client-type prompts don't include DEFAULT_SYSTEM_PROMPT, so append
-        # tax-year guidance separately
-        system_prompt += _TAX_YEAR_GUIDANCE
+        # Insert citation guidance BEFORE {context} so it's in a high-attention
+        # position, matching DEFAULT_SYSTEM_PROMPT layout.
+        patched_template = db_client.client_type.system_prompt.replace(
+            "Context:\n{context}", _TAX_YEAR_GUIDANCE + "\nContext:\n{context}"
+        )
+        system_prompt = patched_template.format(context=context)
     else:
         system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
 
@@ -1956,8 +1958,11 @@ async def answer_question_stream(
     )
 
     if db_client and db_client.client_type:
-        system_prompt = db_client.client_type.system_prompt.format(context=context)
-        system_prompt += _TAX_YEAR_GUIDANCE
+        # Insert citation guidance BEFORE {context} — high-attention position.
+        patched_template = db_client.client_type.system_prompt.replace(
+            "Context:\n{context}", _TAX_YEAR_GUIDANCE + "\nContext:\n{context}"
+        )
+        system_prompt = patched_template.format(context=context)
     else:
         system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
 
