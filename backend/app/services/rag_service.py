@@ -201,6 +201,9 @@ ALWAYS include the line number when citing a form. Write "Form 100S, Line 30" �
 
 Federal vs. state disambiguation:
 When the question asks about a federal figure, cite the federal form — not the California or other state equivalent. For example, cite "Form 1120-S, Line 21" for total deductions, not "CA Form 100S" or "Schedule F". Conversely, when the question asks about a state tax amount, cite the state form specifically.
+
+Common line-item traps — explicit rules:
+- Charitable contributions are ALWAYS cited on Schedule A (itemized deductions), specifically Line 11 (cash contributions), Line 12 (non-cash contributions), or Line 14 (total charitable deduction). NEVER cite Form 1040 Line 11 for charity — Form 1040 Line 11 is Adjusted Gross Income (AGI), a completely different figure.
 """
 
 
