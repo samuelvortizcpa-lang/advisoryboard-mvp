@@ -79,7 +79,7 @@ async def classify_query(
         settings = get_settings()
         client = AsyncOpenAI(api_key=settings.openai_api_key)
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o-mini-2024-07-18",
             messages=[
                 {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
                 {"role": "user", "content": question},
@@ -118,6 +118,7 @@ async def classify_query(
 
 _TIER_MAP = {
     "gpt-4o-mini": "standard",
+    "gpt-4o-mini-2024-07-18": "standard",
     "claude-sonnet-4.6": "advanced",
     "claude-opus-4.6": "premium",
 }
@@ -374,7 +375,7 @@ async def route_completion(
     try:
         oai = AsyncOpenAI(api_key=settings.openai_api_key)
         response = await oai.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o-mini-2024-07-18",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question},
@@ -383,8 +384,8 @@ async def route_completion(
             max_tokens=1_500,
         )
         answer = response.choices[0].message.content or "No answer generated."
-        model_used = "gpt-4o-mini"
-        logger.info("Query answered by GPT-4o-mini")
+        model_used = "gpt-4o-mini-2024-07-18"
+        logger.info("Query answered by GPT-4o-mini-2024-07-18")
 
         # Log OpenAI token usage
         if db and user_id:
@@ -457,7 +458,7 @@ async def route_completion_stream(
     quota_remaining: int | None = None
     quota_warning: str | None = None
     quota_warning_message: str | None = None
-    model_used = "gpt-4o-mini"
+    model_used = "gpt-4o-mini-2024-07-18"
 
     # ── GATE: Total query quota check ───────────────────────────────────
     if db and user_id:
@@ -581,7 +582,7 @@ async def route_completion_stream(
     # Factual queries (or fallback): stream from GPT-4o-mini
     oai = AsyncOpenAI(api_key=settings.openai_api_key)
     stream = await oai.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o-mini-2024-07-18",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
