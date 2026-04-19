@@ -37,7 +37,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Generalized to accept any 3-5 digit parent form, not just 1040 variants.
     (
         re.compile(
-            r"^\s*Schedule\s+([A-Z](?:-[A-Z0-9]+)?)\s*\(Form\s+(\d{3,5}(?:-[A-Z]{1,3})?)\)",
+            r"^\s*Schedule\s+([A-Z0-9]{1,4}(?:-[A-Z0-9]+)?)\s*\(Form\s+(\d{3,5}(?:-[A-Z]{1,3})?)\)",
             re.MULTILINE | re.IGNORECASE,
         ),
         None,  # dynamic — built from match groups
@@ -45,7 +45,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Schedule without parent form suffix — e.g. "Schedule D"
     (
         re.compile(
-            r"^\s*Schedule\s+([A-Z](?:-[A-Z0-9]+)?)\b",
+            r"^\s*Schedule\s+([A-Z0-9]{1,4}(?:-[A-Z0-9]+)?)\b",
             re.MULTILINE | re.IGNORECASE,
         ),
         None,
@@ -147,6 +147,43 @@ _TRANSFER_RE = re.compile(
 
 # Lines covered pattern — "Line 5", "Lines 2-4", "Line 2b"
 _LINE_RE = re.compile(r"[Ll]ines?\s+(\d+[a-z]?(?:\s*[-–—]\s*\d+[a-z]?)?)")
+
+
+# ---------------------------------------------------------------------------
+# Content-based Form 1040 fallback (for OCR-destroyed page headers)
+# ---------------------------------------------------------------------------
+#
+# When a chunk would emit with form="Unknown" and contains multiple
+# distinctive Form 1040 line-item phrases, we reclassify as Form 1040.
+# This handles the case where OCR destroys the page header (e.g.
+# "Form 1040" rendered as "51 0 40").
+#
+# Phrases chosen for specificity — they appear on Form 1040 page 1
+# in the standard line-item structure and are unlikely to appear
+# verbatim on other forms.
+
+_FORM_1040_DISTINCTIVE_PHRASES = [
+    re.compile(r"Total amount from Form\(s\)\s*W-?2", re.IGNORECASE),
+    re.compile(r"This is your total income", re.IGNORECASE),
+    re.compile(r"This is your adjusted gross income", re.IGNORECASE),
+    re.compile(r"Standard deduction or itemized deductions", re.IGNORECASE),
+    re.compile(r"This is your taxable income", re.IGNORECASE),
+    re.compile(r"Qualified business income deduction", re.IGNORECASE),
+    re.compile(r"This is your total tax", re.IGNORECASE),
+    re.compile(r"This is the amount you owe", re.IGNORECASE),
+    re.compile(r"the amount you overpaid", re.IGNORECASE),
+]
+
+
+def _infer_form_1040_from_content(text: str) -> bool:
+    """Return True if chunk text contains >= 2 distinctive Form 1040 phrases.
+
+    Used as an emit-time fallback when form detection via header failed
+    (e.g., OCR destroyed the header). Does NOT update state — each chunk
+    is evaluated independently.
+    """
+    matches = sum(1 for p in _FORM_1040_DISTINCTIVE_PHRASES if p.search(text))
+    return matches >= 2
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +356,39 @@ def _build_metadata(
     }
 
 
+def _resolve_page_form(
+    page_text: str,
+    current_form: str,
+) -> tuple[str, str | None] | None:
+    """Resolve a page's form identity before the line-by-line loop runs.
+
+    Precedence:
+      1. Scan the first 5 non-blank lines for a real form header.
+         If found, return it.
+      2. If no header, run content-based inference (currently Form 1040
+         only). If matched, return ("Form 1040", None).
+      3. Otherwise return None — caller keeps state from previous page.
+
+    Returns (form, parent_form) or None.
+    """
+    lines = page_text.split("\n")
+    nonblank_seen = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        nonblank_seen += 1
+        if nonblank_seen > 5:
+            break
+        header = _detect_form_header(line)
+        if header:
+            return header
+
+    if _infer_form_1040_from_content(page_text):
+        return ("Form 1040", None)
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -388,13 +458,24 @@ def form_aware_chunk(
             chunk_len = 0
             return
 
-        prefix = _build_prefix(tax_year, chunk_form, chunk_page, chunk_section)
+        emit_form = chunk_form
+        emit_parent = chunk_parent
+        emit_section = chunk_section
+
+        # Content-based Form 1040 fallback for OCR-destroyed headers
+        if emit_form == "Unknown" and _infer_form_1040_from_content(body):
+            emit_form = "Form 1040"
+            emit_parent = None
+            if emit_section == "Unclassified":
+                emit_section = "Header"
+
+        prefix = _build_prefix(tax_year, emit_form, chunk_page, emit_section)
         metadata = _build_metadata(
             tax_year=tax_year,
-            form=chunk_form,
-            parent_form=chunk_parent,
+            form=emit_form,
+            parent_form=emit_parent,
             page=chunk_page,
-            section=chunk_section,
+            section=emit_section,
             part=chunk_part,
             chunk_text=body,
             is_voucher=chunk_is_voucher,
@@ -461,6 +542,27 @@ def form_aware_chunk(
             current_parent_form = None
             current_part = None
             current_section = "Unclassified"
+
+        # Page-boundary flush: close any in-progress chunk so it's attributed
+        # to the page it started on, and the next chunk begins cleanly on
+        # the new page with the current state.
+        if chunk_buf:
+            _flush()
+        chunk_page = page_num
+        _snapshot_state()
+
+        # Page-level form resolution: attempt to identify the page's form
+        # once, before the line loop. Header scan first, content inference
+        # as fallback. Updates state if a new form is resolved.
+        resolved = _resolve_page_form(text, current_form)
+        if resolved is not None:
+            new_form, new_parent = resolved
+            if new_form != current_form:
+                current_form = new_form
+                current_parent_form = new_parent
+                current_part = None
+                current_section = _default_section(new_form)
+                _snapshot_state()
 
         lines = text.split("\n")
 

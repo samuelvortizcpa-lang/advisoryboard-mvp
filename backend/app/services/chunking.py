@@ -37,20 +37,27 @@ _VOUCHER_PATTERNS = [
     re.compile(r"payment\s+voucher", re.IGNORECASE),
     # "Calendar year—Due April 15, 2025" header on 1040-ES vouchers
     re.compile(r"calendar\s+year.{0,5}due\s", re.IGNORECASE),
-    # IRS lockbox routing number (appears on payment voucher stubs)
-    re.compile(r"3\s*3\s*4\s*0\s*0\s*0\s*3"),
 ]
 
 # Patterns that indicate a chunk is a continuation of a voucher (e.g. IRS
 # routing / address block that spills into the next chunk)
 _VOUCHER_CONTINUATION_PATTERNS = [
     re.compile(r"internal\s+revenue\s+service", re.IGNORECASE),
-    re.compile(r"3\s*3\s*4\s*0\s*0\s*0\s*3"),
     re.compile(r"united\s+states\s+treasury", re.IGNORECASE),
     re.compile(r"estimated\s+tax\s+you\s+are\s+paying", re.IGNORECASE),
 ]
 
 _FUTURE_YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
+
+# Form 1040 main-form page header (NOT 1040-ES). Matches lines like:
+#   "Form 1040 (2024) Page 2"
+#   "Form 1040-SR (2024) Page 2"
+#   "Form 1040-NR (2024) Page 3"
+# but NOT "Form 1040-ES ..."
+_FORM_1040_MAIN_PAGE_HEADER = re.compile(
+    r"^\s*Form\s+1040(?:-(?:SR|NR|X))?\s*\(\s*\d{4}\s*\)\s*Page\s*\d+",
+    re.MULTILINE | re.IGNORECASE,
+)
 
 
 def detect_voucher_chunk(
@@ -64,13 +71,19 @@ def detect_voucher_chunk(
       - voucher_type: "1040-ES" | None
       - voucher_year: int | None (the tax year the voucher is for, if detectable)
 
-    A chunk is flagged as a voucher only if BOTH conditions hold:
-      1. At least one voucher pattern matches
-      2. A year appears in the chunk that is >= (return_tax_year + 1) if return_tax_year
-         is known, OR any 4-digit year in range 2025-2099 if not
+    A chunk is flagged as a voucher only if ALL of these hold:
+      1. At least two voucher patterns match (requires corroborating signals,
+         not a single incidental phrase)
+      2. The chunk is NOT a Form 1040 main-form continuation page
+         (e.g. "Form 1040 (2024) Page 2")
+      3. A year appears in the chunk that is >= (return_tax_year + 1) if
+         return_tax_year is known, OR any 4-digit year in range 2025-2099 if not
     """
-    has_voucher_pattern = any(p.search(chunk_text) for p in _VOUCHER_PATTERNS)
-    if not has_voucher_pattern:
+    voucher_pattern_matches = sum(1 for p in _VOUCHER_PATTERNS if p.search(chunk_text))
+    if voucher_pattern_matches < 2:
+        return {"is_voucher": False, "voucher_type": None, "voucher_year": None}
+
+    if _FORM_1040_MAIN_PAGE_HEADER.search(chunk_text):
         return {"is_voucher": False, "voucher_type": None, "voucher_year": None}
 
     years_in_text = [int(y) for y in _FUTURE_YEAR_PATTERN.findall(chunk_text)]

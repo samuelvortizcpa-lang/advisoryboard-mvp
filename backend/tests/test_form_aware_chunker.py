@@ -247,6 +247,68 @@ class TestFormDetection:
 
 
 # ===========================================================================
+# Schedule digit/multi-char identifier tests (4 tests — expected to FAIL)
+# ===========================================================================
+
+
+class TestScheduleDigitPatterns:
+    """Tests for Schedule identifiers that use digits or multi-letter codes.
+
+    The current Schedule pattern only accepts [A-Z] (single letter), but
+    IRS uses Schedule 1, 2, 3, SE, 8812, etc. These tests document the
+    gap and will fail until the pattern is broadened.
+    """
+
+    def test_schedule_2_form_1040_detected(self):
+        """Schedule 2 (Form 1040) Additional Taxes — must be detected.
+        Currently fails because the Schedule pattern only accepts letters [A-Z].
+        """
+        from app.services.form_aware_chunker import _detect_form_header
+
+        line = "SCHEDULE 2 (Form 1040) 2024"
+        result = _detect_form_header(line)
+        assert result is not None, f"Expected match, got None for: {line}"
+        form, parent = result
+        assert form == "Schedule 2 (Form 1040)", f"Expected Schedule 2 (Form 1040), got: {form}"
+        assert parent == "Form 1040", f"Expected parent Form 1040, got: {parent}"
+
+    def test_schedule_3_form_1040_detected(self):
+        """Schedule 3 (Form 1040) Additional Credits and Payments — must be detected."""
+        from app.services.form_aware_chunker import _detect_form_header
+
+        line = "SCHEDULE 3 (Form 1040) 2024"
+        result = _detect_form_header(line)
+        assert result is not None, f"Expected match, got None for: {line}"
+        form, parent = result
+        assert form == "Schedule 3 (Form 1040)", f"Expected Schedule 3 (Form 1040), got: {form}"
+        assert parent == "Form 1040", f"Expected parent Form 1040, got: {parent}"
+
+    def test_schedule_8812_detected(self):
+        """Schedule 8812 (Credits for Qualifying Children) — must be detected.
+        This is a 4-digit-named schedule; pattern must accept multi-digit identifiers.
+        """
+        from app.services.form_aware_chunker import _detect_form_header
+
+        line = "Schedule 8812 (Form 1040) 2024 Credits for Qualifying Children"
+        result = _detect_form_header(line)
+        assert result is not None, f"Expected match, got None for: {line}"
+        form, parent = result
+        assert "Schedule 8812" in form, f"Expected Schedule 8812 in form, got: {form}"
+
+    def test_schedule_se_detected(self):
+        """Schedule SE (Self-Employment Tax) — two-letter identifier.
+        Currently fails because the pattern captures only a single letter [A-Z].
+        """
+        from app.services.form_aware_chunker import _detect_form_header
+
+        line = "SCHEDULE SE (Form 1040) 2024 Self-Employment Tax"
+        result = _detect_form_header(line)
+        assert result is not None, f"Expected match, got None for: {line}"
+        form, parent = result
+        assert "Schedule SE" in form, f"Expected Schedule SE in form, got: {form}"
+
+
+# ===========================================================================
 # Section detection (5 tests)
 # ===========================================================================
 
@@ -626,3 +688,411 @@ class TestBoundaryAlignment:
         assert len(result) >= 2, f"Expected >= 2 chunks but got {len(result)}: {forms}"
         assert "Form 1040" in forms, f"No Form 1040 chunk found in {forms}"
         assert "Form 8889" in forms, f"No Form 8889 chunk found in {forms}"
+
+
+# ===========================================================================
+# Voucher false-positive regression tests (3 tests — expected to FAIL until fix)
+# ===========================================================================
+
+
+class TestVoucherFalsePositives:
+    """Tests for voucher detection false positives.
+
+    These tests document the bug where Form 1040 page 2 is incorrectly
+    flagged as a 1040-ES voucher because an account number matches the
+    IRS lockbox routing pattern and a future year appears in an unrelated
+    context (e.g. "applied to your 2025 estimated tax").
+    """
+
+    def test_voucher_detection_rejects_form_1040_main_page(self):
+        """Form 1040 page 2 must NOT be flagged as a voucher.
+
+        The account number '3 3 4 0 0 0 3 6 7 7 7 1' matches the IRS
+        lockbox routing pattern, and '2025' appears in 'applied to your
+        2025 estimated tax' — but this is a regular Form 1040, not a
+        1040-ES voucher.
+        """
+        from app.services.chunking import detect_voucher_chunk
+
+        PAGE_6_TEXT = (
+            "Form 1040 (2024) Page 2\n"
+            "Tax and 16 Tax (see instructions). Check if any from Form(s): "
+            "1 8814 2 4972 3 . . 16 40,934. Credits 17 Amount from Schedule 2, "
+            "line 3 . . . . . . . . . . . . . . . . . . . . 17 310.\n"
+            "25a 43,141. b Form(s) 1099 . . . 25b 0. c Other forms . . . 25c 678.\n"
+            "26 2024 estimated tax payments and amount applied from 2023 return "
+            ". . . . . . . . . . 26\n"
+            "See instructions. d Account number 3 3 4 0 0 0 3 6 7 7 7 1\n"
+            "36 Amount of line 34 you want applied to your 2025 estimated tax "
+            ". . . 36\n"
+            "38 Estimated tax penalty (see instructions) . . . . . . . . .\n"
+            "Go to www.irs.gov/Form1040 for instructions and the latest "
+            "information. BAA REV 03/20/25 Intuit.cg.cfp.sp Form 1040 (2024)"
+        )
+
+        result = detect_voucher_chunk(PAGE_6_TEXT, return_tax_year=2024)
+        assert result["is_voucher"] is False, (
+            f"Form 1040 page 2 falsely flagged as voucher: {result}"
+        )
+
+    def test_voucher_detection_accepts_real_1040es_voucher(self):
+        """A genuine Form 1040-ES payment voucher must be detected."""
+        from app.services.chunking import detect_voucher_chunk
+
+        VOUCHER_1_TEXT = (
+            "Form 1040-ES Payment Voucher\n"
+            "Detach Here and Mail With Your Payment\n"
+            "Department of the Treasury Calendar Year Internal Revenue Service Due\n"
+            "File only if you are making a payment of estimated tax by check or "
+            "money order. Mail this Amount of estimated tax voucher with your "
+            "check or money order payable to the 'United States Treasury.'\n"
+            "1\n"
+            "MOORESVILLE NC 28117-9551\n"
+            "658.\n"
+            "105 LONGLEAF DR\n"
+            "252-75-6885\n"
+            "AERIN HA\n"
+            "INTERNAL REVENUE SERVICE\n"
+            "PO BOX 1300\n"
+            "CHARLOTTE NC 28201-1300\n"
+            "04/15/2025 2025\n"
+            "2025\n"
+            "REV 03/20/25 INTUIT.CG.CFP.SP 1555\n"
+            "MICHAEL L TJAHJADI\n"
+            "252756885 ZN TJAH 30 0 202512 430"
+        )
+
+        result = detect_voucher_chunk(VOUCHER_1_TEXT, return_tax_year=2024)
+        assert result["is_voucher"] is True, (
+            f"Real 1040-ES voucher not detected: {result}"
+        )
+        assert result["voucher_year"] == 2025
+
+    def test_voucher_detection_requires_multiple_signals(self):
+        """A single weak voucher signal plus a future year must NOT trigger.
+
+        'estimated tax payments' matches a voucher pattern, but a real
+        voucher has multiple corroborating signals (Form 1040-ES header,
+        payment voucher language, IRS address, etc.). One weak match in
+        otherwise-normal text should not flag the chunk.
+        """
+        from app.services.chunking import detect_voucher_chunk
+
+        WEAK_SIGNAL_TEXT = (
+            "This is a regular document that happens to mention "
+            "estimated tax payments once.\n"
+            "The year 2025 also appears for unrelated reasons.\n"
+            "No other voucher markers are present."
+        )
+
+        result = detect_voucher_chunk(WEAK_SIGNAL_TEXT, return_tax_year=2024)
+        assert result["is_voucher"] is False, (
+            f"Single weak signal falsely flagged as voucher: {result}"
+        )
+
+
+# ===========================================================================
+# Form 1040 content fallback tests (3 tests — expected to FAIL until fix)
+# ===========================================================================
+
+
+class TestForm1040ContentFallback:
+    """Tests for content-based Form 1040 inference when OCR destroys the header.
+
+    Page 5 of Michael's document has its Form 1040 header garbled by OCR
+    ('Form 1040' → '51 0 40'). A content-based fallback should recover
+    the form identity when multiple distinctive Form 1040 phrases appear.
+    """
+
+    def test_unknown_chunk_with_two_form_1040_phrases_upgrades_to_form_1040(self):
+        """Page 5 of Michael's doc has its Form 1040 header destroyed by OCR
+        ('Form 1040' → '51 0 40'). Content-based inference must recover it
+        when the chunk contains distinctive Form 1040 line-item phrases.
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        # Synthetic text mimicking page 5 OCR — no Form 1040 header,
+        # but clear Form 1040 page 1 content
+        pages = [{
+            "page_number": 1,
+            "text": (
+                "51 0 40 Department of Treasury 2024\n"
+                "Income 1a Total amount from Form(s) W-2, box 1 271,792.\n"
+                "9 Add lines 1z, 2b, 3b, 4b, 5b, 6b, 7, and 8. This is your total income 293,600.\n"
+                "11 Subtract line 10 from line 9. This is your adjusted gross income 293,600.\n"
+                "12 Standard deduction or itemized deductions (from Schedule A) 61,126.\n"
+                "15 This is your taxable income 232,445.\n"
+            ),
+        }]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        forms = [r["metadata"]["form"] for r in result]
+        assert any(f == "Form 1040" for f in forms), (
+            f"Expected at least one chunk tagged Form 1040 via content fallback, got: {forms}"
+        )
+        assert not any(f == "Unknown" for f in forms), (
+            f"Expected no Unknown chunks after content fallback, got: {forms}"
+        )
+
+    def test_single_form_1040_phrase_stays_unknown(self):
+        """A single distinctive phrase is not enough to trigger the fallback.
+        Prevents misclassifying a chunk that mentions 'total income' once as
+        Form 1040 when it's actually something else (or truly ambiguous).
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        pages = [{
+            "page_number": 1,
+            "text": (
+                "Some document with no clear form header.\n"
+                "It mentions This is your total income once.\n"
+                "But nothing else distinctive about Form 1040.\n"
+                "Just regular prose with a line number reference line 5.\n"
+            ),
+        }]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        forms = [r["metadata"]["form"] for r in result]
+        assert all(f == "Unknown" for f in forms), (
+            f"Single weak signal should not upgrade to Form 1040: {forms}"
+        )
+
+    def test_content_fallback_does_not_override_known_form(self):
+        """If a chunk already has a known form (e.g., Schedule B) but
+        happens to include Form 1040 phrases as cross-references, the
+        content fallback must NOT override — it only upgrades Unknown.
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        pages = [{
+            "page_number": 11,
+            "text": (
+                "SCHEDULE B (Form 1040) 2024 Interest and Ordinary Dividends\n"
+                "Part I Interest\n"
+                "This section transfers to This is your total income on the main form\n"
+                "and affects This is your adjusted gross income calculation.\n"
+                "1 List name of payer\n"
+                "Standard deduction or itemized deductions apply on Form 1040\n"
+            ),
+        }]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        # At least one chunk should be tagged Schedule B, not Form 1040
+        forms = [r["metadata"]["form"] for r in result]
+        schedule_b_chunks = [f for f in forms if "Schedule B" in f]
+        assert len(schedule_b_chunks) >= 1, (
+            f"Expected at least one Schedule B chunk; content fallback may have overridden. Got: {forms}"
+        )
+
+
+# ===========================================================================
+# Page-level form resolution tests (6 tests — some expected to FAIL until fix)
+# ===========================================================================
+
+
+class TestPageLevelFormResolution:
+    """Tests for page-level form inference.
+
+    When OCR destroys a page header, per-chunk content fallback may only
+    catch some chunks (those with enough distinctive phrases). Page-level
+    inference should resolve the form once for the entire page and apply
+    it to all chunks on that page.
+    """
+
+    def test_page_with_destroyed_header_but_many_phrases_resolves_to_form_1040(self):
+        """A page whose OCR destroys the Form 1040 header (renders as '51 0 40')
+        should have ALL its chunks tagged Form 1040 via page-level content
+        inference — not just some chunks.
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        # Long enough page text that the chunker will split it into 3+ chunks
+        pages = [{
+            "page_number": 5,
+            "text": (
+                "51 0 40 Department ofthe Treasury—Internal Revenue Service 2024\n"
+                "U.S. Individual Income Tax Return OMB No. 1545-0074\n"
+                "For the year Jan. 1-Dec. 31, 2024\n"
+                "Your first name and middle initial Last name Your social security number\n"
+                "Michael L Tjahjadi 252 75 6885\n"
+                "Home address 105 Longleaf Dr\n"
+                "Mooresville NC 281179551\n"
+                "Filing Status Married filing jointly\n"
+                "Standard Deduction box\n"
+                "Dependents (see instructions)\n"
+                "\n"
+                "Income\n"
+                "1a Total amount from Form(s) W-2, box 1 (see instructions) 271,792.\n"
+                "1b Household employee wages not reported on Form(s) W-2\n"
+                "2a Tax-exempt interest 136. b Taxable interest 7.\n"
+                "3a Qualified dividends 3,077. b Ordinary dividends 13,267.\n"
+                "4a IRA distributions 7,950. b Taxable amount 950.\n"
+                "\n"
+                "7 Capital gain or (loss). Attach Schedule D if required 7,584.\n"
+                "8 Additional income from Schedule 1, line 10\n"
+                "9 Add lines 1z, 2b, 3b, 4b, 5b, 6b, 7, and 8. This is your total income 293,600.\n"
+                "10 Adjustments to income from Schedule 1, line 26\n"
+                "11 Subtract line 10 from line 9. This is your adjusted gross income 293,600.\n"
+                "12 Standard deduction or itemized deductions (from Schedule A) 61,126.\n"
+                "13 Qualified business income deduction from Form 8995 or Form 8995-A 29.\n"
+                "14 Add lines 12 and 13 61,155.\n"
+                "15 Subtract line 14 from line 11. If zero or less, enter -0-. This is your taxable income 232,445.\n"
+                "For Disclosure, Privacy Act, and Paperwork Reduction Act Notice, see separate instructions.\n"
+            ),
+        }]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        forms = [r["metadata"]["form"] for r in result]
+        assert len(result) >= 2, f"Expected page to split into multiple chunks, got {len(result)}"
+        assert all(f == "Form 1040" for f in forms), (
+            f"Expected ALL chunks to be tagged Form 1040, got: {forms}"
+        )
+
+    def test_page_with_destroyed_header_and_one_phrase_stays_unknown(self):
+        """A page with a destroyed header and only ONE distinctive phrase
+        should not be resolved as Form 1040 — threshold requires at least 2.
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        pages = [{
+            "page_number": 5,
+            "text": (
+                "51 0 40 Department of Treasury\n"
+                "Some content with one phrase: This is your total income appears here.\n"
+                "But nothing else distinctive about Form 1040 page 1.\n"
+                "Just regular prose and numbers 12345.\n"
+            ),
+        }]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        forms = [r["metadata"]["form"] for r in result]
+        assert all(f == "Unknown" for f in forms), (
+            f"Expected Unknown with single signal, got: {forms}"
+        )
+
+    def test_page_with_real_header_wins_over_content_inference(self):
+        """A page with a real Schedule B header must be tagged Schedule B
+        even if Form 1040 distinctive phrases appear (as cross-references).
+        Header detection takes precedence over content inference.
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        pages = [{
+            "page_number": 11,
+            "text": (
+                "SCHEDULE B (Form 1040) 2024 Interest and Ordinary Dividends\n"
+                "Part I Interest\n"
+                "Note: See the Instructions for Form 1040 line 2b\n"
+                "This schedule transfers to This is your total income calculation\n"
+                "and affects This is your adjusted gross income determination\n"
+                "1 List name of payer\n"
+                "Standard deduction or itemized deductions are on Form 1040\n"
+                "CHARLES SCHWAB 6.59\n"
+                "MERRILL LYNCH 9,224.98\n"
+            ),
+        }]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        forms = [r["metadata"]["form"] for r in result]
+        assert any("Schedule B" in f for f in forms), (
+            f"Expected Schedule B, got: {forms}"
+        )
+        assert not any(f == "Form 1040" for f in forms), (
+            f"Schedule B header must win over Form 1040 content inference, got: {forms}"
+        )
+
+    def test_unknown_page_inherits_from_previous_known_page(self):
+        """A page with no detectable header and no distinctive phrases
+        should inherit the form from the previous page (document continuation).
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        pages = [
+            {
+                "page_number": 7,
+                "text": (
+                    "SCHEDULE 2 (Form 1040) 2024 Additional Taxes\n"
+                    "Part I Tax\n"
+                    "1 Additions to tax\n"
+                    "2 Alternative minimum tax 229.\n"
+                    "3 Add lines 1z and 2. Enter here and on Form 1040 line 17 310.\n"
+                ),
+            },
+            {
+                "page_number": 8,
+                "text": (
+                    "Page 2 continuation with no clear header\n"
+                    "17 Other additional taxes\n"
+                    "18 Total additional taxes 1,502.\n"
+                    "21 Add lines 4, 7 through 16, 18, and 19 1,502.\n"
+                ),
+            },
+        ]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        page_8_chunks = [r for r in result if r["page_number"] == 8]
+        page_8_forms = [r["metadata"]["form"] for r in page_8_chunks]
+        assert len(page_8_chunks) >= 1, "Expected at least one chunk on page 8"
+        assert all("Schedule 2" in f for f in page_8_forms), (
+            f"Expected page 8 to inherit Schedule 2 from page 7, got: {page_8_forms}"
+        )
+
+    def test_page_after_voucher_stays_unknown_without_signals(self):
+        """After exiting a voucher sequence, a page with no header and
+        no distinctive phrases should stay Unknown (voucher state is reset,
+        and we cannot infer a form from nothing).
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        pages = [
+            {
+                "page_number": 1,
+                "text": (
+                    "Form 1040-ES Payment Voucher\n"
+                    "File only if you are making a payment of estimated tax\n"
+                    "Calendar Year Due 04/15/2025 2025\n"
+                    "Payment voucher\n"
+                    "MICHAEL L TJAHJADI\n"
+                ),
+            },
+            {
+                "page_number": 2,
+                "text": (
+                    "Some filler text with no form identifiers\n"
+                    "Numbers and line references 12345\n"
+                    "No distinctive phrases present\n"
+                ),
+            },
+        ]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        page_2_chunks = [r for r in result if r["page_number"] == 2]
+        page_2_forms = [r["metadata"]["form"] for r in page_2_chunks]
+        assert all(f == "Unknown" for f in page_2_forms), (
+            f"Expected Unknown after voucher exit without signals, got: {page_2_forms}"
+        )
+
+    def test_multi_form_page_splits_correctly(self):
+        """A page that contains two form headers (Schedule 2 ending and
+        Schedule 3 starting) should produce chunks for both forms. Page-level
+        inference must not prevent line-by-line mid-page form changes.
+        """
+        from app.services.form_aware_chunker import form_aware_chunk
+
+        pages = [{
+            "page_number": 9,
+            "text": (
+                "SCHEDULE 2 (Form 1040) 2024 Additional Taxes\n"
+                "Part II continued\n"
+                "21 Total additional taxes 1,502.\n"
+                "\n"
+                "SCHEDULE 3 (Form 1040) 2024 Additional Credits and Payments\n"
+                "Part I Nonrefundable Credits\n"
+                "1 Foreign tax credit 101.\n"
+            ),
+        }]
+
+        result = form_aware_chunk(pages, tax_year=2024)
+        forms = [r["metadata"]["form"] for r in result]
+        assert any("Schedule 2" in f for f in forms), f"Missing Schedule 2, got: {forms}"
+        assert any("Schedule 3" in f for f in forms), f"Missing Schedule 3, got: {forms}"
