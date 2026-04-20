@@ -58,6 +58,15 @@ from app.services.hybrid_search import reciprocal_rank_fusion
 from app.services.text_extraction import ExtractionError, UnsupportedFileType, extract_text
 
 logger = logging.getLogger(__name__)
+
+# DIAGNOSTIC (P0 env-var propagation, April 21 2026): remove after resolved
+_form_aware_raw = os.environ.get("USE_FORM_AWARE_CHUNKER")
+logger.info(
+    "STARTUP: USE_FORM_AWARE_CHUNKER raw=%r lowered=%r total_env_keys=%d",
+    _form_aware_raw,
+    (_form_aware_raw or "").lower(),
+    len(os.environ),
+)
 pipeline_logger = logging.getLogger("rag_pipeline")
 
 # ---------------------------------------------------------------------------
