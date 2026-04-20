@@ -45,6 +45,7 @@ from app.models.checkin_response import CheckinResponse
 from app.models.checkin_template import CheckinTemplate
 from app.services import storage_service
 from app.services.chunking import chunk_text, detect_voucher_chunk, flag_voucher_continuations, get_chunk_params, smart_chunk, structure_aware_chunk
+from app.services.form_aware_chunker import form_aware_chunk
 from app.services.reranker import rerank_chunks
 from app.services.context_assembler import (
     ContextPurpose,
@@ -590,13 +591,42 @@ async def process_document(db: Session, document: Document) -> None:
                 )
 
         # 2. Chunk (document-type-specific sizing)
+        # Extract return tax year (e.g., "2024" from document_period)
+        # Moved above chunking block so form_aware_chunk can use it.
+        _return_tax_year: int | None = None
+        if document.document_period:
+            import re as _re_year
+            _year_match = _re_year.search(r"\b(20\d{2})\b", document.document_period)
+            if _year_match:
+                _return_tax_year = int(_year_match.group(1))
+
+        chunk_metadatas: list[dict | None] = []  # parallel to chunks; None = legacy path
         chunk_size, chunk_overlap = get_chunk_params(document.document_type)
-        if docai_result and docai_result.get("pages"):
+
+        _use_form_aware = (
+            os.environ.get("USE_FORM_AWARE_CHUNKER", "").lower() == "true"
+            and (document.document_type or "").lower() == "tax_return"
+            and docai_result
+            and docai_result.get("pages")
+        )
+
+        if _use_form_aware:
+            fa_result = form_aware_chunk(
+                docai_result["pages"], tax_year=_return_tax_year
+            )
+            chunks = [c["text"] for c in fa_result]
+            chunk_metadatas = [c["metadata"] for c in fa_result]
+            logger.info(
+                "RAG: form-aware chunking: %d chunks from %d pages (tax_year=%s)",
+                len(chunks), len(docai_result["pages"]), _return_tax_year,
+            )
+        elif docai_result and docai_result.get("pages"):
             # Structure-aware chunking from Document AI
             structured_chunks = structure_aware_chunk(
                 docai_result["pages"], max_chars=chunk_size, overlap=chunk_overlap
             )
             chunks = [c["text"] for c in structured_chunks]
+            chunk_metadatas = [None] * len(chunks)
             logger.info(
                 "RAG: structure-aware chunking: %d chunks from %d pages (size=%d, overlap=%d)",
                 len(chunks), len(docai_result["pages"]), chunk_size, chunk_overlap,
@@ -606,6 +636,7 @@ async def process_document(db: Session, document: Document) -> None:
             # document-type-specific sizing (financial=600, transcript=1800, etc.)
             doc_type = document.document_type or "general"
             chunks = await asyncio.to_thread(smart_chunk, text, doc_type)
+            chunk_metadatas = [None] * len(chunks)
         if not chunks:
             raise ValueError("Document produced no usable text chunks after extraction.")
 
@@ -623,14 +654,6 @@ async def process_document(db: Session, document: Document) -> None:
         client = _openai()
         chunk_rows: list[DocumentChunk] = []
 
-        # Extract return tax year for voucher detection (e.g., "2024" from document_period)
-        _return_tax_year: int | None = None
-        if document.document_period:
-            import re as _re_year
-            _year_match = _re_year.search(r"\b(20\d{2})\b", document.document_period)
-            if _year_match:
-                _return_tax_year = int(_year_match.group(1))
-
         for batch_start in range(0, len(chunks), EMBED_BATCH):
             batch = chunks[batch_start : batch_start + EMBED_BATCH]
 
@@ -642,15 +665,16 @@ async def process_document(db: Session, document: Document) -> None:
             for local_i, (chunk_text_val, emb_data) in enumerate(
                 zip(batch, response.data)
             ):
-                # Detect 1040-ES voucher chunks
-                voucher_info = detect_voucher_chunk(chunk_text_val, _return_tax_year)
-                chunk_metadata = None
-                if voucher_info["is_voucher"]:
-                    chunk_metadata = {
-                        "is_voucher": True,
-                        "voucher_type": voucher_info["voucher_type"],
-                        "voucher_year": voucher_info["voucher_year"],
-                    }
+                chunk_metadata = chunk_metadatas[batch_start + local_i]
+                if chunk_metadata is None:
+                    # Legacy path: per-chunk voucher detection
+                    voucher_info = detect_voucher_chunk(chunk_text_val, _return_tax_year)
+                    if voucher_info["is_voucher"]:
+                        chunk_metadata = {
+                            "is_voucher": True,
+                            "voucher_type": voucher_info["voucher_type"],
+                            "voucher_year": voucher_info["voucher_year"],
+                        }
 
                 chunk_rows.append(
                     DocumentChunk(
