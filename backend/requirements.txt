@@ -43,6 +43,7 @@ google-auth>=2.23.0
 
 # Google Document AI (structured tax form extraction)
 google-cloud-documentai>=2.20.0
+google-cloud-storage>=2.10.0
 
 # PDF page images (OCR + thumbnails)
 pdf2image>=1.17.0
