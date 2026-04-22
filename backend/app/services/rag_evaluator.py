@@ -106,12 +106,27 @@ def _normalize_for_match(text: str) -> str:
     return t
 
 
+# Matches both smart_chunk format "[Page N]" and form-aware chunk
+# prefix format "| Page N |" or "| Page N ]". Used for eval scoring only.
+_PAGE_MARKER_PATTERN = re.compile(
+    r"\[Page\s+(\d+)\]"            # smart_chunk: [Page 5]
+    r"|"
+    r"\|\s*Page\s+(\d+)\s*[\|\]]"  # form-aware: | Page 5 | or | Page 5 ]
+)
+
+
 def _extract_pages_from_chunks(chunk_texts: list[str]) -> list[int]:
-    """Extract all unique [Page N] markers from a list of chunk texts."""
+    """Extract unique page numbers from chunk texts.
+
+    Supports both legacy smart_chunk [Page N] markers and current
+    form-aware chunk prefixes like [TAX YEAR ... | Page N | ...].
+    """
     pages: set[int] = set()
     for text in chunk_texts:
-        for m in re.findall(r"\[Page\s+(\d+)\]", text):
-            pages.add(int(m))
+        for match in _PAGE_MARKER_PATTERN.finditer(text):
+            page_str = match.group(1) or match.group(2)
+            if page_str:
+                pages.add(int(page_str))
     return sorted(pages)
 
 
