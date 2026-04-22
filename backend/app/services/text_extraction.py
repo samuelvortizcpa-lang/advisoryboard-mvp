@@ -567,51 +567,43 @@ def _extract_fathom_json(path: Path) -> str:
 # Google Document AI enhanced extraction
 # ---------------------------------------------------------------------------
 
+# NOTE: Retained for a planned deduplication cleanup — the canonical
+# copy now lives in document_ai_service.py and is used by
+# extract_with_strategy. After Session 4 ships, remove this local
+# definition and (if anything in this file ends up needing it) import
+# from document_ai_service. See backlog P3.
 FINANCIAL_DOC_TYPES: set[str] = {
     "tax_return", "w2", "k1", "1099", "financial_statement", "1040x", "invoice",
 }
 
 
 def extract_text_with_docai(
-    file_bytes: bytes, document_type: str | None = None
+    file_bytes: bytes,
+    document_type: str | None = None,
 ) -> dict | None:
     """
-    Try Document AI extraction.  Returns structured dict or None.
+    Delegate to DocAI strategy dispatcher.
 
-    For financial document types, uses Form Parser (structured key-value +
-    table extraction).  For other PDFs, uses Document AI OCR (higher quality
-    than pytesseract).  Returns None when Document AI is not configured or
-    fails, so the caller falls back to the existing pdfplumber text.
+    Contract preserved from prior implementation:
+    - Returns dict (with 'text' and 'pages' keys) on success
+    - Returns None when DocAI is unavailable, page count unknown,
+      batch disabled via flag, or any DocAI call fails
+    - Catches DocAITooLarge and returns None so callers don't need
+      to handle the exception (preserves None-means-fallback pattern)
     """
     from app.services.document_ai_service import (
-        is_available,
-        extract_with_form_parser,
-        extract_with_ocr,
+        extract_with_strategy,
+        DocAITooLarge,
     )
 
-    if not is_available():
-        logger.info("Document AI not configured, using pdfplumber fallback")
-        return None
-
-    if document_type and document_type.lower() in FINANCIAL_DOC_TYPES:
-        result = extract_with_form_parser(file_bytes)
-        if result:
-            logger.info(
-                "Document AI Form Parser extracted %d pages, %d entities",
-                len(result.get("pages", [])),
-                len(result.get("entities", [])),
-            )
-            return result
-
-    # For non-financial PDFs or if form parser failed, try Document AI OCR
-    result = extract_with_ocr(file_bytes)
-    if result:
-        logger.info(
-            "Document AI OCR extracted %d pages", len(result.get("pages", []))
+    try:
+        return extract_with_strategy(file_bytes, document_type)
+    except DocAITooLarge as exc:
+        logger.warning(
+            "DocAI strategy: document too large: %s; falling back to pdfplumber",
+            exc,
         )
-        return result
-
-    return None
+        return None
 
 
 def _extract_email(path: Path) -> str:

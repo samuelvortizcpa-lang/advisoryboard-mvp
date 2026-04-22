@@ -15,12 +15,28 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 
 import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
 _client = None
+
+# Feature flag: enables batch processing for 31-200 page documents.
+# Default False for soft launch. When False, 31-200 pp docs return None
+# (same behavior as today — caller falls back to pdfplumber).
+USE_DOCAI_BATCH = os.getenv("USE_DOCAI_BATCH", "false").lower() == "true"
+
+# Financial document types get Form Parser; everything else gets OCR.
+# This mirrors the routing currently in text_extraction.extract_text_with_docai.
+FINANCIAL_DOC_TYPES = frozenset({
+    "tax_return", "w2", "k1", "1099", "financial_statement", "1040x", "invoice",
+})
+
+
+class DocAITooLarge(Exception):
+    """Document exceeds max supported page count for DocAI (200)."""
 
 
 def is_available() -> bool:
@@ -95,7 +111,10 @@ def _count_pdf_pages(file_bytes: bytes) -> int | None:
 
 
 def extract_with_form_parser(
-    file_bytes: bytes, mime_type: str = "application/pdf"
+    file_bytes: bytes,
+    mime_type: str = "application/pdf",
+    *,
+    imageless_mode: bool = False,
 ) -> dict | None:
     """
     Send PDF to Document AI Form Parser for structured extraction.
@@ -106,12 +125,13 @@ def extract_with_form_parser(
     if client is None:
         return None
 
-    # Check page limit (online processing max 15 pages)
+    # Check page limit — imageless mode allows up to 30 pages
+    max_pages = 30 if imageless_mode else 15
     page_count = _count_pdf_pages(file_bytes)
-    if page_count and page_count > 15:
+    if page_count and page_count > max_pages:
         logger.warning(
-            "Document AI: PDF has %d pages (limit 15 for online processing), skipping",
-            page_count,
+            "Document AI: PDF has %d pages (limit %d for online processing), skipping",
+            page_count, max_pages,
         )
         return None
 
@@ -127,6 +147,8 @@ def extract_with_form_parser(
         request = documentai.ProcessRequest(
             name=processor_name, raw_document=raw_document
         )
+        if imageless_mode:
+            request.imageless_mode = True
         result = client.process_document(request=request, timeout=60.0)
         document = result.document
 
@@ -200,7 +222,10 @@ def extract_with_form_parser(
 
 
 def extract_with_ocr(
-    file_bytes: bytes, mime_type: str = "application/pdf"
+    file_bytes: bytes,
+    mime_type: str = "application/pdf",
+    *,
+    imageless_mode: bool = False,
 ) -> dict | None:
     """
     Send PDF to Document AI OCR processor for high-quality text extraction.
@@ -211,12 +236,13 @@ def extract_with_ocr(
     if client is None:
         return None
 
-    # Check page limit
+    # Check page limit — imageless mode allows up to 30 pages
+    max_pages = 30 if imageless_mode else 15
     page_count = _count_pdf_pages(file_bytes)
-    if page_count and page_count > 15:
+    if page_count and page_count > max_pages:
         logger.warning(
-            "Document AI: PDF has %d pages (limit 15 for online processing), skipping",
-            page_count,
+            "Document AI: PDF has %d pages (limit %d for online processing), skipping",
+            page_count, max_pages,
         )
         return None
 
@@ -232,6 +258,8 @@ def extract_with_ocr(
         request = documentai.ProcessRequest(
             name=processor_name, raw_document=raw_document
         )
+        if imageless_mode:
+            request.imageless_mode = True
         result = client.process_document(request=request, timeout=60.0)
         document = result.document
 
@@ -256,3 +284,95 @@ def extract_with_ocr(
         sentry_sdk.capture_exception(exc)
         logger.warning("Document AI OCR failed: %s", exc)
         return None
+
+
+def extract_with_strategy(
+    file_bytes: bytes,
+    document_type: str | None,
+) -> dict | None:
+    """
+    Top-level DocAI strategy dispatcher. Routes by page count:
+      - 0-30 pages: online (with imageless_mode=True)
+      - 31-200 pages: batch via GCS (if USE_DOCAI_BATCH flag on, else None)
+      - >200 pages: raises DocAITooLarge
+
+    Returns the same dict | None contract as the online extractors:
+      {"text": str, "pages": list[dict], ...}
+
+    Callers should treat None as "no DocAI result, fall back to pdfplumber"
+    and catch DocAITooLarge separately to surface a clear UX message.
+    """
+    if not is_available():
+        return None
+
+    page_count = _count_pdf_pages(file_bytes)
+    if page_count is None:
+        # Could not count pages — fail safe by treating as unsupported.
+        logger.warning("Document AI: could not count PDF pages, skipping DocAI")
+        return None
+
+    doc_type_norm = (document_type or "").lower()
+    is_financial = doc_type_norm in FINANCIAL_DOC_TYPES
+
+    # Online tier (0-30 pages, imageless_mode extends limit from 15 to 30)
+    if page_count <= 30:
+        logger.info(
+            "DocAI strategy: %d pages -> online (%s), imageless_mode=True",
+            page_count, "form_parser" if is_financial else "ocr",
+        )
+        if is_financial:
+            return extract_with_form_parser(file_bytes, imageless_mode=True)
+        return extract_with_ocr(file_bytes, imageless_mode=True)
+
+    # Batch tier (31-200 pages)
+    if page_count <= 200:
+        if not USE_DOCAI_BATCH:
+            logger.info(
+                "DocAI strategy: %d pages requires batch but USE_DOCAI_BATCH=false; returning None",
+                page_count,
+            )
+            return None
+
+        # Batch uses OCR processor only for v1 (Session 3 validated this shape).
+        # Form Parser batch upgrade is a future enhancement.
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = os.getenv("DOCAI_LOCATION", "us")
+        ocr_processor_id = os.getenv("DOCAI_OCR_PROCESSOR_ID")
+        if not (project_id and ocr_processor_id):
+            logger.warning(
+                "DocAI strategy: batch requested but GOOGLE_CLOUD_PROJECT or "
+                "DOCAI_OCR_PROCESSOR_ID not set; returning None"
+            )
+            return None
+
+        processor_name = (
+            f"projects/{project_id}/locations/{location}/processors/{ocr_processor_id}"
+        )
+        document_id = uuid.uuid4().hex
+
+        # Import locally to avoid module-load-time dependency on google-cloud-storage
+        # for deployments that don't use batch.
+        from app.services.batch_extractor import BatchExtractor, DocAIBatchError
+
+        logger.info(
+            "DocAI strategy: %d pages -> batch (OCR), document_id=%s",
+            page_count, document_id,
+        )
+        try:
+            extractor = BatchExtractor()
+            return extractor.extract(
+                file_bytes=file_bytes,
+                document_id=document_id,
+                processor_name=processor_name,
+            )
+        except DocAIBatchError as exc:
+            logger.warning(
+                "DocAI batch failed for document_id=%s: %s: %s",
+                document_id, type(exc).__name__, exc,
+            )
+            return None
+
+    # Splitting tier (>200 pages) — future work
+    raise DocAITooLarge(
+        f"Document is {page_count} pages; max supported is 200."
+    )
