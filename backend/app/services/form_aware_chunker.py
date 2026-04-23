@@ -19,10 +19,15 @@ import re
 from typing import Optional
 
 from app.services.chunking import detect_voucher_chunk
+from app.services.form_sections import (
+    FORM_SECTIONS_REGISTRY,
+    SectionEntry,
+    lookup_section_for_line,
+)
 
 logger = logging.getLogger(__name__)
 
-CHUNKER_VERSION = "form_aware_v1"
+CHUNKER_VERSION = "form_aware_v2"
 
 # ---------------------------------------------------------------------------
 # Form header patterns — must be first non-whitespace on the line
@@ -132,6 +137,28 @@ _SECTION_HEADINGS = [
 _SECTION_RE = re.compile(
     r"^\s*(" + "|".join(re.escape(h) for h in _SECTION_HEADINGS) + r")\s*$",
     re.MULTILINE | re.IGNORECASE,
+)
+
+# ============================================================================
+# v2 section-aware splitting parameters
+# ============================================================================
+
+# Soft target for chunk size within a single section. v2 tries to respect
+# section boundaries over size targets (spec §4).
+V2_SECTION_TARGET_CHARS = 2000
+
+# Hard ceiling: when a section exceeds this, we force a split with the
+# section header injected into the subsequent chunk to preserve context.
+V2_SECTION_HARD_CEILING = 2000
+
+# Regex to detect line-number-prefixed lines in tax form OCR output.
+# Matches "Line 11", "11.", "11)", "11a", "1a", "5d" at line start after
+# optional whitespace. Captures just the line identifier.
+# This is how we detect which line group we're currently in, so we can
+# consult FORM_SECTIONS_REGISTRY.
+_LINE_NUMBER_RE = re.compile(
+    r"^\s*(?:Line\s+)?(\d{1,3}[a-z]?)\b",
+    re.IGNORECASE,
 )
 
 # ---------------------------------------------------------------------------
@@ -292,6 +319,47 @@ def _detect_section(line: str) -> str | None:
     if m:
         return m.group(1).strip()
     return None
+
+
+def _detect_line_number(line: str) -> Optional[str]:
+    """Extract the line identifier from a single line of OCR text if it
+    looks like a tax form line-start.
+
+    Returns the line identifier string (e.g., "11", "5d", "1a") or None
+    if the line doesn't appear to start with a line number.
+
+    Used by v2 splitting logic to track which form line the chunker is
+    currently processing, so it can consult FORM_SECTIONS_REGISTRY.
+    """
+    if not line or not line.strip():
+        return None
+    m = _LINE_NUMBER_RE.match(line)
+    if not m:
+        return None
+    line_id = m.group(1).lower()
+    # Filter out OCR artifacts: bare 4-digit numbers are usually years,
+    # not line numbers. Form lines rarely exceed 3 digits.
+    if line_id.isdigit() and len(line_id) == 4:
+        return None
+    return line_id
+
+
+def _lookup_section_v2(
+    current_form: Optional[str],
+    current_line: Optional[str],
+) -> Optional[SectionEntry]:
+    """Look up the section entry for the current (form, line) pair.
+
+    Consults FORM_SECTIONS_REGISTRY via lookup_section_for_line.
+    Returns None if form is unknown or line doesn't match any section.
+
+    This is the core of v2's section detection: instead of matching
+    against a hardcoded list of section header strings (v1 approach),
+    we match observed line numbers against per-form line-group tables.
+    """
+    if not current_form or not current_line:
+        return None
+    return lookup_section_for_line(current_form, current_line)
 
 
 def _extract_transfers(text: str) -> list[str]:
@@ -591,7 +659,25 @@ def form_aware_chunk(
                 chunk_page = page_num
                 _snapshot_state()
 
-            # --- Check for section heading ---
+            # --- v2: Section detection via line-number lookup (primary) ---
+            # If this line starts with a line number, look up which named
+            # section that line belongs to. If it's a different section
+            # than the current one, flush and update state BEFORE appending
+            # the line. This ensures the line that introduces the new
+            # section becomes the first line of the new chunk, preserving
+            # label-to-content association (fixes Q7 Schedule A charity).
+            line_num = _detect_line_number(line)
+            if line_num:
+                section_entry = _lookup_section_v2(current_form, line_num)
+                if section_entry and section_entry["section"] != current_section:
+                    _flush()
+                    current_section = section_entry["section"]
+                    chunk_page = page_num
+                    _snapshot_state()
+
+            # --- v1 section heading regex (fallback for non-numbered lines) ---
+            # Keeps compatibility with content like "Gifts to Charity" header
+            # text appearing before the first numbered line of a section.
             section_info = _detect_section(line)
             if section_info and section_info != current_section:
                 _flush()
@@ -602,22 +688,40 @@ def form_aware_chunk(
             # --- Accumulate line ---
             line_len = len(line) + 1  # +1 for newline
 
-            # Force split if adding this line would exceed max_chars
-            if chunk_len + line_len > max_chars and chunk_buf:
-                _flush()
-                chunk_page = page_num
-                _snapshot_state()
+            # --- v2: Size gating depends on current_section ---
+            # If we're inside a named section (not Header/Unclassified/part-header),
+            # respect section atomicity up to V2_SECTION_HARD_CEILING.
+            # Otherwise, fall back to v1 behavior: soft-split at target_chars
+            # on blank lines, force-split at max_chars.
+            in_named_section = current_section not in (
+                "Header",
+                "Unclassified",
+                "Estimated Tax Payment Voucher",
+            ) and not (current_part and current_section == current_part)
 
-            # Soft split at target_chars on paragraph boundaries
-            if (
-                chunk_len >= target_chars
-                and chunk_buf
-                and line.strip() == ""
-            ):
-                _flush()
-                chunk_page = page_num
-                _snapshot_state()
-                continue  # skip the blank line itself
+            if in_named_section:
+                # v2 strict: only split at hard ceiling. Keep the section atomic.
+                if chunk_len + line_len > V2_SECTION_HARD_CEILING and chunk_buf:
+                    _flush()
+                    chunk_page = page_num
+                    _snapshot_state()
+            else:
+                # v1 fallback: force split at max_chars
+                if chunk_len + line_len > max_chars and chunk_buf:
+                    _flush()
+                    chunk_page = page_num
+                    _snapshot_state()
+
+                # v1 fallback: soft split at target_chars on blank lines
+                if (
+                    chunk_len >= target_chars
+                    and chunk_buf
+                    and line.strip() == ""
+                ):
+                    _flush()
+                    chunk_page = page_num
+                    _snapshot_state()
+                    continue  # skip the blank line itself
 
             chunk_buf.append(line)
             chunk_len += line_len

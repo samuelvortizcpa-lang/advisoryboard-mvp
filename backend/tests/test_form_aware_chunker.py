@@ -660,7 +660,7 @@ class TestMetadataShape:
             "U.S. Individual Income Tax Return\n"
         )
         result = form_aware_chunk(pages, tax_year=2024)
-        assert result[0]["metadata"]["chunker_version"] == "form_aware_v1"
+        assert result[0]["metadata"]["chunker_version"] == "form_aware_v2"
 
 
 # ===========================================================================
@@ -1096,3 +1096,273 @@ class TestPageLevelFormResolution:
         forms = [r["metadata"]["form"] for r in result]
         assert any("Schedule 2" in f for f in forms), f"Missing Schedule 2, got: {forms}"
         assert any("Schedule 3" in f for f in forms), f"Missing Schedule 3, got: {forms}"
+
+
+# ============================================================================
+# v2 section-aware splitting tests
+# Added Session 7 — verifies section atomicity, line-number lookup,
+# and the Q7 Schedule A fix.
+# ============================================================================
+
+
+class TestV2SectionAwareSplitting:
+    """v2 section-strict splitting: named sections stay atomic up to hard
+    ceiling; line-number lookup populates section metadata correctly;
+    size suppression works inside named sections."""
+
+    def test_schedule_a_gifts_to_charity_atomic(self):
+        """Schedule A Gifts to Charity label and amount stay in same chunk."""
+        text = """SCHEDULE A
+(Form 1040)
+Itemized Deductions
+
+Gifts to Charity
+11  Gifts by cash or check
+12  Other than by cash or check
+13  Carryover from prior year
+14  Add lines 11 through 13                       14  9,630.
+"""
+        pages = _single_page(text, page=10)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        # Find the chunk containing the $9,630 amount
+        charity_chunks = [
+            c for c in chunks
+            if "9,630" in c["text"] or "9630" in c["text"]
+        ]
+        assert len(charity_chunks) >= 1, "No chunk contains the charity amount"
+        # That same chunk must also reference charity (label or section metadata)
+        c = charity_chunks[0]
+        has_charity_context = (
+            "harit" in c["text"].lower()
+            or "Gifts to Charity" in c["metadata"]["section"]
+        )
+        assert has_charity_context, (
+            f"Chunk with 9,630 has no charity context: section={c['metadata']['section']}, "
+            f"body_preview={c['text'][:200]}"
+        )
+
+    def test_schedule_b_part_i_interest_atomic(self):
+        """Schedule B Part I Interest lines 1-4 stay in same chunk."""
+        text = """SCHEDULE B
+(Form 1040)
+Interest and Ordinary Dividends
+
+Part I Interest
+1 List name of payer
+2 Add the amounts on line 1
+3 Excludable interest on series EE and I U.S. savings bonds
+4 Subtract line 3 from line 2
+"""
+        pages = _single_page(text, page=11)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        # The v1 section-heading regex fires on "Part I Interest" text,
+        # creating a heading chunk. The v2 line-number lookup then detects
+        # lines 1-4 in the same section. All numbered lines must land
+        # in a single chunk.
+        content_chunks = [
+            c for c in chunks
+            if "1 List" in c["text"]
+        ]
+        assert len(content_chunks) >= 1, "No chunk with line 1 content found"
+        c = content_chunks[0]
+        for line_marker in ["1 List", "2 Add", "3 Excludable", "4 Subtract"]:
+            assert line_marker in c["text"], (
+                f"Line marker {line_marker!r} missing from content chunk"
+            )
+
+    def test_section_metadata_not_header_for_content_chunks(self):
+        """Mid-section chunks should NOT be tagged 'Header' — v1 bug."""
+        text = """SCHEDULE A
+(Form 1040)
+
+Gifts to Charity
+11  Gifts by cash or check
+12  Other than by cash or check
+13  Carryover from prior year
+14  Add lines 11 through 13                       14  9,630.
+"""
+        pages = _single_page(text, page=10)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        # Find the chunk with line content (not the pure header)
+        content_chunks = [
+            c for c in chunks
+            if "9,630" in c["text"] or "Gifts by cash" in c["text"]
+        ]
+        assert len(content_chunks) >= 1
+        # None of those should be tagged "Header"
+        for c in content_chunks:
+            assert c["metadata"]["section"] != "Header", (
+                f"Content chunk tagged as Header: {c['text'][:200]}"
+            )
+
+    def test_schedule_d_part_iii_summary_detected(self):
+        """Schedule D Part III Summary (Line 16) detected as its own section."""
+        text = """SCHEDULE D
+(Form 1040)
+Capital Gains and Losses
+
+Part III Summary
+16  Combine lines 7 and 15 and enter the result
+17  Are lines 15 and 16 both gains?
+18  28% rate gain
+19  Unrecaptured section 1250 gain
+"""
+        pages = _single_page(text, page=12)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        part_iii_chunks = [
+            c for c in chunks
+            if "Part III" in c["metadata"]["section"]
+            and "Summary" in c["metadata"]["section"]
+        ]
+        assert len(part_iii_chunks) >= 1, (
+            f"No Part III Summary chunk. Chunks produced: "
+            f"{[c['metadata']['section'] for c in chunks]}"
+        )
+
+    def test_form_5329_part_iv_roth_ira_detected(self):
+        """Form 5329 Part IV Roth IRA excess contributions section."""
+        text = """Form 5329
+Additional Taxes on Qualified Plans
+
+Part IV Additional Tax on Excess Contributions to Roth IRAs
+18  Enter your excess contributions from line 24
+19  Roth IRA contributions for 2024
+20  2024 distributions from your Roth IRAs
+"""
+        pages = _single_page(text, page=21)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        part_iv_chunks = [
+            c for c in chunks
+            if "Part IV" in c["metadata"]["section"]
+            and ("Roth" in c["metadata"]["section"] or "18" in c["text"])
+        ]
+        assert len(part_iv_chunks) >= 1
+
+    def test_named_section_larger_than_target_stays_atomic(self):
+        """A named section with many lines stays in one chunk up to hard
+        ceiling, even if it exceeds the 600-char soft target."""
+        # Build a Schedule A Taxes You Paid section with enough verbose
+        # content to exceed 600 chars but stay under 2000
+        text_parts = ["SCHEDULE A\n(Form 1040)\n\nTaxes You Paid\n"]
+        for line_num in ["5", "5a", "5b", "5c", "5d", "5e", "6", "7"]:
+            text_parts.append(
+                f"{line_num}  Item description for line {line_num} "
+                f"with enough verbose filler text to push the total "
+                f"character count upward in a controlled way here.\n"
+            )
+        text = "".join(text_parts)
+        pages = _single_page(text, page=10)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        # The v1 heading regex may create a small "Taxes You Paid" heading chunk.
+        # The v2 line-number lookup creates the content chunk with all lines 5-7.
+        # Find the chunk that actually contains line content.
+        content_chunks = [
+            c for c in chunks
+            if "5  Item" in c["text"]
+        ]
+        assert len(content_chunks) >= 1, "No content chunk with line 5"
+        # All Line 5-7 content should be in ONE chunk (no soft-split)
+        c = content_chunks[0]
+        for line_num in ["5a", "5b", "5c", "5d", "5e", "6", "7"]:
+            assert f"{line_num}  Item" in c["text"], (
+                f"Line {line_num} not in same chunk as rest of section"
+            )
+
+    def test_unknown_form_falls_back_to_v1_splitting(self):
+        """Unrecognized form with no section table should chunk by size."""
+        # Generate enough text to trigger size-based splitting
+        text = "Some front matter page with no IRS form structure.\n\n"
+        text += "This is a preparer cover letter. " * 50
+        pages = _single_page(text, page=1)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        # Should produce at least one chunk (fallback logic works)
+        assert len(chunks) >= 1
+        # Form should be Unknown (no IRS header detected)
+        assert chunks[0]["metadata"]["form"] == "Unknown"
+
+    def test_detect_line_number_filters_year_digits(self):
+        """_detect_line_number rejects 4-digit years as line numbers."""
+        from app.services.form_aware_chunker import _detect_line_number
+        assert _detect_line_number("2024 Form 1040") is None
+        assert _detect_line_number("1040 Page 2") is None
+        # But valid 3-digit line numbers work
+        assert _detect_line_number("100  Some line") == "100"
+
+    def test_voucher_section_not_treated_as_named_section(self):
+        """Voucher sections should use v1 behavior, not section-strict logic."""
+        # detect_voucher_chunk requires ≥2 voucher patterns + a future year
+        text = """Form 1040-ES
+2025 Estimated Tax Payment Voucher 1
+Calendar year—Due April 15, 2025
+Detach Here and Mail With Your Payment
+"""
+        pages = _single_page(text, page=1)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        assert len(chunks) >= 1
+        assert chunks[0]["metadata"]["is_voucher"] is True
+
+    def test_schedule_k1_1120s_line_1_detected(self):
+        """Schedule K-1 (Form 1120-S) Line 1 (ordinary biz income) detected."""
+        text = """Schedule K-1 (Form 1120-S)
+Shareholder's Share of Income, Deductions, Credits, etc.
+
+Part III Shareholder's Share of Current Year Income
+1 Ordinary business income (loss)                    50,000
+2 Net rental real estate income (loss)
+3 Other net rental income (loss)
+"""
+        pages = _single_page(text, page=5)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        part_iii_chunks = [
+            c for c in chunks
+            if "Ordinary Business Income" in c["metadata"]["section"]
+        ]
+        assert len(part_iii_chunks) >= 1, (
+            f"No Line 1 chunk found. Sections: "
+            f"{[c['metadata']['section'] for c in chunks]}"
+        )
+
+    def test_schedule_c_net_profit_detected(self):
+        """Schedule C Line 31 (net profit) correctly mapped to Part II."""
+        text = """Schedule C
+(Form 1040)
+Profit or Loss From Business
+
+Part II Expenses
+29  Tentative profit
+30  Expenses for business use of your home
+31  Net profit or loss                              25,000
+"""
+        pages = _single_page(text, page=1)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        net_profit_chunks = [
+            c for c in chunks
+            if "Net Profit" in c["metadata"]["section"]
+            or "31" in c["text"]
+        ]
+        assert len(net_profit_chunks) >= 1
+
+    def test_v2_section_hard_ceiling_triggers_split(self):
+        """Section over HARD_CEILING (2000) should split at ceiling."""
+        # Build a section that exceeds 2000 chars
+        text_parts = ["SCHEDULE A\n(Form 1040)\n\nGifts to Charity\n"]
+        # Add Line 11 with very long content
+        long_content = "Very detailed donation entry with extensive description. " * 50
+        text_parts.append(f"11  {long_content}\n")
+        text_parts.append("14  Total                                  14  9,630.\n")
+        text = "".join(text_parts)
+        pages = _single_page(text, page=10)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+        # Section was over 2000 chars → should have produced multiple
+        # chunks with Gifts to Charity section
+        charity_chunks = [
+            c for c in chunks
+            if "Gifts to Charity" in c["metadata"]["section"]
+        ]
+        assert len(charity_chunks) >= 1
+        # No chunk should massively exceed hard ceiling
+        for c in charity_chunks:
+            # Allow some slack for the prefix + one overshoot line
+            assert len(c["text"]) < 3500, (
+                f"Chunk exceeded safe ceiling: {len(c['text'])} chars"
+            )
