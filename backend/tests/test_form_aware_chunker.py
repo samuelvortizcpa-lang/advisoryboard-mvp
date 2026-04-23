@@ -1288,6 +1288,100 @@ Part IV Additional Tax on Excess Contributions to Roth IRAs
         # But valid 3-digit line numbers work
         assert _detect_line_number("100  Some line") == "100"
 
+    def test_detect_line_number_rejects_dollar_amounts_with_commas(self):
+        """Dollar amounts like '9,630.' must NOT match as line number.
+
+        Session 7 v2 eval root cause: OCR column-interleaving emits bare
+        dollar amounts on their own lines. Leading digit of '9,630.' was
+        matching as Schedule A Line 9 (Interest You Paid), causing section
+        flip-flop and confidently-wrong charity citations.
+        """
+        from app.services.form_aware_chunker import _detect_line_number
+        assert _detect_line_number("9,630.") is None
+        assert _detect_line_number("12,645.") is None
+        assert _detect_line_number("10,000.") is None
+        assert _detect_line_number("1,234,567.") is None
+        # With indentation (OCR often adds whitespace)
+        assert _detect_line_number("   9,630.") is None
+        assert _detect_line_number("\t12,645.") is None
+
+    def test_detect_line_number_still_matches_valid_line_starts(self):
+        """Regression guard: valid line-start patterns must still match."""
+        from app.services.form_aware_chunker import _detect_line_number
+        assert _detect_line_number("11 Gifts by cash or check") == "11"
+        assert _detect_line_number("9 Investment interest") == "9"
+        assert _detect_line_number("5a State and local income taxes") == "5a"
+        assert _detect_line_number("Line 14 Add lines 11 through 13") == "14"
+        assert _detect_line_number("1a Wages") == "1a"
+        # Sub-line markers
+        assert _detect_line_number("16a Other deductions") == "16a"
+        assert _detect_line_number("24g Total other credits") == "24g"
+
+    def test_detect_line_number_rejects_multi_digit_amounts_without_commas(self):
+        """Large amounts without commas (rare in OCR but possible) must also
+        not false-positive into the current form's line space.
+        """
+        from app.services.form_aware_chunker import _detect_line_number
+        # Leading digits followed by another digit → rejected
+        assert _detect_line_number("9630") is None
+        assert _detect_line_number("10000") is None
+        # But real line numbers (bounded by space or end) still match
+        assert _detect_line_number("100 Some description") == "100"
+
+    def test_q7_charity_with_ocr_column_interleaving(self):
+        """Q7 regression: simulate the Schedule A column-interleaving pattern
+        observed in Session 7 Phase 7 diagnostic. Bare dollar amounts on
+        their own lines must NOT pull content into wrong sections.
+        """
+        synthetic_text = """SCHEDULE A
+(Form 1040)
+Itemized Deductions
+
+Taxes You Paid
+5 State and local taxes
+5a State and local income taxes
+5b State and local real estate taxes
+5c State and local personal property taxes
+5d Add lines 5a through 5c
+12,645.
+5e Enter the smaller of line 5d or $10,000
+10,000.
+
+Interest You Paid
+8 Home mortgage interest and points
+9 Investment interest
+10 Add lines 8e and 9
+
+Gifts to Charity
+11 Gifts by cash or check
+12 Other than by cash or check
+13 Carryover from prior year
+14 Add lines 11 through 13
+9,630.
+"""
+        pages = _single_page(synthetic_text, page=10)
+        chunks = form_aware_chunk(pages, tax_year=2024)
+
+        # The 9,630 amount should land in a Gifts to Charity chunk,
+        # NOT in Interest You Paid.
+        chunks_with_9630 = [c for c in chunks if "9,630" in c["text"]]
+        assert len(chunks_with_9630) >= 1, "No chunk contains 9,630"
+        for c in chunks_with_9630:
+            assert "Charity" in c["metadata"]["section"], (
+                f"9,630 ended up in non-charity section: "
+                f"{c['metadata']['section']}"
+            )
+
+        # The 12,645 amount should land in Taxes You Paid (Line 5d context),
+        # NOT in any other section.
+        chunks_with_12645 = [c for c in chunks if "12,645" in c["text"]]
+        assert len(chunks_with_12645) >= 1, "No chunk contains 12,645"
+        for c in chunks_with_12645:
+            assert "Taxes You Paid" in c["metadata"]["section"], (
+                f"12,645 ended up in non-tax section: "
+                f"{c['metadata']['section']}"
+            )
+
     def test_voucher_section_not_treated_as_named_section(self):
         """Voucher sections should use v1 behavior, not section-strict logic."""
         # detect_voucher_chunk requires ≥2 voucher patterns + a future year

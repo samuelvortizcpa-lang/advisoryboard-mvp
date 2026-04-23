@@ -156,8 +156,14 @@ V2_SECTION_HARD_CEILING = 2000
 # optional whitespace. Captures just the line identifier.
 # This is how we detect which line group we're currently in, so we can
 # consult FORM_SECTIONS_REGISTRY.
+# Negative lookahead (?!,|\d) rejects matches where the captured digits are
+# followed by a comma or another digit — avoids false-positives from dollar
+# amounts like "9,630." which OCR emits on their own line in Schedule A's
+# two-column layout. Session 7 v2 eval surfaced this as the root cause of
+# section flip-flop: the leading "9" of "9,630." matched as Line 9 (Interest
+# You Paid) when the amount actually belonged to Line 14 (Gifts to Charity).
 _LINE_NUMBER_RE = re.compile(
-    r"^\s*(?:Line\s+)?(\d{1,3}[a-z]?)\b",
+    r"^\s*(?:Line\s+)?(\d{1,3}[a-z]?)(?!,|\d)\b",
     re.IGNORECASE,
 )
 
