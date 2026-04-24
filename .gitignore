@@ -254,3 +254,6 @@ backend/uploads/
 # ─── Local-only admin dashboard (DEPRECATED 2026-04-13 — see CLAUDE.md) ──────────────
 admin-dashboard/
 .gstack/
+
+# Session 11 — dev-only integration verifier, not for commit
+scripts/verify_flip_detector.py

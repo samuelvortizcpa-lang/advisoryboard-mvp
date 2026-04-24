@@ -14,6 +14,7 @@ Reuses detect_voucher_chunk from chunking.py for 1040-ES detection.
 
 from __future__ import annotations
 
+import collections
 import logging
 import re
 from typing import Optional
@@ -463,6 +464,71 @@ def _resolve_page_form(
     return None
 
 
+class _SectionFlipDetector:
+    """Logs suspicious section oscillation density in chunker output
+    without affecting chunker behavior. Produces telemetry to scope
+    Phase 2 column reconstruction.
+
+    Detection metric: revisits = runs - distinct_sections within a
+    rolling window. A revisit means a section re-appeared after
+    leaving its previous run. Catches both per-line alternation
+    (A-B-A-B) and run-based oscillation (AAA-BBB-AAA) while ignoring
+    sequential progression (A-B-C-D-E).
+
+    Refinement history (Session 11):
+      v1 (spec §5): adjacent-difference counting — fired on Form 1040
+          sequential progression (false positive)
+      v2: reversion counting (A-B-A) — silenced Form 1040 but missed
+          run-based oscillation (false negative)
+      v3 (this): revisit counting — correct for both patterns
+
+    Ref: AdvisoryBoard_ScheduleA_Oscillation_Spec.md §5 (spec to be
+    updated post-session to reflect v3 algorithm)
+    """
+
+    def __init__(self, window_lines: int = 10, flip_threshold: int = 2):
+        self.window: collections.deque = collections.deque(maxlen=window_lines)
+        self.window_lines = window_lines
+        self.flip_threshold = flip_threshold
+        self.alerts: list[dict] = []
+
+    def observe(self, section, line_no, raw_line: str,
+                form_type: str, page: int) -> None:
+        self.window.append(section)
+        if len(self.window) < self.window_lines:
+            return
+        window_list = list(self.window)
+        # Count runs of consecutive same-section lines and distinct sections.
+        # Revisits = runs - distinct. A revisit means a section re-appeared
+        # after leaving the "current run." This is structurally robust to
+        # both per-line oscillation (A-B-A-B) and run-based oscillation
+        # (AAA-BBB-AAA-BBB), unlike pure reversion counting.
+        # Form 1040-style sequential progression (A-B-C-D-...) produces
+        # runs == distinct, so revisits = 0 and the detector stays quiet.
+        runs = 1
+        for i in range(1, len(window_list)):
+            if window_list[i] != window_list[i - 1]:
+                runs += 1
+        distinct = len(set(window_list))
+        revisits = runs - distinct
+        if revisits >= self.flip_threshold:
+            self.alerts.append({
+                "form": form_type,
+                "page": page,
+                "window": window_list,
+                "raw_line": raw_line,
+                "revisit_count": revisits,
+            })
+
+    def emit(self, logger) -> None:
+        if self.alerts:
+            logger.warning(
+                "SECTION_FLIP_DETECTOR: %d suspicious windows",
+                len(self.alerts),
+                extra={"alerts": self.alerts[:20]},
+            )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -505,6 +571,7 @@ def form_aware_chunk(
     current_part: str | None = None
     current_section: str = "Unclassified"
     in_voucher_sequence: bool = False
+    flip_detector = _SectionFlipDetector()
 
     # Accumulator for the current chunk
     chunk_buf: list[str] = []
@@ -691,6 +758,14 @@ def form_aware_chunk(
                 chunk_page = page_num
                 _snapshot_state()
 
+            flip_detector.observe(
+                section=current_section,
+                line_no=line_num,
+                raw_line=line,
+                form_type=current_form,
+                page=page_num,
+            )
+
             # --- Accumulate line ---
             line_len = len(line) + 1  # +1 for newline
 
@@ -734,6 +809,8 @@ def form_aware_chunk(
 
     # Flush remaining content
     _flush()
+
+    flip_detector.emit(logger)
 
     # Warn about Unknown form chunks
     unknown_count = sum(1 for r in results if r["metadata"]["form"] == "Unknown")
