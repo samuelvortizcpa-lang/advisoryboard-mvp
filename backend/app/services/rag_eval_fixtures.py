@@ -148,10 +148,11 @@ MICHAEL_TJAHJADI_2024: list[GroundTruthItem] = [
         "expected_citations": [
             {"form": "Form 5329", "line": "18", "page": 21},
             {"form": "Form 5329", "line": "24", "page": 21},
+            {"form": "Schedule 2", "line": "24", "page": 7},
         ],
         "category": "exact_term_match",
         "difficulty": "hard",
-        "notes": "Form 5329 — excess contribution, requires understanding of penalty form",
+        "notes": "Form 5329 — excess contribution. LLM may also cite Schedule 2 Line 24 (the flow-through to 1040); accepted as alternative.",
     },
 ]
 
