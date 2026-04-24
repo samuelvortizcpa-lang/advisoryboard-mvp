@@ -246,10 +246,7 @@ yarn-error.log*
 *.db
 
 # ─── Setup / Utility Scripts ──────────────────
-setup.sh
-db_setup.sh
 frontend_setup.sh
-run_tests.sh
 
 # ─── Uploads directory (local dev file storage) ───────────
 backend/uploads/
