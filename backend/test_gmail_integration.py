@@ -35,12 +35,12 @@ import app.models  # noqa: F401
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
-# Read CLERK_SECRET_KEY from .env so we can use it as bearer token in TEST_MODE
+# Read CLERK_SECRET_KEY from .env.local so we can use it as bearer token in TEST_MODE
 def _read_env_var(name: str) -> str:
-    """Read a var from the .env file in the same directory."""
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    """Read a var from the .env.local file in the same directory."""
+    env_path = os.path.join(os.path.dirname(__file__), ".env.local")
     if not os.path.exists(env_path):
-        raise RuntimeError(f".env file not found at {env_path}")
+        raise RuntimeError(f".env.local file not found at {env_path}")
     with open(env_path) as f:
         for line in f:
             line = line.strip()

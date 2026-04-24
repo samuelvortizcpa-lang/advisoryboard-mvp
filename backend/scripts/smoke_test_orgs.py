@@ -61,7 +61,7 @@ def get_headers() -> dict[str, str]:
     if explicit:
         return {"Authorization": f"Bearer {explicit}"}
 
-    env_file = Path(__file__).parent.parent / ".env"
+    env_file = Path(__file__).parent.parent / ".env.local"
     env_vars = _parse_dotenv(env_file)
 
     test_mode = env_vars.get("TEST_MODE", "").lower() in ("1", "true", "yes")

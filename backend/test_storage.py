@@ -3,7 +3,7 @@
 import sys
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(".env.local")
 
 from app.services.storage_service import upload_file, download_file, delete_file
 

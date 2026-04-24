@@ -89,12 +89,12 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
 
     Raises HTTPException 401 on any failure.
 
-    TEST_MODE bypass: when TEST_MODE=true in .env, sending the CLERK_SECRET_KEY
+    TEST_MODE bypass: when TEST_MODE=true in .env.local, sending the CLERK_SECRET_KEY
     value as the Bearer token skips Clerk verification and returns a fixed test user.
     This makes automated tests runnable without short-lived JWTs.
 
     NOTE: get_settings() is @lru_cache'd.  If you add/change TEST_MODE or
-    CLERK_SECRET_KEY in .env while the server is running, you must restart
+    CLERK_SECRET_KEY in .env.local while the server is running, you must restart
     the server for the new values to take effect.
     """
     settings = get_settings()
