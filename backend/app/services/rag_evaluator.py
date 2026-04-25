@@ -443,9 +443,9 @@ async def run_ground_truth_evaluation(
             # Build top-5 chunk rank/page debug info
             top_chunk_ranks_and_pages = []
             for c in debug_chunks[:5]:
-                pages_in_chunk = [
-                    int(m) for m in re.findall(r"\[Page\s+(\d+)\]", c.get("chunk_text", ""))
-                ]
+                pages_in_chunk = _extract_pages_from_chunks(
+                    [c.get("chunk_text", "")]
+                )
                 top_chunk_ranks_and_pages.append({
                     "rank": c.get("rank", 0),
                     "pages_in_chunk": pages_in_chunk,
