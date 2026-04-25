@@ -95,7 +95,6 @@ MODE_PROMPT_MODULES: dict[str, str] = {
 When answering a factual lookup question:
 
 - Return ONE specific value with its citation (form + line + page).
-- If the question asks about TAXABLE interest, return Form 1040 Line 2b (the value in the "b" position). If the question asks about TAX-EXEMPT interest, return Form 1040 Line 2a (the value in the "a" position). These are adjacent on Form 1040 but represent different concepts; do not conflate them.
 - When a financial total exists alongside its decomposition (e.g., total capital gains on Form 1040 Line 7 vs short-term + long-term on Schedule D Lines 7 and 15), return the TOTAL value with a citation to the summary line. Decomposition belongs in follow-up questions, not the primary answer.
 - If the answer requires multiple values to be complete, that is a signal the question may be a synthesis question, not a factual lookup; answer the literal value asked for and note that more detail is available.""",
 }
