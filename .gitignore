@@ -255,5 +255,5 @@ backend/uploads/
 admin-dashboard/
 .gstack/
 
-# Session 11 — dev-only integration verifier, not for commit
-scripts/verify_flip_detector.py
+# Session 11 — dev-only archive (integration verifiers, one-off scripts)
+scripts/_archive/
