@@ -83,6 +83,23 @@ EMBED_BATCH = 100  # OpenAI allows up to 2 048 inputs per call
 # Not thread-safe, but fine for async single-threaded uvicorn.
 _last_search_stats: dict = {}
 
+# ---------------------------------------------------------------------------
+# Mode-specific prompt modules
+# ---------------------------------------------------------------------------
+# Each module is injected immediately before the "Context:" block in the
+# system prompt by _assemble_system_prompt(). Modules refine LLM behavior
+# for specific question types without altering the base prompt.
+
+MODE_PROMPT_MODULES: dict[str, str] = {
+    "factual": """\
+When answering a factual lookup question:
+
+- Return ONE specific value with its citation (form + line + page).
+- If the question asks about TAXABLE interest, return Form 1040 Line 2b (the value in the "b" position). If the question asks about TAX-EXEMPT interest, return Form 1040 Line 2a (the value in the "a" position). These are adjacent on Form 1040 but represent different concepts; do not conflate them.
+- When a financial total exists alongside its decomposition (e.g., total capital gains on Form 1040 Line 7 vs short-term + long-term on Schedule D Lines 7 and 15), return the TOTAL value with a citation to the summary line. Decomposition belongs in follow-up questions, not the primary answer.
+- If the answer requires multiple values to be complete, that is a signal the question may be a synthesis question, not a factual lookup; answer the literal value asked for and note that more detail is available.""",
+}
+
 DEFAULT_SYSTEM_PROMPT = """\
 You are an AI assistant for an advisory board platform used by CPA firms.
 Your role is to help CPAs quickly understand their clients' financial and business situations.
@@ -212,6 +229,30 @@ ALWAYS include the line number when citing a form. Write "Form 100S, Line 30" �
 Federal vs. state disambiguation:
 When the question asks about a federal figure, cite the federal form — not the California or other state equivalent. For example, cite "Form 1120-S, Line 21" for total deductions, not "CA Form 100S" or "Schedule F". Conversely, when the question asks about a state tax amount, cite the state form specifically.
 """
+
+
+def _assemble_system_prompt(
+    prompt_template: str, context: str, mode: str = "factual",
+) -> str:
+    """Insert mode-specific guidance before the Context block, then format.
+
+    Targets the unique 'Context:\\n{context}' placeholder marker rather
+    than the bare 'Context:' substring, to avoid replacing any incidental
+    'Context:' occurrences inside injected guidance blocks.
+    """
+    module = MODE_PROMPT_MODULES.get(mode, "")
+    if module:
+        marker = "Context:\n{context}"
+        if marker in prompt_template:
+            prompt_template = prompt_template.replace(
+                marker,
+                f"{module}\n\n{marker}",
+                1,
+            )
+        else:
+            # Defensive fallback — module prepended.
+            prompt_template = f"{module}\n\n{prompt_template}"
+    return prompt_template.format(context=context)
 
 
 # ---------------------------------------------------------------------------
@@ -1571,9 +1612,9 @@ async def answer_question(
         patched_template = db_client.client_type.system_prompt.replace(
             "Context:\n{context}", _TAX_YEAR_GUIDANCE + "\nContext:\n{context}"
         )
-        system_prompt = patched_template.format(context=context)
+        system_prompt = _assemble_system_prompt(patched_template, context)
     else:
-        system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
+        system_prompt = _assemble_system_prompt(DEFAULT_SYSTEM_PROMPT, context)
 
     if db_client and db_client.custom_instructions:
         system_prompt += (
@@ -1995,9 +2036,9 @@ async def answer_question_stream(
         patched_template = db_client.client_type.system_prompt.replace(
             "Context:\n{context}", _TAX_YEAR_GUIDANCE + "\nContext:\n{context}"
         )
-        system_prompt = patched_template.format(context=context)
+        system_prompt = _assemble_system_prompt(patched_template, context)
     else:
-        system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
+        system_prompt = _assemble_system_prompt(DEFAULT_SYSTEM_PROMPT, context)
 
     if db_client and db_client.custom_instructions:
         system_prompt += f"\n\nAdditional instructions for this specific client:\n{db_client.custom_instructions}"
