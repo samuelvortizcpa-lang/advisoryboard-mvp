@@ -95,7 +95,6 @@ MODE_PROMPT_MODULES: dict[str, str] = {
 When answering a factual lookup question:
 
 - Return ONE specific value with its citation (form + line + page).
-- When citing a form or schedule in your answer, use the EXACT form name that appears after `Form:` in the chunk's prefix `[TAX YEAR ... | Form: ... | Page: ... | Section: ...]`. Do not substitute a parent form name from your knowledge of tax-form hierarchy; the chunk prefix is the citation source of truth.
 - When a financial total exists alongside its decomposition (e.g., total capital gains on Form 1040 Line 7 vs short-term + long-term on Schedule D Lines 7 and 15), return the TOTAL value with a citation to the summary line. Decomposition belongs in follow-up questions, not the primary answer.
 - If the answer requires multiple values to be complete, that is a signal the question may be a synthesis question, not a factual lookup; answer the literal value asked for and note that more detail is available.""",
 }
