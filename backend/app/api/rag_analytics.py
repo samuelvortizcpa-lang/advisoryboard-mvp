@@ -111,6 +111,9 @@ async def get_eval_detail(
             ),
             "retrieval_hit": q.get("retrieval_hit", False),
             "response_hit": q.get("response_hit", False),
+            "citation_hit": q.get("citation_hit"),
+            "extracted_citations": q.get("extracted_citations"),
+            "expected_citations": q.get("expected_citations"),
             "latency_ms": q.get("latency_ms"),
         }
         for q in per_question_raw
@@ -274,6 +277,9 @@ async def run_eval(
             "response_snippet": q.get("response_snippet", ""),
             "retrieval_hit": q.get("retrieval_hit", False),
             "response_hit": q.get("response_hit", False),
+            "citation_hit": q.get("citation_hit"),
+            "extracted_citations": q.get("extracted_citations"),
+            "expected_citations": q.get("expected_citations"),
             "latency_ms": q.get("latency_ms"),
         }
         for q in per_question_raw
