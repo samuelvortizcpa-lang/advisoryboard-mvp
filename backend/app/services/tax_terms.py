@@ -193,6 +193,42 @@ TERM_EXPANSIONS: dict[str, dict] = {
         "expansions": ["schedule k-1", "k-1", "partnership", "s corporation"],
         "forms": ["k-1", "schedule k-1"],
     },
+
+    # ── Form 1120-S (S-corp) — Session 16 Q1/Q7/Q8 retrieval fix ──
+    "ordinary business income": {
+        "expansions": [
+            "form 1120-s line 21",
+            "schedule k line 1",
+            "s corporation income",
+        ],
+        "forms": ["1120-s", "schedule k"],
+    },
+    "1120-s": {
+        "expansions": ["s corporation", "form 1120-s", "schedule k"],
+        "forms": ["1120-s", "schedule k"],
+    },
+    "shareholder distribution": {
+        "expansions": [
+            "schedule k line 16d",
+            "schedule m-2 line 7",
+            "accumulated adjustments account",
+        ],
+        "forms": ["schedule k", "schedule m-2"],
+    },
+
+    # ── California S-corp (Form 100S) ──
+    "state tax": {
+        "expansions": [
+            "form 100s",
+            "franchise tax",
+            "form 100s line 30",
+        ],
+        "forms": ["100s", "form 100s"],
+    },
+    "franchise tax": {
+        "expansions": ["form 100s", "form 100s line 30", "state tax"],
+        "forms": ["100s", "form 100s"],
+    },
 }
 
 
