@@ -463,13 +463,19 @@ def _resolve_page_form(
     Precedence:
       1. Scan the first 5 non-blank lines for a real form header.
          If found, return it.
-      2. If no header, run content-based inference (currently Form 1040
-         only). If matched, return ("Form 1040", None).
-      3. Otherwise return None — caller keeps state from previous page.
+      2. If no header in the first 5 lines, run content-based inference
+         (currently Form 1040 only). If matched, return ("Form 1040", None).
+      3. If neither succeeded, scan the entire page line-by-line for a
+         real form header. This catches forms whose header text falls
+         past the first 5 non-blank lines (e.g., when the page opens
+         with signature-block continuation from a prior form).
+      4. Otherwise return None — caller keeps state from previous page.
 
     Returns (form, parent_form) or None.
     """
     lines = page_text.split("\n")
+
+    # Tier 1: first 5 non-blank lines
     nonblank_seen = 0
     for line in lines:
         if not line.strip():
@@ -481,8 +487,20 @@ def _resolve_page_form(
         if header:
             return header
 
+    # Tier 2: Form 1040 content inference
     if _infer_form_1040_from_content(page_text):
         return ("Form 1040", None)
+
+    # Tier 3 (Layer 3): full-page line-by-line scan as last resort.
+    # Catches form headers that fall past the first 5 non-blank lines
+    # (e.g., page 16 of Tracy's 1120-S where the form header sits below
+    # 8879-CORP signature-block continuation from the preceding page).
+    for line in lines:
+        if not line.strip():
+            continue
+        header = _detect_form_header(line)
+        if header:
+            return header
 
     return None
 
