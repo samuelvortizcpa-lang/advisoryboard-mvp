@@ -43,7 +43,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Generalized to accept any 3-5 digit parent form, not just 1040 variants.
     (
         re.compile(
-            r"^\s*Schedule\s+([A-Z0-9]{1,4}(?:-[A-Z0-9]+)?)\s*\(Form\s+(\d{3,5}(?:-[A-Z]{1,3})?)\)",
+            r"^\s*Schedule\s+([A-Z0-9]{1,4}(?:-[A-Z0-9]+)?)\s*\(Form\s*(\d{3,5}(?:-[A-Z]{1,3})?)\)",
             re.MULTILINE | re.IGNORECASE,
         ),
         None,  # dynamic — built from match groups
@@ -59,7 +59,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Form 1040-ES (voucher — handled separately but detected here)
     (
         re.compile(
-            r"^\s*Form\s+1040-ES\b",
+            r"^\s*Form\s*1040-ES\b",
             re.MULTILINE | re.IGNORECASE,
         ),
         "Form 1040-ES",
@@ -67,7 +67,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Form 1040 variants: 1040, 1040-SR, 1040-X, 1040-NR
     (
         re.compile(
-            r"^\s*Form\s+(1040(?:-[A-Z]{1,3})?)\b",
+            r"^\s*Form\s*(1040(?:-[A-Z]{1,3})?)\b",
             re.MULTILINE | re.IGNORECASE,
         ),
         None,
@@ -80,7 +80,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Generic federal forms: Form NNNN or Form NNNN-X (3-5 digits)
     (
         re.compile(
-            r"^\s*Form\s+(\d{3,5}(?:-[A-Z0-9]+)?)\b",
+            r"^\s*Form\s*(\d{3,5}(?:-[A-Z0-9]+)?)\b",
             re.MULTILINE | re.IGNORECASE,
         ),
         None,
@@ -233,12 +233,32 @@ def _looks_like_header_tail(tail: str) -> bool:
     with a real form header line, False if it looks like a cross-reference.
 
     Empty or whitespace-only tail → accepted (form name alone on a line).
+
+    Rejection rules:
+      - Tail starts with lowercase letter (cross-reference like
+        "Form 8283 to be attached").
+      - Tail starts with "lines" / "line" (line-range reference).
+      - Tail starts with a comma followed by lowercase (sentence
+        continuation like ", see instructions").
+
+    Acceptance:
+      - Comma followed by uppercase IS accepted, because real form
+        titles often continue past a comma with a state or descriptor
+        capitalized (e.g., "Form 100S, California S Corporation
+        Franchise or Income Tax Return").
     """
     tail = tail.strip()
     if not tail:
         return True
-    # Explicit reject: starts with lowercase, comma, or "line(s)"
-    if re.match(r"^[a-z,]", tail) or re.match(r"^lines?\b", tail, re.IGNORECASE):
+    # Reject lowercase start (cross-reference)
+    if re.match(r"^[a-z]", tail):
+        return False
+    # Reject "line(s)" prefix
+    if re.match(r"^lines?\b", tail, re.IGNORECASE):
+        return False
+    # Reject comma + lowercase (sentence continuation), but allow
+    # comma + uppercase (form-title continuation).
+    if re.match(r"^,\s*[a-z]", tail):
         return False
     return True
 
