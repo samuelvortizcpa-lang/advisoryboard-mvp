@@ -96,6 +96,9 @@ _STATE_FORM_PREFIXES = [
     "CA-540", "CA-540NR",
     "NY-IT", "NY-IT-201",
     "540", "540NR",
+    # Layer 1 (Thread 2): CA corporate forms — Form 100 family
+    # Form 100 (C-corp) deliberately excluded — false-positive surface on bare "100"
+    "100S", "100W", "100X", "100-ES",
 ]
 _STATE_FORM_RE = re.compile(
     r"^\s*(?:Form\s+)?(" + "|".join(re.escape(p) for p in _STATE_FORM_PREFIXES) +
