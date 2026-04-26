@@ -182,8 +182,10 @@ class BatchExtractor:
         )
     """
 
-    # Default poll timeout in seconds (10 min per design §3.6)
-    DEFAULT_POLL_TIMEOUT = 600
+    # Default poll timeout in seconds — Session 15 recovery raised from 600 (design §3.6)
+    # to 1800 (30 min) to accommodate 60+ page PDFs. Design doc §3.6 is now stale; needs
+    # reconciliation in a future architecture-pass session.
+    DEFAULT_POLL_TIMEOUT = 1800
 
     def __init__(
         self,
