@@ -15,7 +15,9 @@ Session 19 = real Anthropic integration.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -120,6 +122,46 @@ INTERPRETATION_TOOL = {
 }
 
 
+# ── Per-worker LRU cache (§3.7) ───────────────────────────────────────
+#
+# Cache key versions on PROMPT_VERSION + MODEL_ID, so any prompt or
+# model change automatically invalidates without explicit flush.
+# Negative caching: None values are stored explicitly (cache hit on a
+# known-failed question short-circuits the LLM call).
+
+_CACHE_MAXSIZE = 1024
+_cache: OrderedDict[str, InterpretationResult | None] = OrderedDict()
+_CACHE_MISS = object()  # sentinel — distinguishes "not present" from "present-with-None"
+
+
+def _cache_key(question: str) -> str:
+    """SHA256 over normalized question + prompt version + model id."""
+    normalized = question.lower().strip()
+    material = f"{normalized}|{PROMPT_VERSION}|{MODEL_ID}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
+
+
+def _cache_get(key: str):
+    """Return cached value (which may be None) or _CACHE_MISS sentinel."""
+    if key in _cache:
+        _cache.move_to_end(key)
+        return _cache[key]
+    return _CACHE_MISS
+
+
+def _cache_set(key: str, value: InterpretationResult | None) -> None:
+    if key in _cache:
+        _cache.move_to_end(key)
+    _cache[key] = value
+    if len(_cache) > _CACHE_MAXSIZE:
+        _cache.popitem(last=False)
+
+
+def _cache_clear() -> None:
+    """Test/debug helper. Not called in production code paths."""
+    _cache.clear()
+
+
 # ── Lazy client singleton ─────────────────────────────────────────────
 
 _client: AsyncAnthropic | None = None
@@ -181,11 +223,18 @@ async def interpret_query_llm(
         return None
 
     # 2. Client init — returns None if ANTHROPIC_API_KEY is unset.
+    #    No cache write here: don't cache config failures.
     client = _get_client()
     if client is None:
         return None
 
-    # 3. Real Haiku call with dual timeout (SDK soft + asyncio hard).
+    # 3. Cache check — after flag gate and client check, before LLM call.
+    cache_key = _cache_key(question)
+    cached = _cache_get(cache_key)
+    if cached is not _CACHE_MISS:
+        return cached  # may be InterpretationResult or None (negative cache)
+
+    # 4. Real Haiku call with dual timeout (SDK soft + asyncio hard).
     try:
         response = await asyncio.wait_for(
             client.messages.create(
@@ -205,13 +254,15 @@ async def interpret_query_llm(
             anthropic.APITimeoutError,
             anthropic.AuthenticationError,
             anthropic.APIError):
+        _cache_set(cache_key, None)
         return None
     except Exception:
         # Defensive — never crash the retrieval pipeline. Phase E
         # will add Sentry capture here.
+        _cache_set(cache_key, None)
         return None
 
-    # 4. Extract tool-use block.
+    # 5. Extract tool-use block.
     tool_block = next(
         (b for b in response.content
          if getattr(b, "type", None) == "tool_use"
@@ -219,19 +270,22 @@ async def interpret_query_llm(
         None,
     )
     if tool_block is None:
+        _cache_set(cache_key, None)
         return None
     payload = tool_block.input
 
-    # 5. Schema validation.
+    # 6. Schema validation.
     if not _validate_payload(payload):
+        _cache_set(cache_key, None)
         return None
 
-    # 6. Confidence threshold.
+    # 7. Confidence threshold.
     if payload["confidence"] < CONFIDENCE_THRESHOLD:
+        _cache_set(cache_key, None)
         return None
 
-    # 7. Build and return.
-    return InterpretationResult(
+    # 8. Build, cache, and return.
+    result = InterpretationResult(
         forms=payload["forms"],
         line_numbers=payload["line_numbers"],
         keywords=payload["keywords"],
@@ -240,3 +294,5 @@ async def interpret_query_llm(
         reasoning=payload["reasoning"],
         schema_version="v1",
     )
+    _cache_set(cache_key, result)
+    return result
