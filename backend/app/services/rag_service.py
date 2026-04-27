@@ -52,6 +52,7 @@ from app.services.context_assembler import (
     assemble_context,
     format_context_for_prompt,
 )
+from app.services.query_interpreter import interpret_query_llm
 from app.services.query_router import classify_query, route_completion, route_completion_stream
 from app.services.tax_terms import expand_query as expand_financial_terms
 from app.services.hybrid_search import reciprocal_rank_fusion
@@ -923,7 +924,15 @@ async def search_chunks(
     _search_start = _time.monotonic()
 
     # --- Financial term expansion ---
-    expansion_terms, relevant_forms = expand_financial_terms(query)
+    # Option B (Session 18): query interpreter runs alongside the
+    # static dictionary. Stub returns None today; Session 19 swaps
+    # in the real Anthropic call behind a feature flag. None →
+    # dict-only behavior (byte-identical to pre-Session-18). See
+    # design doc §3.4.
+    interpretation = await interpret_query_llm(query)
+    expansion_terms, relevant_forms = expand_financial_terms(
+        query, interpretation=interpretation
+    )
     if expansion_terms:
         logger.info(
             "Term expansion: %s → expansions=%s, forms=%s",
