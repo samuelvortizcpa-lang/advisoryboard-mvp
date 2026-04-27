@@ -16,13 +16,18 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
+import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Literal
 
 import anthropic
+import sentry_sdk
 from anthropic import AsyncAnthropic
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -203,6 +208,77 @@ def _validate_payload(payload: dict) -> bool:
     return True
 
 
+# ── One-time Sentry alerts (deduped per process) ─────────────────────
+
+_missing_key_alerted = False
+_auth_failure_alerted = False
+
+
+def _alert_missing_api_key() -> None:
+    global _missing_key_alerted
+    if _missing_key_alerted:
+        return
+    _missing_key_alerted = True
+    sentry_sdk.capture_message(
+        "ANTHROPIC_API_KEY missing; query interpretation disabled",
+        level="error",
+    )
+
+
+def _alert_auth_failure() -> None:
+    global _auth_failure_alerted
+    if _auth_failure_alerted:
+        return
+    _auth_failure_alerted = True
+    sentry_sdk.capture_message(
+        "Anthropic auth failure on query interpretation",
+        level="error",
+    )
+
+
+def _alert_schema_failure(payload: object) -> None:
+    with sentry_sdk.push_scope() as scope:
+        scope.set_extra("payload_repr", repr(payload)[:500])
+        sentry_sdk.capture_message(
+            "Query interpretation schema validation failed",
+            level="error",
+        )
+
+
+# ── Per-call structured log ──────────────────────────────────────────
+
+
+def _emit_log(
+    *,
+    question_hash: str,
+    latency_ms: int,
+    success: bool,
+    fallback_triggered: bool,
+    confidence: float | None,
+    intent: str | None,
+    forms_count: int | None,
+    keywords_count: int | None,
+    from_cache: bool,
+) -> None:
+    logger.info(
+        "query_interpretation",
+        extra={
+            "event": "query_interpretation",
+            "question_hash": f"sha256:{question_hash[:16]}...",
+            "model": MODEL_ID,
+            "prompt_version": PROMPT_VERSION,
+            "latency_ms": latency_ms,
+            "success": success,
+            "fallback_triggered": fallback_triggered,
+            "confidence": confidence,
+            "intent": intent,
+            "forms_count": forms_count,
+            "keywords_count": keywords_count,
+            "from_cache": from_cache,
+        },
+    )
+
+
 # ── Main entry point ──────────────────────────────────────────────────
 
 
@@ -223,15 +299,28 @@ async def interpret_query_llm(
         return None
 
     # 2. Client init — returns None if ANTHROPIC_API_KEY is unset.
-    #    No cache write here: don't cache config failures.
+    #    No cache write, no per-call log. One-time Sentry alert only.
     client = _get_client()
     if client is None:
+        _alert_missing_api_key()
         return None
 
     # 3. Cache check — after flag gate and client check, before LLM call.
     cache_key = _cache_key(question)
+    t0 = time.perf_counter()
     cached = _cache_get(cache_key)
     if cached is not _CACHE_MISS:
+        _emit_log(
+            question_hash=cache_key,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            success=cached is not None,
+            fallback_triggered=cached is None,
+            confidence=cached.confidence if cached is not None else None,
+            intent=cached.intent if cached is not None else None,
+            forms_count=len(cached.forms) if cached is not None else None,
+            keywords_count=len(cached.keywords) if cached is not None else None,
+            from_cache=True,
+        )
         return cached  # may be InterpretationResult or None (negative cache)
 
     # 4. Real Haiku call with dual timeout (SDK soft + asyncio hard).
@@ -250,16 +339,39 @@ async def interpret_query_llm(
             ),
             timeout=HARD_TIMEOUT_S,
         )
+    except anthropic.AuthenticationError:
+        _alert_auth_failure()
+        _cache_set(cache_key, None)
+        _emit_log(
+            question_hash=cache_key,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            success=False, fallback_triggered=True,
+            confidence=None, intent=None,
+            forms_count=None, keywords_count=None, from_cache=False,
+        )
+        return None
     except (asyncio.TimeoutError,
             anthropic.APITimeoutError,
-            anthropic.AuthenticationError,
             anthropic.APIError):
         _cache_set(cache_key, None)
+        _emit_log(
+            question_hash=cache_key,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            success=False, fallback_triggered=True,
+            confidence=None, intent=None,
+            forms_count=None, keywords_count=None, from_cache=False,
+        )
         return None
     except Exception:
-        # Defensive — never crash the retrieval pipeline. Phase E
-        # will add Sentry capture here.
+        sentry_sdk.capture_exception()
         _cache_set(cache_key, None)
+        _emit_log(
+            question_hash=cache_key,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            success=False, fallback_triggered=True,
+            confidence=None, intent=None,
+            forms_count=None, keywords_count=None, from_cache=False,
+        )
         return None
 
     # 5. Extract tool-use block.
@@ -271,20 +383,42 @@ async def interpret_query_llm(
     )
     if tool_block is None:
         _cache_set(cache_key, None)
+        _emit_log(
+            question_hash=cache_key,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            success=False, fallback_triggered=True,
+            confidence=None, intent=None,
+            forms_count=None, keywords_count=None, from_cache=False,
+        )
         return None
     payload = tool_block.input
 
     # 6. Schema validation.
     if not _validate_payload(payload):
+        _alert_schema_failure(payload)
         _cache_set(cache_key, None)
+        _emit_log(
+            question_hash=cache_key,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            success=False, fallback_triggered=True,
+            confidence=None, intent=None,
+            forms_count=None, keywords_count=None, from_cache=False,
+        )
         return None
 
     # 7. Confidence threshold.
     if payload["confidence"] < CONFIDENCE_THRESHOLD:
         _cache_set(cache_key, None)
+        _emit_log(
+            question_hash=cache_key,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            success=False, fallback_triggered=True,
+            confidence=payload["confidence"], intent=payload.get("intent"),
+            forms_count=None, keywords_count=None, from_cache=False,
+        )
         return None
 
-    # 8. Build, cache, and return.
+    # 8. Build, cache, log, and return.
     result = InterpretationResult(
         forms=payload["forms"],
         line_numbers=payload["line_numbers"],
@@ -295,4 +429,12 @@ async def interpret_query_llm(
         schema_version="v1",
     )
     _cache_set(cache_key, result)
+    _emit_log(
+        question_hash=cache_key,
+        latency_ms=int((time.perf_counter() - t0) * 1000),
+        success=True, fallback_triggered=False,
+        confidence=result.confidence, intent=result.intent,
+        forms_count=len(result.forms), keywords_count=len(result.keywords),
+        from_cache=False,
+    )
     return result
