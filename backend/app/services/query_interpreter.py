@@ -65,8 +65,12 @@ class InterpretationResult:
 MODEL_ID = "claude-haiku-4-5-20251001"
 PROMPT_VERSION = "v1"
 CONFIDENCE_THRESHOLD = 0.5
-SOFT_TIMEOUT_S = 1.5
-HARD_TIMEOUT_S = 2.0
+# Session 20 Phase 1 probe (N=10, real Haiku 4.5, production prompt+tool):
+# p50≈2.3s, max≈4.6s, retry rate 0%. SOFT is the SDK httpx timeout per
+# request; HARD is the asyncio.wait_for backstop. Both must exceed the
+# observed distribution. Ref: session-summary-april-27-2026-session-20.
+SOFT_TIMEOUT_S = 5.5
+HARD_TIMEOUT_S = 6.0
 TOOL_NAME = "record_interpretation"
 
 SYSTEM_PROMPT = """\
