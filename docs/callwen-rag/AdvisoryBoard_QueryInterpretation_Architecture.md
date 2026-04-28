@@ -215,14 +215,111 @@ flag-on p95 ≤ flag-off p95 + 1s (delta).
 
 ### §5.4 — Phrasing-variance fixture
 
-**Promoted post-Session-20 to Session 21+ priority.** Phase 4
-demonstrated v1 ships clean (no regressions, full eval criteria
-met within reinterpreted latency bound), but did not move Tracy's
-failing fixtures because the dictionary post-Session-16 already
-covers the canonical forms for those questions. Testing Option B's
-actual hypothesis ("LLM handles phrasing the dictionary can't")
-requires this fixture. Build before further interpreter prompt
-iteration to avoid optimizing the prompt against the wrong target.
+This fixture stress-tests Option B's hypothesis: that LLM
+interpretation handles phrasing the dictionary cannot. Where §5.1
+measures whether the interpreter regresses on canonical phrasings
+(it does not, per Sessions 20–21), §5.4 measures whether
+interpretation adds retrieval value the substring-match dictionary
+cannot.
+
+#### 5.4.1 Typology
+
+Three rewording categories, each chosen to defeat substring match
+in a structurally distinct way:
+
+| Cat | Name | Tests |
+|---|---|---|
+| A | Synonym substitution | Semantic equivalence mapping |
+| B | Lay/colloquial phrasing | Intent extraction from informal language (the load-bearing test of Option B's hypothesis) |
+| C | Structural reframe | Multi-clause / indirect reference resolution |
+
+Two candidate categories — abbreviation/expansion and
+circumlocution — were dropped during design. The first is partly
+solvable with string normalization and produces contrived
+phrasings ("eleven-twenty-S") that don't reflect natural CPA or
+client speech. The second overlaps heavily with B without adding
+distinct signal.
+
+#### 5.4.2 Corpus
+
+20 base questions (10 Tracy, 10 Michael) × 3 rewordings (one per
+category) = 60 phrasing-variant questions. Each rewording inherits
+the original's `expected_page`, `expected_pages`,
+`expected_answer_contains`, and `expected_citations` — Phase 3a
+manual review confirmed each rewording asks the *same* question of
+the *same* document location, just phrased to defeat substring
+match.
+
+Lives in `backend/app/services/rag_eval_fixtures.py` as
+`TRACY_CHEN_DO_INC_2024_PHRASING` and
+`MICHAEL_TJAHJADI_2024_PHRASING`, registered in the
+`CLIENT_PHRASING_VARIANCE` dict. Fetched via
+`get_phrasing_variance(client_id)`. Selected at eval time via
+the `fixture` request-body parameter on
+`POST /api/admin/rag-analytics/run-eval`.
+
+#### 5.4.3 Methodology
+
+Same A/B comparison shape as §5.3:
+
+1. Run flag-off, 3 runs (matches §5.1 run-count discipline)
+2. Run flag-on, 3 runs
+3. Compare per-category and per-client aggregates
+
+**Per-client aggregate is the load-bearing decision metric.** With
+30 reworded questions × 3 runs = 90 data points per client per
+flag state, statistically robust enough for ≥0.05 deltas to be
+meaningful.
+
+**Per-category aggregate is diagnostic, not a ship gate.** With ~30
+data points per category per client per flag state, a 0.10 delta is
+two question flips — edge-of-noise. Per-category results inform
+*where* the interpreter helps and where it doesn't, but go/no-go
+rests on per-client.
+
+**Per-rewording results exist for debuggability** but should not
+drive decisions on individual rewordings. A single failing
+rewording is a hypothesis about a phrasing class, not a finding.
+
+#### 5.4.4 Pass criteria
+
+| Criterion | Threshold | Rationale |
+|---|---|---|
+| Flag-on per-client retrieval ≥ flag-off per-client retrieval | No regression | Same as §5.1 |
+| Flag-on per-client retrieval > flag-off per-client retrieval (any client) | Hypothesis confirmed — interpreter adds value the dictionary doesn't | Direct test of Option B hypothesis |
+| Unexpected failure rate < 1% | Per §4.3 named rate | Same as §4.3 |
+| Latency p95 ≤ +1s vs §5.1 baseline | — | Mid-client-call latency budget |
+
+Pass on criterion 1 alone: keep flag on; interpretation does no
+harm at the §5.4 phrasing-variance ceiling. Pass on criteria 1 + 2:
+hypothesis confirmed; interpretation provides measurable lift on
+non-canonical phrasings. Fail on criterion 1: flip flag off and
+diagnose; the interpreter is regressing relative to dictionary on
+phrasings the dictionary doesn't cover, which would be surprising
+and worth investigation.
+
+#### 5.4.5 Mode 2/3/4 connection
+
+Per §1.3, the interpreter is Mode 2 substrate. The `intent` field
+on `InterpretationResult` is logged per-rewording (added Phase 3b)
+specifically so this campaign produces evidence about the
+interpreter's intent-classification stability under phrasing
+variance — directly relevant to the future Mode 2 router
+accuracy metric (per `AdvisoryBoard_North_Star_Integration_Architecture.md` §1).
+
+This fixture is the **Mode 1** phrasing-variance fixture. Mode 2,
+3, and 4 each get their own when those modes ship, per North Star
+anti-pattern: "Don't ship Mode 2/3/4 features without per-mode
+evals." The A/B/C typology likely transfers; ground truth and
+category boundaries do not (e.g., Mode 2 enumeration fixtures need
+a `complete_set` ground-truth shape that doesn't apply to factual
+lookup).
+
+#### 5.4.6 Results
+
+To be filled in Phase 6 (campaign close) after flag-off and
+flag-on runs complete. This section is currently scoped to
+methodology only.
 
 ## §6 — Observability
 

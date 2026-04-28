@@ -12,6 +12,7 @@ class ExtraFieldFormatter(logging.Formatter):
     EXTRA_FIELDS = [
         "success", "from_cache", "confidence", "latency_ms",
         "fallback_triggered", "forms_count", "forms", "question_hash",
+        "intent",
     ]
 
     def format(self, record):

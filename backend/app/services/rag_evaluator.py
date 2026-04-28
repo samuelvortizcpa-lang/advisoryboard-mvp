@@ -366,6 +366,8 @@ async def run_evaluation(
 async def run_ground_truth_evaluation(
     client_id: str | UUID,
     db: Session,
+    *,
+    fixtures: list | None = None,
 ) -> dict[str, Any]:
     """
     Run per-client ground-truth questions through the live RAG pipeline.
@@ -380,12 +382,15 @@ async def run_ground_truth_evaluation(
     (same top-level keys) plus a per_question debugging array.
     """
     from app.services import rag_service
-    from app.services.rag_eval_fixtures import get_ground_truth
 
     client_id_str = str(client_id)
     client_id_uuid = UUID(client_id_str)
 
-    ground_truth = get_ground_truth(client_id_str)
+    if fixtures is not None:
+        ground_truth = fixtures
+    else:
+        from app.services.rag_eval_fixtures import get_ground_truth
+        ground_truth = get_ground_truth(client_id_str)
     if ground_truth is None:
         raise ValueError(
             f"No ground-truth test set defined for client {client_id_str}"

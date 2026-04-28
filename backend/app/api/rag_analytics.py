@@ -231,6 +231,7 @@ async def eval_summary(
 
 class RunEvalRequest(BaseModel):
     client_id: str
+    fixture: str = "ground_truth"
 
 
 @router.post(
@@ -242,20 +243,34 @@ async def run_eval(
     _admin: None = Depends(verify_admin_access),
     db: Session = Depends(get_db),
 ) -> dict:
-    from app.services.rag_eval_fixtures import get_ground_truth
+    from app.services.rag_eval_fixtures import get_ground_truth, get_phrasing_variance
     from app.services.rag_evaluator import run_ground_truth_evaluation
 
-    client_id = UUID(body.client_id)
+    FIXTURE_LOADERS = {
+        "ground_truth": get_ground_truth,
+        "phrasing_variance": get_phrasing_variance,
+    }
 
-    if get_ground_truth(body.client_id) is None:
+    loader = FIXTURE_LOADERS.get(body.fixture)
+    if loader is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown fixture '{body.fixture}'. Valid: {', '.join(sorted(FIXTURE_LOADERS))}",
+        )
+
+    fixtures = loader(body.client_id)
+    if fixtures is None:
         raise HTTPException(
             status_code=404,
-            detail=f"No ground-truth test set defined for client {body.client_id}",
+            detail=f"No {body.fixture} test set defined for client {body.client_id}",
         )
+
+    client_id = UUID(body.client_id)
 
     results = await run_ground_truth_evaluation(
         client_id=body.client_id,
         db=db,
+        fixtures=fixtures,
     )
 
     # Persist
