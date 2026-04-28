@@ -261,6 +261,7 @@ def _emit_log(
     confidence: float | None,
     intent: str | None,
     forms_count: int | None,
+    forms: list | None,
     keywords_count: int | None,
     from_cache: bool,
 ) -> None:
@@ -277,6 +278,7 @@ def _emit_log(
             "confidence": confidence,
             "intent": intent,
             "forms_count": forms_count,
+            "forms": forms or [],
             "keywords_count": keywords_count,
             "from_cache": from_cache,
         },
@@ -322,6 +324,7 @@ async def interpret_query_llm(
             confidence=cached.confidence if cached is not None else None,
             intent=cached.intent if cached is not None else None,
             forms_count=len(cached.forms) if cached is not None else None,
+            forms=cached.forms if cached is not None else [],
             keywords_count=len(cached.keywords) if cached is not None else None,
             from_cache=True,
         )
@@ -351,7 +354,8 @@ async def interpret_query_llm(
             latency_ms=int((time.perf_counter() - t0) * 1000),
             success=False, fallback_triggered=True,
             confidence=None, intent=None,
-            forms_count=None, keywords_count=None, from_cache=False,
+            forms_count=None, forms=[],
+            keywords_count=None, from_cache=False,
         )
         return None
     except (asyncio.TimeoutError,
@@ -363,7 +367,8 @@ async def interpret_query_llm(
             latency_ms=int((time.perf_counter() - t0) * 1000),
             success=False, fallback_triggered=True,
             confidence=None, intent=None,
-            forms_count=None, keywords_count=None, from_cache=False,
+            forms_count=None, forms=[],
+            keywords_count=None, from_cache=False,
         )
         return None
     except Exception:
@@ -374,7 +379,8 @@ async def interpret_query_llm(
             latency_ms=int((time.perf_counter() - t0) * 1000),
             success=False, fallback_triggered=True,
             confidence=None, intent=None,
-            forms_count=None, keywords_count=None, from_cache=False,
+            forms_count=None, forms=[],
+            keywords_count=None, from_cache=False,
         )
         return None
 
@@ -392,7 +398,8 @@ async def interpret_query_llm(
             latency_ms=int((time.perf_counter() - t0) * 1000),
             success=False, fallback_triggered=True,
             confidence=None, intent=None,
-            forms_count=None, keywords_count=None, from_cache=False,
+            forms_count=None, forms=[],
+            keywords_count=None, from_cache=False,
         )
         return None
     payload = tool_block.input
@@ -406,7 +413,8 @@ async def interpret_query_llm(
             latency_ms=int((time.perf_counter() - t0) * 1000),
             success=False, fallback_triggered=True,
             confidence=None, intent=None,
-            forms_count=None, keywords_count=None, from_cache=False,
+            forms_count=None, forms=[],
+            keywords_count=None, from_cache=False,
         )
         return None
 
@@ -418,7 +426,8 @@ async def interpret_query_llm(
             latency_ms=int((time.perf_counter() - t0) * 1000),
             success=False, fallback_triggered=True,
             confidence=payload["confidence"], intent=payload.get("intent"),
-            forms_count=None, keywords_count=None, from_cache=False,
+            forms_count=None, forms=[],
+            keywords_count=None, from_cache=False,
         )
         return None
 
@@ -438,7 +447,8 @@ async def interpret_query_llm(
         latency_ms=int((time.perf_counter() - t0) * 1000),
         success=True, fallback_triggered=False,
         confidence=result.confidence, intent=result.intent,
-        forms_count=len(result.forms), keywords_count=len(result.keywords),
+        forms_count=len(result.forms), forms=result.forms,
+        keywords_count=len(result.keywords),
         from_cache=False,
     )
     return result
