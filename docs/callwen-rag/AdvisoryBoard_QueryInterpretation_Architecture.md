@@ -317,9 +317,161 @@ lookup).
 
 #### 5.4.6 Results
 
-To be filled in Phase 6 (campaign close) after flag-off and
-flag-on runs complete. This section is currently scoped to
-methodology only.
+Run on April 28, 2026 (Session 22). 6 runs total: 3 flag-off
+(Phase 4) and 3 flag-on (Phase 5), against the same 60-rewording
+fixture (Tracy + Michael, 30 each).
+
+##### Per-client aggregate (load-bearing decision metric)
+
+| Client | Metric | Flag OFF (mean of 3 runs) | Flag ON (mean of 3 runs) | Δ |
+|---|---|---|---|---|
+| Tracy | retrieval | 0.600 | 0.600 | 0.000 |
+| Tracy | response | 0.533 | 0.533 | 0.000 |
+| Tracy | citation | 0.178 | 0.189 | +0.011 |
+| Michael | retrieval | 0.867 | 0.867 | 0.000 |
+| Michael | response | 0.733 | 0.744 | +0.011 |
+| Michael | citation | 0.711 | 0.700 | −0.011 |
+
+##### Per-category aggregate (diagnostic)
+
+Tracy:
+
+| Category | Metric | OFF | ON | Δ |
+|---|---|---|---|---|
+| A — synonym | retrieval | 0.600 | 0.600 | 0.000 |
+| A — synonym | response | 0.700 | 0.700 | 0.000 |
+| A — synonym | citation | 0.233 | 0.200 | −0.033 |
+| B — colloquial | retrieval | 0.500 | 0.500 | 0.000 |
+| B — colloquial | response | 0.300 | 0.300 | 0.000 |
+| B — colloquial | citation | 0.200 | 0.267 | +0.067 |
+| C — structural | retrieval | 0.700 | 0.700 | 0.000 |
+| C — structural | response | 0.600 | 0.600 | 0.000 |
+| C — structural | citation | 0.100 | 0.100 | 0.000 |
+
+Michael:
+
+| Category | Metric | OFF | ON | Δ |
+|---|---|---|---|---|
+| A — synonym | retrieval | 0.900 | 0.900 | 0.000 |
+| A — synonym | response | 0.900 | 0.900 | 0.000 |
+| A — synonym | citation | 0.767 | 0.700 | −0.067 |
+| B — colloquial | retrieval | 0.900 | 0.900 | 0.000 |
+| B — colloquial | response | 0.767 | 0.733 | −0.033 |
+| B — colloquial | citation | 0.867 | 0.867 | 0.000 |
+| C — structural | retrieval | 0.800 | 0.800 | 0.000 |
+| C — structural | response | 0.533 | 0.600 | +0.067 |
+| C — structural | citation | 0.500 | 0.533 | +0.033 |
+
+##### Latency
+
+| Client | OFF avg (ms) | ON avg (ms) | Δ |
+|---|---|---|---|
+| Tracy | 8254 | 7250 | −1004 |
+| Michael | 7206 | 7373 | +167 |
+
+The Tracy latency anomaly (flag-on faster than flag-off) is
+most plausibly explained by Railway/OpenAI infrastructure
+variance across the ~80-minute gap between phases. No deploy
+events between phases. Per-question p50 trends within each phase
+were stable; cross-phase comparison is bounded by external noise.
+
+##### Pass criteria evaluation (against §5.4.4)
+
+| Criterion | Threshold | Result |
+|---|---|---|
+| Flag-on per-client retrieval ≥ flag-off | No regression | **PASS** — exact parity on both clients |
+| Flag-on per-client retrieval > flag-off (any client) | Hypothesis confirmed | **NOT MET** — zero retrieval movement on either client |
+| Unexpected failure rate < 1% | Per §4.3 | **PASS** — 0/180 unexpected failures across 6 runs |
+| Latency p95 ≤ +1s vs §5.1 baseline | Mid-call budget | **PASS** — Tracy ON lower than OFF; Michael +167ms |
+
+Outcome: **do-no-harm satisfied; hypothesis not confirmed.**
+
+##### Interpretation
+
+The interpreter executes correctly in production (verified by
+intent log telemetry showing `intent=factual_lookup` dominant,
+form classifications matching expected values, ~1.5–2s
+interpretation latency on uncached calls). Its outputs are
+union-merged with dictionary outputs at retrieval time. The
+merge produces no measurable change in retrieval ranking on the
+phrasing-variance fixture — neither helping nor hurting.
+
+Two readings of this finding, both held simultaneously:
+
+1. **The dictionary path is finding what's findable.** On
+   questions where the dictionary path retrieves the right
+   chunk, the interpreter's form-boost is redundant. On
+   questions where the dictionary path fails, the failure mode
+   is upstream of form-boost — vector embedding mismatch, BM25
+   term gaps, RRF fusion behavior, or rerank decisions. No
+   amount of better query interpretation routes around those
+   failures because the chunks the interpreter would route to
+   aren't winning the rank competition.
+
+2. **The interpreter is doing real work that this fixture
+   cannot measure.** The Mode 1 phrasing-variance fixture
+   measures retrieval lift on factual-lookup questions. The
+   interpreter's intent-classification output is being captured
+   per-call but is not yet wired to anything downstream — that
+   wiring is the substance of Mode 2 enablement (North Star P2).
+   Saying "the interpreter doesn't help Mode 1" is a real
+   finding; saying "the interpreter doesn't help" generally
+   would be premature. It hasn't been measured against the
+   query modes it was designed to substrate.
+
+##### Persistent failure patterns surfaced
+
+5-question always-fail clusters (0% response across 6 runs)
+identify retrieval bottlenecks, not interpretation failures:
+
+Tracy:
+- Q2/Q3 (T1 colloquial + structural): answer LLM produces
+  wrong number on "how much profit did Tracy's company make"
+  variants. Retrieval correct (Form 1120-S Line 22 chunks
+  surface), answer LLM extracts wrong figure.
+- Q5 (T2 colloquial): "How much money came in" — vector miss
+  on gross receipts terminology
+- Q10 (T4 synonym): "sum of all business expenses claimed" —
+  vector retrieves Line 20 (interest expense) instead of
+  Line 21 (total deductions)
+- Q11 (T4 colloquial): "write off in total" — same retrieval
+  miss as Q10
+
+Michael:
+- Q16/Q17/Q18 (M6 all categories): capital gains. Known
+  Mode 1 fixture quirk (Session 16 / North Star P1). Not a
+  Session 22 concern.
+- Q21 (M7 structural): "charitable giving section" — retrieval
+  miss
+- Q23 (M8 colloquial): "How much tax did Michael's return
+  calculate" — answer LLM citation extraction failure
+
+##### Decision
+
+Flag remains ON. Rationale:
+
+- Do-no-harm criterion satisfied
+- Intent telemetry continues accruing — substrate for Mode 2
+  router accuracy measurement (per North Star Integration §1)
+- Latency cost is small and within North Star "fast enough
+  mid-client-call" budget
+- Reverse decision is one Railway click; cost of carrying ON
+  is bounded
+- The strategic value of having the interpreter in place when
+  Mode 2 work begins exceeds the absence of measured Mode 1 lift
+
+##### What this campaign did not measure
+
+- Whether interpretation helps Mode 2 (enumeration) queries —
+  fixture is Mode 1 only by design
+- Whether interpretation helps Mode 3 (synthesis) queries —
+  same
+- Whether intent classification is stable enough to drive
+  router decisions at production scale — telemetry is
+  accruing; analysis deferred to Mode 2 enablement work
+- Whether the retrieval bottleneck on Tracy's S-corp surface
+  area can be moved by RRF tuning, vector embedding upgrades,
+  or BM25 term expansion — separate work, not interpreter-side
 
 ## §6 — Observability
 
