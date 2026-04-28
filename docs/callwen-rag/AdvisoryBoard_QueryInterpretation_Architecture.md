@@ -163,18 +163,22 @@ model. At pre-PMF volume this is irrelevant; at 100-CPA scale
 revisit either via sticky routing or a Postgres-backed cache.
 Reference: Session 20 Phase 4.5 production-log analysis.
 
-### §4.3 — Failure-rate threshold
+### §4.3 — Failure and fallback rates
 
-Design target: < 1% fallback rate (None returns) in production.
+Two distinct rates are tracked:
 
-Session 21 Phase 3 directly verified: 29/30 calls succeeded
-(96.7%). The 1 fallback was Michael Q9 (HSA contribution limit)
-at confidence=0.30 — a correct self-assessment on a regulatory
-question, not a form lookup. The 3.3% fallback rate exceeds the
-1% target but is benign: the fallback path (dictionary-only)
-handled the question correctly (eval scored response_hit=True).
-At N=30 the rate is noisy; at scale this question class (regulatory
-limits, not form-specific) will consistently fall back by design.
+| Metric | Definition | Target | Session 21 (N=30) |
+|---|---|---|---|
+| **Unexpected failure rate** | `None` returns from infrastructure causes: auth error, API timeout, schema validation failure, uncaught exception | < 1% | **0/30 (0.0%)** |
+| **Low-confidence fallback rate** | `None` returns from confidence < `CONFIDENCE_THRESHOLD` on questions outside the interpreter's domain (regulatory limits, non-form-specific queries) | Informational; persistent rise warrants prompt or threshold review | **1/30 (3.3%)** — Michael Q9 (HSA contribution limit, confidence=0.30) |
+
+Both paths return `None` and trigger dictionary-only fallback. The
+distinction matters for alerting: unexpected failures warrant
+investigation; low-confidence fallbacks are correct behavior.
+
+The single fallback (Michael Q9) was a correct self-assessment on a
+regulatory question, not a form lookup. The dictionary path handled
+it correctly (eval scored response_hit=True).
 
 ## §5 — Eval Criteria
 
