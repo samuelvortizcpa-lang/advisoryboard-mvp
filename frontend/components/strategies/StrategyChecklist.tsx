@@ -3,9 +3,11 @@
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { ProfileFlags, StrategyChecklist as ChecklistType, StrategyWithStatus } from "@/lib/api";
+import type { ImplementationProgress as ProgressData, ProfileFlags, StrategyChecklist as ChecklistType, StrategyWithStatus } from "@/lib/api";
 import { createStrategiesApi } from "@/lib/api";
 import AISuggestModal from "./AISuggestModal";
+import ImplementationProgress from "./ImplementationProgress";
+import ImplementationTaskList from "./ImplementationTaskList";
 import StrategyComparison from "./StrategyComparison";
 
 interface Props {
@@ -358,6 +360,8 @@ export default function StrategyChecklist({ clientId, clientName, profileFlags, 
 }
 
 // ─── Single strategy row ─────────────────────────────────────────────────────
+// Implementation progress: Option A — state is lifted into StrategyRow, which
+// fetches progress once and passes the result to both chip and task list.
 
 function StrategyRow({
   clientId,
@@ -379,12 +383,39 @@ function StrategyRow({
   const [saved, setSaved] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Implementation progress state (shared by chip + task list)
+  const [progress, setProgress] = useState<ProgressData | null>(null);
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [tasksExpanded, setTasksExpanded] = useState(false);
+
   // Sync when parent data refreshes
   useEffect(() => {
     setStatus(item.status);
     setNotes(item.notes ?? "");
     setImpact(item.estimated_impact != null ? String(item.estimated_impact) : "");
   }, [item.status, item.notes, item.estimated_impact]);
+
+  // Fetch implementation progress for recommended/implemented strategies
+  const loadProgress = useCallback(async () => {
+    if (status !== "recommended" && status !== "implemented") {
+      setProgress(null);
+      return;
+    }
+    setProgressLoading(true);
+    try {
+      const api = createStrategiesApi(getToken);
+      const result = await api.fetchImplementationProgress(clientId, item.strategy.id, item.tax_year);
+      setProgress(result);
+    } catch {
+      // non-fatal
+    } finally {
+      setProgressLoading(false);
+    }
+  }, [getToken, clientId, item.strategy.id, item.tax_year, status]);
+
+  useEffect(() => {
+    loadProgress();
+  }, [loadProgress]);
 
   async function save(
     newStatus: string,
@@ -441,6 +472,14 @@ function StrategyRow({
           </svg>
         )}
 
+        {/* Implementation progress chip */}
+        <ImplementationProgress
+          progress={progress}
+          loading={progressLoading}
+          status={status}
+          onClick={() => setTasksExpanded(!tasksExpanded)}
+        />
+
         {/* Status selector */}
         <div className="relative shrink-0">
           <select
@@ -494,6 +533,15 @@ function StrategyRow({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Implementation task list (expanded via progress chip click) */}
+      {tasksExpanded && (
+        <ImplementationTaskList
+          progress={progress}
+          loading={progressLoading}
+          onTaskUpdated={loadProgress}
+        />
       )}
     </div>
   );
