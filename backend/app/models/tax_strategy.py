@@ -1,11 +1,14 @@
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.strategy_implementation_task import StrategyImplementationTask
 
 
 class TaxStrategy(Base):
@@ -27,6 +30,14 @@ class TaxStrategy(Base):
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
+    )
+
+    # Relationships
+    implementation_tasks: Mapped[list["StrategyImplementationTask"]] = relationship(
+        "StrategyImplementationTask",
+        back_populates="strategy",
+        cascade="all, delete-orphan",
+        order_by="StrategyImplementationTask.display_order",
     )
 
     def __repr__(self) -> str:
