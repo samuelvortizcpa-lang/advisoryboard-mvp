@@ -26,6 +26,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.client_access import ClientAccess
 from app.models.client_assignment import ClientAssignment
 from app.models.tax_strategy import TaxStrategy
+from app.models.strategy_implementation_task import StrategyImplementationTask
 from app.models.client_strategy_status import ClientStrategyStatus
 from app.models.audit_log import AuditLog
 from app.models.email_template import EmailTemplate
@@ -72,6 +73,7 @@ __all__ = [
     "ClientAccess",
     "ClientAssignment",
     "TaxStrategy",
+    "StrategyImplementationTask",
     "ClientStrategyStatus",
     "AuditLog",
     "EmailTemplate",

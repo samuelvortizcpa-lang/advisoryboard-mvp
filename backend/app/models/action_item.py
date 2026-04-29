@@ -10,8 +10,10 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.client import Client
+    from app.models.client_strategy_status import ClientStrategyStatus
     from app.models.document import Document
     from app.models.engagement_template_task import EngagementTemplateTask
+    from app.models.strategy_implementation_task import StrategyImplementationTask
 
 
 class ActionItem(Base):
@@ -73,6 +75,26 @@ class ActionItem(Base):
         nullable=True,
     )
 
+    # Strategy implementation linkage
+    strategy_implementation_task_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("strategy_implementation_tasks.id"),
+        nullable=True,
+        index=True,
+    )
+    client_strategy_status_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("client_strategy_status.id"),
+        nullable=True,
+        index=True,
+    )
+    owner_role: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="cpa"
+    )
+    owner_external_label: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True
+    )
+
     extracted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -108,6 +130,12 @@ class ActionItem(Base):
     )
     engagement_task: Mapped[Optional["EngagementTemplateTask"]] = relationship(
         "EngagementTemplateTask",
+    )
+    strategy_implementation_task: Mapped[Optional["StrategyImplementationTask"]] = relationship(
+        "StrategyImplementationTask",
+    )
+    client_strategy_status: Mapped[Optional["ClientStrategyStatus"]] = relationship(
+        "ClientStrategyStatus",
     )
 
     def __repr__(self) -> str:
