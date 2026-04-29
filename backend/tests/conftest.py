@@ -54,12 +54,22 @@ def _create_test_engine():
     except ImportError:
         VECTOR_TYPE = None
 
+    # PostgreSQL-only types that need SQLite equivalents
+    try:
+        from sqlalchemy.dialects.postgresql import TSVECTOR
+    except ImportError:
+        TSVECTOR = None
+
     for table in Base.metadata.tables.values():
         for column in table.columns:
             if isinstance(column.type, JSONB):
                 column.type = JSON()
             # pgvector columns can't be created in SQLite — swap to String
             if VECTOR_TYPE is not None and isinstance(column.type, VECTOR_TYPE):
+                from sqlalchemy import String
+                column.type = String()
+            # TSVECTOR (full-text search) → String in SQLite
+            if TSVECTOR is not None and isinstance(column.type, TSVECTOR):
                 from sqlalchemy import String
                 column.type = String()
 

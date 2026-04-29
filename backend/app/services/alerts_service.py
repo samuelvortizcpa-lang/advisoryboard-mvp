@@ -123,6 +123,7 @@ def _compute_alerts_uncached(
         .filter(
             ActionItem.client_id.in_(client_ids),
             ActionItem.status == "pending",
+            ActionItem.owner_role == "cpa",
             ActionItem.due_date.isnot(None),
             ActionItem.due_date <= seven_days,
         )
@@ -310,6 +311,7 @@ def _compute_alerts_uncached(
         .filter(
             ActionItem.client_id.in_(client_ids),
             ActionItem.status == "pending",
+            ActionItem.owner_role == "cpa",
             EngagementTemplateTask.workflow_type == "quarterly_estimate",
             ActionItem.due_date.isnot(None),
             ActionItem.due_date <= thirty_days_ahead,
