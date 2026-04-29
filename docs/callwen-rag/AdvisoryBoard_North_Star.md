@@ -1,9 +1,11 @@
 # AdvisoryBoard — North Star
 
 **Status:** Living reference doc. Updated when product framing changes; otherwise stable.
-**Last updated:** April 24, 2026 (Session 12)
+**Last updated:** April 28, 2026 (Session 23 — Layer 1/Layer 2 scope note)
 **Owner:** Sam Ortiz
 **Purpose:** Single source of truth for what AdvisoryBoard is *for*, what success looks like per query mode, and how feature priorities map to those modes. Every Claude Code prompt and every chat session anchors to this doc.
+
+**Scope (April 28, 2026, Session 23):** This doc anchors **Layer 1 — the retrieval substrate** (hybrid search, form-aware chunking, answer LLM, citation extraction). It governs retrieval-quality decisions and the Mode 1/2/3/4 query taxonomy. **Layer 2 — engagement orchestration** (stage-aware deliverables, configurable cadence, strategy decomposition, department-aware views) composes on top of Layer 1 and is anchored by `callwen-advisory-engagement-use-case-brief.md`. **The accuracy north star applies to both layers** — a wrong figure in a Day-14 kickoff memo is a Layer 1 failure surfaced through a Layer 2 surface; both layers fail simultaneously. Layer 1 priority is rebalanced based on what Layer 2 deliverables actually retrieve, not deprioritized in absolute terms.
 
 ---
 
