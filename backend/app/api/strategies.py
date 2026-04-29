@@ -8,23 +8,28 @@ import logging
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.strategy_implementation_task import StrategyImplementationTask
 from app.models.tax_strategy import TaxStrategy
 from app.schemas.strategy import (
     AISuggestResponse,
+    ArchiveTasksResponse,
     ApplySuggestionsRequest,
     ApplySuggestionsResponse,
     BulkStatusResponse,
     BulkStatusUpdate,
+    ImplementationProgressResponse,
     ProfileFlagsResponse,
     ProfileFlagsUpdate,
+    RegenerateTasksResponse,
     ReportRequest,
     StrategyChecklistResponse,
     StrategyHistoryResponse,
+    StrategyImplementationTaskResponse,
     StrategyStatusUpdate,
     TaxStrategyResponse,
 )
@@ -325,3 +330,105 @@ async def update_flags(
             )
 
     return ProfileFlagsResponse.model_validate(client)
+
+
+# ─── Implementation tasks (reference + client-scoped) ────────────────────────
+
+
+@router.get(
+    "/strategies/{strategy_id}/implementation-tasks",
+    response_model=list[StrategyImplementationTaskResponse],
+)
+async def list_implementation_tasks(
+    strategy_id: UUID,
+    is_active: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> list[StrategyImplementationTaskResponse]:
+    """Return reference template tasks for a strategy."""
+    strat = db.query(TaxStrategy).filter(TaxStrategy.id == strategy_id).first()
+    if strat is None:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+
+    q = db.query(StrategyImplementationTask).filter(
+        StrategyImplementationTask.strategy_id == strategy_id,
+    )
+    if is_active:
+        q = q.filter(StrategyImplementationTask.is_active == True)  # noqa: E712
+    rows = q.order_by(StrategyImplementationTask.display_order).all()
+    return [StrategyImplementationTaskResponse.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/clients/{client_id}/strategies/{strategy_id}/implementation-progress",
+    response_model=ImplementationProgressResponse,
+)
+async def get_implementation_progress(
+    client_id: UUID,
+    strategy_id: UUID,
+    year: int = Query(...),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> ImplementationProgressResponse:
+    """Return implementation progress for a (client, strategy, year) bundle."""
+    check_client_access(auth, client_id, db)
+    result = strategy_service.get_implementation_progress(
+        db, client_id=client_id, strategy_id=strategy_id, tax_year=year,
+    )
+    return ImplementationProgressResponse(**result)
+
+
+@router.post(
+    "/clients/{client_id}/strategies/{strategy_id}/implementation-tasks/regenerate",
+    response_model=RegenerateTasksResponse,
+)
+async def regenerate_implementation_tasks(
+    client_id: UUID,
+    strategy_id: UUID,
+    year: int = Query(...),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> RegenerateTasksResponse:
+    """Idempotent re-materialization of implementation tasks."""
+    # TODO: restrict to CPA-only once department-aware roles ship (Gap 6)
+    check_client_access(auth, client_id, db)
+    try:
+        count = strategy_service.materialize_implementation_tasks(
+            db, client_id=client_id, strategy_id=strategy_id,
+            tax_year=year, user_id=auth.user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    msg = (
+        f"Created {count} new implementation tasks."
+        if count > 0
+        else "No new tasks to create — all templates already materialized."
+    )
+    return RegenerateTasksResponse(new_tasks_created=count, message=msg)
+
+
+@router.post(
+    "/clients/{client_id}/strategies/{strategy_id}/implementation-tasks/archive",
+    response_model=ArchiveTasksResponse,
+)
+async def archive_implementation_tasks(
+    client_id: UUID,
+    strategy_id: UUID,
+    year: int = Query(...),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth),
+) -> ArchiveTasksResponse:
+    """Soft-archive materialized implementation tasks."""
+    # TODO: restrict to CPA-only once department-aware roles ship (Gap 6)
+    check_client_access(auth, client_id, db)
+    count = strategy_service.archive_implementation_tasks(
+        db, client_id=client_id, strategy_id=strategy_id,
+        tax_year=year, user_id=auth.user_id,
+    )
+    msg = (
+        f"Archived {count} implementation tasks."
+        if count > 0
+        else "No tasks to archive."
+    )
+    return ArchiveTasksResponse(archived_count=count, message=msg)

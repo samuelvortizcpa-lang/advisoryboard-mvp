@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -232,3 +233,55 @@ class UnreviewedAlert(BaseModel):
 class ReportRequest(BaseModel):
     year: Optional[int] = None
     include_prior_years: bool = True
+
+
+# ─── Implementation tasks ───────────────────────────────────────────────────
+
+
+class StrategyImplementationTaskResponse(BaseModel):
+    id: UUID
+    strategy_id: UUID
+    task_name: str
+    description: Optional[str] = None
+    default_owner_role: str
+    default_owner_external_label: Optional[str] = None
+    default_lead_days: int
+    required_documents: list[dict] = []
+    display_order: int
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class TaskProgressItem(BaseModel):
+    id: UUID
+    task_name: str
+    owner_role: str
+    owner_external_label: Optional[str] = None
+    status: str
+    due_date: Optional[date] = None
+    completed_at: Optional[str] = None
+    display_order: int
+
+
+class OwnerRoleBreakdown(BaseModel):
+    total: int
+    completed: int
+
+
+class ImplementationProgressResponse(BaseModel):
+    total: int
+    completed: int
+    by_owner_role: dict[str, OwnerRoleBreakdown]
+    tasks: list[TaskProgressItem]
+
+
+class RegenerateTasksResponse(BaseModel):
+    new_tasks_created: int
+    message: str
+
+
+class ArchiveTasksResponse(BaseModel):
+    archived_count: int
+    message: str
