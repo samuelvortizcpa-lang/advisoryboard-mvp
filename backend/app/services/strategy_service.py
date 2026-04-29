@@ -1,19 +1,26 @@
 """
-Tax Strategy Matrix service — filtering, status tracking, history.
+Tax Strategy Matrix service — filtering, status tracking, history,
+and strategy-implementation-task materialization.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+import logging
+from datetime import date, datetime, timedelta, timezone
+from typing import Optional, Tuple
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.models.action_item import ActionItem
 from app.models.client import Client
+from app.models.client_assignment import ClientAssignment
 from app.models.client_strategy_status import ClientStrategyStatus
+from app.models.strategy_implementation_task import StrategyImplementationTask
 from app.models.tax_strategy import TaxStrategy
+
+logger = logging.getLogger(__name__)
 
 
 # The only valid status values for a client_strategy_status row.
@@ -191,6 +198,8 @@ def update_strategy_status(
         .first()
     )
 
+    old_status = row.status if row else "not_reviewed"
+
     if row:
         row.status = new_status
         row.notes = notes
@@ -212,6 +221,17 @@ def update_strategy_status(
 
     db.commit()
     db.refresh(row)
+
+    # Materialize implementation tasks on transition INTO 'recommended'
+    if new_status == "recommended" and old_status != "recommended":
+        materialize_implementation_tasks(
+            db,
+            client_id=client_id,
+            strategy_id=strategy_id,
+            tax_year=tax_year,
+            user_id=user_id or "",
+        )
+
     return row
 
 
@@ -225,6 +245,8 @@ def bulk_update_statuses(
     _get_client_or_404(db, client_id)
     now = datetime.now(timezone.utc)
     count = 0
+
+    materialize_queue: list[dict] = []
 
     for item in updates:
         s = item["status"]
@@ -243,6 +265,8 @@ def bulk_update_statuses(
             )
             .first()
         )
+
+        old_status = row.status if row else "not_reviewed"
 
         if row:
             row.status = s
@@ -263,9 +287,25 @@ def bulk_update_statuses(
             )
             db.add(row)
 
+        if s == "recommended" and old_status != "recommended":
+            materialize_queue.append({
+                "strategy_id": item["strategy_id"],
+                "tax_year": item["tax_year"],
+            })
+
         count += 1
 
     db.commit()
+
+    for mq in materialize_queue:
+        materialize_implementation_tasks(
+            db,
+            client_id=client_id,
+            strategy_id=mq["strategy_id"],
+            tax_year=mq["tax_year"],
+            user_id=user_id or "",
+        )
+
     return count
 
 
@@ -368,6 +408,291 @@ def get_strategy_history(db: Session, client_id: UUID) -> dict:
         "year_summaries": year_summaries,
         "available_years": available_years,
     }
+
+
+# ─── Implementation task helpers ──────────────────────────────────────────
+
+
+def _resolve_primary_cpa_assignment(
+    db: Session, client_id: UUID
+) -> Optional[Tuple[str, str]]:
+    """Return (user_id, display_name) for the first assignment on this client, or None."""
+    assignment = (
+        db.query(ClientAssignment)
+        .filter(ClientAssignment.client_id == client_id)
+        .first()
+    )
+    if assignment is None:
+        return None
+    # ClientAssignment stores Clerk user_id; display name isn't on this model,
+    # so we return user_id for both fields (the API layer can resolve display name).
+    return (assignment.user_id, assignment.user_id)
+
+
+# ─── Implementation task service functions ────────────────────────────────
+
+
+def materialize_implementation_tasks(
+    db: Session,
+    *,
+    client_id: UUID,
+    strategy_id: UUID,
+    tax_year: int,
+    user_id: str,
+) -> int:
+    """Generate action_items from strategy_implementation_tasks for a (client, strategy, year) bundle.
+
+    Idempotent: skips templates that already have a corresponding action_items row
+    for this client_strategy_status. Returns the count of NEW tasks created.
+    """
+    # Look up the client_strategy_status row
+    css = (
+        db.query(ClientStrategyStatus)
+        .filter(
+            ClientStrategyStatus.client_id == client_id,
+            ClientStrategyStatus.strategy_id == strategy_id,
+            ClientStrategyStatus.tax_year == tax_year,
+        )
+        .first()
+    )
+    if css is None:
+        raise ValueError(
+            f"No client_strategy_status for client={client_id}, "
+            f"strategy={strategy_id}, year={tax_year}"
+        )
+
+    # Load active templates ordered by display_order
+    templates = (
+        db.query(StrategyImplementationTask)
+        .filter(
+            StrategyImplementationTask.strategy_id == strategy_id,
+            StrategyImplementationTask.is_active == True,  # noqa: E712
+        )
+        .order_by(StrategyImplementationTask.display_order)
+        .all()
+    )
+
+    if not templates:
+        return 0
+
+    # Find existing non-cancelled action_items for this css to enforce idempotency
+    existing_template_ids = set(
+        row[0]
+        for row in db.query(ActionItem.strategy_implementation_task_id)
+        .filter(
+            ActionItem.client_strategy_status_id == css.id,
+            ActionItem.strategy_implementation_task_id.isnot(None),
+            ActionItem.status != "cancelled",
+        )
+        .all()
+    )
+
+    # Resolve primary CPA assignment for owner_role='cpa' tasks
+    cpa_info = _resolve_primary_cpa_assignment(db, client_id)
+    today = date.today()
+
+    created_count = 0
+    for tmpl in templates:
+        if tmpl.id in existing_template_ids:
+            continue
+
+        assigned_to = None
+        assigned_to_name = None
+        if tmpl.default_owner_role == "cpa" and cpa_info:
+            assigned_to, assigned_to_name = cpa_info
+
+        item = ActionItem(
+            client_id=client_id,
+            text=tmpl.task_name,
+            status="pending",
+            priority="medium",
+            due_date=today + timedelta(days=tmpl.default_lead_days),
+            owner_role=tmpl.default_owner_role,
+            owner_external_label=tmpl.default_owner_external_label,
+            strategy_implementation_task_id=tmpl.id,
+            client_strategy_status_id=css.id,
+            assigned_to=assigned_to,
+            assigned_to_name=assigned_to_name,
+            source="strategy_implementation",
+            created_by=user_id,
+        )
+        db.add(item)
+        created_count += 1
+
+    if created_count > 0:
+        db.flush()
+
+        # Write journal entry
+        strategy = db.query(TaxStrategy).filter(TaxStrategy.id == strategy_id).first()
+        strategy_name = strategy.name if strategy else str(strategy_id)
+
+        from app.services.journal_service import create_auto_entry
+
+        create_auto_entry(
+            db=db,
+            client_id=client_id,
+            user_id=user_id,
+            entry_type="system",
+            category="strategy",
+            title=f"Generated {created_count} implementation tasks for {strategy_name}",
+            source_type="system",
+            metadata={
+                "strategy_id": str(strategy_id),
+                "tax_year": tax_year,
+                "task_count": created_count,
+            },
+        )
+
+    return created_count
+
+
+def get_implementation_progress(
+    db: Session,
+    *,
+    client_id: UUID,
+    strategy_id: UUID,
+    tax_year: int,
+) -> dict:
+    """Return implementation progress for a (client, strategy, year) bundle."""
+    css = (
+        db.query(ClientStrategyStatus)
+        .filter(
+            ClientStrategyStatus.client_id == client_id,
+            ClientStrategyStatus.strategy_id == strategy_id,
+            ClientStrategyStatus.tax_year == tax_year,
+        )
+        .first()
+    )
+
+    empty = {
+        "total": 0,
+        "completed": 0,
+        "by_owner_role": {
+            "cpa": {"total": 0, "completed": 0},
+            "client": {"total": 0, "completed": 0},
+            "third_party": {"total": 0, "completed": 0},
+        },
+        "tasks": [],
+    }
+
+    if css is None:
+        return empty
+
+    # Join with template to get display_order
+    rows = (
+        db.query(ActionItem, StrategyImplementationTask.display_order)
+        .join(
+            StrategyImplementationTask,
+            ActionItem.strategy_implementation_task_id == StrategyImplementationTask.id,
+        )
+        .filter(ActionItem.client_strategy_status_id == css.id)
+        .order_by(StrategyImplementationTask.display_order)
+        .all()
+    )
+
+    if not rows:
+        return empty
+
+    total = len(rows)
+    completed = sum(1 for item, _ in rows if item.status == "completed")
+
+    by_role: dict[str, dict[str, int]] = {
+        "cpa": {"total": 0, "completed": 0},
+        "client": {"total": 0, "completed": 0},
+        "third_party": {"total": 0, "completed": 0},
+    }
+
+    tasks = []
+    for item, display_order in rows:
+        role = item.owner_role or "cpa"
+        if role in by_role:
+            by_role[role]["total"] += 1
+            if item.status == "completed":
+                by_role[role]["completed"] += 1
+
+        tasks.append({
+            "id": item.id,
+            "task_name": item.text,
+            "owner_role": role,
+            "owner_external_label": item.owner_external_label,
+            "status": item.status,
+            "due_date": item.due_date,
+            "completed_at": item.completed_at,
+            "display_order": display_order,
+        })
+
+    return {
+        "total": total,
+        "completed": completed,
+        "by_owner_role": by_role,
+        "tasks": tasks,
+    }
+
+
+def archive_implementation_tasks(
+    db: Session,
+    *,
+    client_id: UUID,
+    strategy_id: UUID,
+    tax_year: int,
+    user_id: str,
+) -> int:
+    """Soft-archive materialized implementation tasks by setting status to 'cancelled'.
+
+    Skips rows already cancelled or completed. Idempotent.
+    """
+    css = (
+        db.query(ClientStrategyStatus)
+        .filter(
+            ClientStrategyStatus.client_id == client_id,
+            ClientStrategyStatus.strategy_id == strategy_id,
+            ClientStrategyStatus.tax_year == tax_year,
+        )
+        .first()
+    )
+    if css is None:
+        return 0
+
+    items = (
+        db.query(ActionItem)
+        .filter(
+            ActionItem.client_strategy_status_id == css.id,
+            ActionItem.status.notin_(["cancelled", "completed"]),
+        )
+        .all()
+    )
+
+    count = len(items)
+    for item in items:
+        item.status = "cancelled"
+
+    if count > 0:
+        db.flush()
+
+        strategy = db.query(TaxStrategy).filter(TaxStrategy.id == strategy_id).first()
+        strategy_name = strategy.name if strategy else str(strategy_id)
+
+        from app.services.journal_service import create_auto_entry
+
+        create_auto_entry(
+            db=db,
+            client_id=client_id,
+            user_id=user_id,
+            entry_type="system",
+            category="strategy",
+            title=f"Archived {count} implementation tasks for {strategy_name}",
+            source_type="system",
+            metadata={
+                "strategy_id": str(strategy_id),
+                "tax_year": tax_year,
+                "task_count": count,
+            },
+        )
+
+    return count
+
+
+# ─── Profile flags ────────────────────────────────────────────────────────
 
 
 def update_profile_flags(db: Session, client_id: UUID, flags_dict: dict) -> Client:
