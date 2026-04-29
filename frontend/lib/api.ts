@@ -1964,6 +1964,44 @@ export interface ApplySuggestionsResponse {
   strategies_updated: number;
 }
 
+// ─── Implementation task types ────────────────────────────────────────────────
+
+export interface ImplementationTask {
+  id: string;
+  task_name: string;
+  owner_role: "cpa" | "client" | "third_party";
+  owner_external_label: string | null;
+  status: string;
+  due_date: string | null;
+  completed_at: string | null;
+  display_order: number;
+}
+
+export interface OwnerRoleBreakdown {
+  total: number;
+  completed: number;
+}
+
+export interface ImplementationProgress {
+  total: number;
+  completed: number;
+  by_owner_role: Record<string, OwnerRoleBreakdown>;
+  tasks: ImplementationTask[];
+}
+
+export interface ImplementationTaskTemplate {
+  id: string;
+  strategy_id: string;
+  task_name: string;
+  description: string | null;
+  default_owner_role: "cpa" | "client" | "third_party";
+  default_owner_external_label: string | null;
+  default_lead_days: number;
+  required_documents: Array<{ document_type: string; document_subtype: string; label: string }>;
+  display_order: number;
+  is_active: boolean;
+}
+
 export function createStrategiesApi(getToken: GetToken, orgId?: string) {
   const f = boundFetch(getToken, orgId);
   const fb = boundFetchBlob(getToken, orgId);
@@ -2033,6 +2071,30 @@ export function createStrategiesApi(getToken: GetToken, orgId?: string) {
         method: "POST",
         body: JSON.stringify({ year, include_prior_years: includePriorYears }),
       }),
+
+    /** Implementation task templates for a strategy */
+    fetchImplementationTemplates: (strategyId: string) =>
+      f<ImplementationTaskTemplate[]>(`/strategies/${strategyId}/implementation-tasks`),
+
+    /** Implementation progress for a (client, strategy, year) bundle */
+    fetchImplementationProgress: (clientId: string, strategyId: string, year: number) =>
+      f<ImplementationProgress>(
+        `/clients/${clientId}/strategies/${strategyId}/implementation-progress?year=${year}`,
+      ),
+
+    /** Re-materialize implementation tasks */
+    regenerateImplementationTasks: (clientId: string, strategyId: string, year: number) =>
+      f<{ new_tasks_created: number; message: string }>(
+        `/clients/${clientId}/strategies/${strategyId}/implementation-tasks/regenerate?year=${year}`,
+        { method: "POST" },
+      ),
+
+    /** Soft-archive implementation tasks */
+    archiveImplementationTasks: (clientId: string, strategyId: string, year: number) =>
+      f<{ archived_count: number; message: string }>(
+        `/clients/${clientId}/strategies/${strategyId}/implementation-tasks/archive?year=${year}`,
+        { method: "POST" },
+      ),
   };
 }
 
