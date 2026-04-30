@@ -43,6 +43,12 @@ from app.models.data_contradiction import DataContradiction
 from app.models.checkin_template import CheckinTemplate
 from app.models.checkin_response import CheckinResponse
 from app.models.rag_evaluation import RagEvaluation
+from app.models.cadence_template import CadenceTemplate
+from app.models.cadence_template_deliverable import (
+    CadenceTemplateDeliverable,
+    DELIVERABLE_KEY_VALUES,
+)
+from app.models.client_cadence import ClientCadence
 
 __all__ = [
     "User",
@@ -90,4 +96,8 @@ __all__ = [
     "CheckinTemplate",
     "CheckinResponse",
     "RagEvaluation",
+    "CadenceTemplate",
+    "CadenceTemplateDeliverable",
+    "DELIVERABLE_KEY_VALUES",
+    "ClientCadence",
 ]

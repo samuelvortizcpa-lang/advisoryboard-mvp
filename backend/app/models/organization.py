@@ -2,13 +2,14 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.cadence_template import CadenceTemplate
     from app.models.organization_member import OrganizationMember
 
 
@@ -70,6 +71,18 @@ class Organization(Base):
         nullable=False,
     )
 
+    # Layer 2 Gap 4: default cadence preset for new clients in this org
+    default_cadence_template_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "cadence_templates.id",
+            ondelete="SET NULL",
+            name="fk_organizations_default_cadence_template",
+            use_alter=True,  # break circular FK dep for SQLite test teardown
+        ),
+        nullable=True,
+    )
+
     # -----------------------------------------------------------------------
     # Relationships
     # -----------------------------------------------------------------------
@@ -78,6 +91,10 @@ class Organization(Base):
         "OrganizationMember",
         back_populates="organization",
         cascade="all, delete-orphan",
+    )
+    default_cadence_template: Mapped[Optional["CadenceTemplate"]] = relationship(
+        "CadenceTemplate",
+        foreign_keys=[default_cadence_template_id],
     )
 
     def __repr__(self) -> str:
