@@ -102,10 +102,10 @@ def setup():
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    # Ensure type swaps are applied (reuse conftest helper for the side effect)
-    _create_test_engine()
+    # Get SQLite-compatible metadata copy (type swaps applied on copy, not Base.metadata)
+    _, metadata = _create_test_engine()
 
-    Base.metadata.create_all(bind=engine)
+    metadata.create_all(bind=engine)
     TestSession = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     db = TestSession()
 
@@ -137,7 +137,7 @@ def setup():
 
     app.dependency_overrides.clear()
     db.close()
-    Base.metadata.drop_all(bind=engine)
+    metadata.drop_all(bind=engine)
     engine.dispose()
 
 

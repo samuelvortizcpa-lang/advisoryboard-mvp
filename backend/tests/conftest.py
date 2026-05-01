@@ -5,6 +5,7 @@ Uses an in-memory SQLite database so tests run fast and isolated.
 For PostgreSQL-specific features (pgvector, JSONB), use integration tests instead.
 """
 
+import copy
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Generator
@@ -38,6 +39,12 @@ TEST_DATABASE_URL = "sqlite:///:memory:"
 
 
 def _create_test_engine():
+    """Create a SQLite engine with PG-type swaps on a *copy* of Base.metadata.
+
+    Returns (engine, metadata_copy).  The canonical Base.metadata is never
+    mutated, so test-collection order cannot poison other tests that inspect
+    the original column types.
+    """
     engine = create_engine(TEST_DATABASE_URL, echo=False)
 
     # Enable foreign key support in SQLite
@@ -47,42 +54,41 @@ def _create_test_engine():
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
+    # Deep-copy metadata so type swaps don't leak to the canonical instance.
+    metadata_copy = copy.deepcopy(Base.metadata)
+
     # Map PostgreSQL-specific types to SQLite-compatible equivalents
-    # so Base.metadata.create_all works on the in-memory SQLite engine.
     try:
         from pgvector.sqlalchemy import Vector as VECTOR_TYPE
     except ImportError:
         VECTOR_TYPE = None
 
-    # PostgreSQL-only types that need SQLite equivalents
     try:
         from sqlalchemy.dialects.postgresql import TSVECTOR
     except ImportError:
         TSVECTOR = None
 
-    for table in Base.metadata.tables.values():
+    for table in metadata_copy.tables.values():
         for column in table.columns:
             if isinstance(column.type, JSONB):
                 column.type = JSON()
-            # pgvector columns can't be created in SQLite — swap to String
             if VECTOR_TYPE is not None and isinstance(column.type, VECTOR_TYPE):
                 from sqlalchemy import String
                 column.type = String()
-            # TSVECTOR (full-text search) → String in SQLite
             if TSVECTOR is not None and isinstance(column.type, TSVECTOR):
                 from sqlalchemy import String
                 column.type = String()
 
-    return engine
+    return engine, metadata_copy
 
 
 @pytest.fixture
 def engine():
     """Create a fresh in-memory SQLite engine for each test."""
-    eng = _create_test_engine()
-    Base.metadata.create_all(bind=eng)
+    eng, metadata = _create_test_engine()
+    metadata.create_all(bind=eng)
     yield eng
-    Base.metadata.drop_all(bind=eng)
+    metadata.drop_all(bind=eng)
     eng.dispose()
 
 
