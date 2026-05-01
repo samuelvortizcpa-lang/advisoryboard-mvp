@@ -72,6 +72,7 @@ from app.api.documents import router as documents_router
 from app.api.integrations import router as integrations_router
 from app.api.rag import router as rag_router
 from app.api.briefs import router as briefs_router
+from app.api.cadence import router as cadence_router
 from app.api.timeline import router as timeline_router
 from app.api.usage import router as usage_router
 from app.api.admin import router as admin_router
@@ -326,3 +327,4 @@ app.include_router(contradictions_router,      prefix="/api", tags=["contradicti
 app.include_router(checkin_router,             prefix="/api", tags=["checkins"])
 app.include_router(checkin_public_router,      prefix="/api/checkins/public", tags=["checkins-public"])
 app.include_router(pdf_export_router,          prefix="/api", tags=["pdf-export"])
+app.include_router(cadence_router,             prefix="/api", tags=["cadence"])

@@ -1,6 +1,8 @@
-"""Pydantic schemas for cadence (Layer 2 Gap 4). G4-P1 ships only the
-DeliverableKey enum; full request/response schemas land in G4-P3."""
+"""Pydantic schemas for cadence (Layer 2 Gap 4)."""
 from enum import Enum
+from uuid import UUID
+
+from pydantic import BaseModel, StrictBool
 
 
 class DeliverableKey(str, Enum):
@@ -11,3 +13,24 @@ class DeliverableKey(str, Enum):
     YEAR_END_RECAP = "year_end_recap"
     PRE_PREP_BRIEF = "pre_prep_brief"
     POST_PREP_FLAG = "post_prep_flag"
+
+
+class ClientCadenceResponse(BaseModel):
+    client_id: UUID
+    template_id: UUID
+    template_name: str
+    template_is_system: bool
+    overrides: dict[DeliverableKey, bool]
+    effective_flags: dict[DeliverableKey, bool]
+
+
+class AssignCadenceRequest(BaseModel):
+    template_id: UUID
+
+
+class UpdateOverridesRequest(BaseModel):
+    overrides: dict[DeliverableKey, StrictBool]
+
+
+class EnabledDeliverablesResponse(BaseModel):
+    enabled: list[DeliverableKey]
