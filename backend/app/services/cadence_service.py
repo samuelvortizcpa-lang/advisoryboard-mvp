@@ -8,10 +8,11 @@ deactivation, and firm-default setter.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.cadence_template import CadenceTemplate
@@ -23,6 +24,26 @@ from app.models.client_cadence import ClientCadence
 from app.models.organization import Organization
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Data transfer objects for read helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ClientCadenceDetail:
+    template_id: UUID
+    template_name: str
+    template_is_system: bool
+    overrides: dict[str, bool]
+    effective_flags: dict[str, bool]
+
+
+@dataclass
+class TemplateWithFlags:
+    template: CadenceTemplate
+    deliverable_flags: dict[str, bool]
 
 
 # ---------------------------------------------------------------------------
@@ -428,3 +449,112 @@ def set_firm_default(
 
     org.default_cadence_template_id = template_id
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 9. get_client_cadence_detail
+# ---------------------------------------------------------------------------
+
+
+def get_client_cadence_detail(
+    db: Session, client_id: UUID
+) -> ClientCadenceDetail | None:
+    """Return joined cadence detail with effective flags, or None if no cadence assigned.
+
+    Pure read. No journal entry, no commit, no DB writes.
+    """
+    cc = (
+        db.query(ClientCadence)
+        .filter(ClientCadence.client_id == client_id)
+        .first()
+    )
+    if cc is None:
+        return None
+
+    template = (
+        db.query(CadenceTemplate)
+        .filter(CadenceTemplate.id == cc.template_id)
+        .first()
+    )
+
+    rows = (
+        db.query(
+            CadenceTemplateDeliverable.deliverable_key,
+            CadenceTemplateDeliverable.is_enabled,
+        )
+        .filter(CadenceTemplateDeliverable.template_id == cc.template_id)
+        .all()
+    )
+    template_defaults = {r[0]: r[1] for r in rows}
+
+    overrides = cc.overrides or {}
+    effective_flags = {**template_defaults, **overrides}
+
+    return ClientCadenceDetail(
+        template_id=template.id,
+        template_name=template.name,
+        template_is_system=template.is_system,
+        overrides=dict(overrides),
+        effective_flags=effective_flags,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 10. list_templates_for_org
+# ---------------------------------------------------------------------------
+
+
+def list_templates_for_org(
+    db: Session, org_id: UUID, include_inactive: bool = False
+) -> list[CadenceTemplate]:
+    """Return system templates plus this org's custom templates.
+
+    Default filters out is_active=False. Pass include_inactive=True for admin views.
+    Ordered: system first, then alphabetical by name within each group.
+    """
+    query = db.query(CadenceTemplate).filter(
+        or_(
+            CadenceTemplate.is_system == True,  # noqa: E712
+            CadenceTemplate.org_id == org_id,
+        )
+    )
+    if not include_inactive:
+        query = query.filter(CadenceTemplate.is_active == True)  # noqa: E712
+
+    return query.order_by(
+        CadenceTemplate.is_system.desc(),
+        CadenceTemplate.name.asc(),
+    ).all()
+
+
+# ---------------------------------------------------------------------------
+# 11. get_template_with_flags
+# ---------------------------------------------------------------------------
+
+
+def get_template_with_flags(
+    db: Session, template_id: UUID
+) -> TemplateWithFlags | None:
+    """Return template + computed deliverable flags dict, or None if not found.
+
+    Caller is responsible for any cross-org scope check.
+    """
+    template = (
+        db.query(CadenceTemplate)
+        .filter(CadenceTemplate.id == template_id)
+        .first()
+    )
+    if template is None:
+        return None
+
+    rows = (
+        db.query(
+            CadenceTemplateDeliverable.deliverable_key,
+            CadenceTemplateDeliverable.is_enabled,
+        )
+        .filter(CadenceTemplateDeliverable.template_id == template_id)
+        .all()
+    )
+    flags = {r[0]: r[1] for r in rows}
+
+    return TemplateWithFlags(template=template, deliverable_flags=flags)

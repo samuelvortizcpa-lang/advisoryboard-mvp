@@ -488,3 +488,108 @@ class TestSetFirmDefault:
         user, org, client, full, empty, quarterly = _setup(db)
         with pytest.raises(ValueError, match="does not exist"):
             cadence_service.set_firm_default(db, org.id, uuid.uuid4(), user.clerk_id)
+
+
+# ---------------------------------------------------------------------------
+# get_client_cadence_detail
+# ---------------------------------------------------------------------------
+
+
+class TestGetClientCadenceDetail:
+
+    def test_returns_none_when_no_cadence_assigned(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        result = cadence_service.get_client_cadence_detail(db, client.id)
+        assert result is None
+
+    def test_returns_detail_with_empty_overrides(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        cadence_service.assign_cadence(db, client.id, full.id, user.clerk_id)
+        detail = cadence_service.get_client_cadence_detail(db, client.id)
+        assert detail is not None
+        assert detail.template_id == full.id
+        assert detail.template_name == "Full Cadence"
+        assert detail.template_is_system is True
+        assert detail.overrides == {}
+        assert len(detail.effective_flags) == 7
+        for key in DELIVERABLE_KEY_VALUES:
+            assert detail.effective_flags[key] is True
+
+    def test_returns_detail_with_overrides_applied(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        cadence_service.assign_cadence(db, client.id, full.id, user.clerk_id)
+        cadence_service.update_overrides(db, client.id, {"progress_note": False}, user.clerk_id)
+        detail = cadence_service.get_client_cadence_detail(db, client.id)
+        assert detail.overrides == {"progress_note": False}
+        assert detail.effective_flags["progress_note"] is False
+        for key in DELIVERABLE_KEY_VALUES:
+            if key != "progress_note":
+                assert detail.effective_flags[key] is True
+
+
+# ---------------------------------------------------------------------------
+# list_templates_for_org
+# ---------------------------------------------------------------------------
+
+
+class TestListTemplatesForOrg:
+
+    def test_returns_system_plus_own_org_excludes_cross_org(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        all_true = {k: True for k in DELIVERABLE_KEY_VALUES}
+
+        # Custom template in org A
+        cadence_service.create_custom_template(
+            db, org.id, "Org A Custom", None, all_true, user.clerk_id,
+        )
+
+        # Separate org B with its own custom template
+        org_b = make_org(db, owner_user_id=user.clerk_id, name="Org B")
+        cadence_service.create_custom_template(
+            db, org_b.id, "Org B Custom", None, all_true, user.clerk_id,
+        )
+
+        results = cadence_service.list_templates_for_org(db, org.id)
+        names = [t.name for t in results]
+        # 3 system + 1 org-A custom = 4 results; org-B custom not present
+        assert len(results) == 4
+        assert "Org A Custom" in names
+        assert "Org B Custom" not in names
+        # System templates come first
+        assert results[0].is_system is True
+
+    def test_include_inactive_flag_controls_filtering(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        all_true = {k: True for k in DELIVERABLE_KEY_VALUES}
+
+        custom = cadence_service.create_custom_template(
+            db, org.id, "Deactivatable", None, all_true, user.clerk_id,
+        )
+        cadence_service.deactivate_template(db, custom.id, user.clerk_id)
+
+        active_only = cadence_service.list_templates_for_org(db, org.id, include_inactive=False)
+        assert custom.id not in [t.id for t in active_only]
+
+        with_inactive = cadence_service.list_templates_for_org(db, org.id, include_inactive=True)
+        assert custom.id in [t.id for t in with_inactive]
+
+
+# ---------------------------------------------------------------------------
+# get_template_with_flags
+# ---------------------------------------------------------------------------
+
+
+class TestGetTemplateWithFlags:
+
+    def test_returns_template_and_flags_or_none_for_missing_id(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        result = cadence_service.get_template_with_flags(db, full.id)
+        assert result is not None
+        assert result.template.name == "Full Cadence"
+        assert len(result.deliverable_flags) == 7
+        for val in result.deliverable_flags.values():
+            assert isinstance(val, bool)
+            assert val is True
+
+        missing = cadence_service.get_template_with_flags(db, uuid.uuid4())
+        assert missing is None
