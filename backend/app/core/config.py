@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
 
     # Deployment environment — set ENVIRONMENT=production in Railway.
-    # When "production", TEST_MODE is forced to False regardless of .env.
+    # When "production", TEST_MODE is forced to False regardless of .env.local.
     environment: str = "development"
 
     # ── Database ──────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     # Set after the extension is published to the Chrome Web Store.
     extension_origin: str = ""
 
-    model_config = {"env_file": ".env", "case_sensitive": False}
+    model_config = {"env_file": ".env.local", "case_sensitive": False}
 
     # ── Production safeguards ─────────────────────────────────────────────────
 

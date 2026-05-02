@@ -246,10 +246,7 @@ yarn-error.log*
 *.db
 
 # ─── Setup / Utility Scripts ──────────────────
-setup.sh
-db_setup.sh
 frontend_setup.sh
-run_tests.sh
 
 # ─── Uploads directory (local dev file storage) ───────────
 backend/uploads/
@@ -257,3 +254,6 @@ backend/uploads/
 # ─── Local-only admin dashboard (DEPRECATED 2026-04-13 — see CLAUDE.md) ──────────────
 admin-dashboard/
 .gstack/
+
+# Session 11 — dev-only archive (integration verifiers, one-off scripts)
+scripts/_archive/

@@ -52,6 +52,7 @@ from app.services.context_assembler import (
     assemble_context,
     format_context_for_prompt,
 )
+from app.services.query_interpreter import interpret_query_llm
 from app.services.query_router import classify_query, route_completion, route_completion_stream
 from app.services.tax_terms import expand_query as expand_financial_terms
 from app.services.hybrid_search import reciprocal_rank_fusion
@@ -82,6 +83,22 @@ EMBED_BATCH = 100  # OpenAI allows up to 2 048 inputs per call
 # Last search stats — populated by search_chunks, read by answer_question.
 # Not thread-safe, but fine for async single-threaded uvicorn.
 _last_search_stats: dict = {}
+
+# ---------------------------------------------------------------------------
+# Mode-specific prompt modules
+# ---------------------------------------------------------------------------
+# Each module is injected immediately before the "Context:" block in the
+# system prompt by _assemble_system_prompt(). Modules refine LLM behavior
+# for specific question types without altering the base prompt.
+
+MODE_PROMPT_MODULES: dict[str, str] = {
+    "factual": """\
+When answering a factual lookup question:
+
+- Return ONE specific value with its citation (form + line + page).
+- When a financial total exists alongside its decomposition (e.g., total capital gains on Form 1040 Line 7 vs short-term + long-term on Schedule D Lines 7 and 15), return the TOTAL value with a citation to the summary line. Decomposition belongs in follow-up questions, not the primary answer.
+- If the answer requires multiple values to be complete, that is a signal the question may be a synthesis question, not a factual lookup; answer the literal value asked for and note that more detail is available.""",
+}
 
 DEFAULT_SYSTEM_PROMPT = """\
 You are an AI assistant for an advisory board platform used by CPA firms.
@@ -212,6 +229,30 @@ ALWAYS include the line number when citing a form. Write "Form 100S, Line 30" �
 Federal vs. state disambiguation:
 When the question asks about a federal figure, cite the federal form — not the California or other state equivalent. For example, cite "Form 1120-S, Line 21" for total deductions, not "CA Form 100S" or "Schedule F". Conversely, when the question asks about a state tax amount, cite the state form specifically.
 """
+
+
+def _assemble_system_prompt(
+    prompt_template: str, context: str, mode: str = "factual",
+) -> str:
+    """Insert mode-specific guidance before the Context block, then format.
+
+    Targets the unique 'Context:\\n{context}' placeholder marker rather
+    than the bare 'Context:' substring, to avoid replacing any incidental
+    'Context:' occurrences inside injected guidance blocks.
+    """
+    module = MODE_PROMPT_MODULES.get(mode, "")
+    if module:
+        marker = "Context:\n{context}"
+        if marker in prompt_template:
+            prompt_template = prompt_template.replace(
+                marker,
+                f"{module}\n\n{marker}",
+                1,
+            )
+        else:
+            # Defensive fallback — module prepended.
+            prompt_template = f"{module}\n\n{prompt_template}"
+    return prompt_template.format(context=context)
 
 
 # ---------------------------------------------------------------------------
@@ -883,7 +924,15 @@ async def search_chunks(
     _search_start = _time.monotonic()
 
     # --- Financial term expansion ---
-    expansion_terms, relevant_forms = expand_financial_terms(query)
+    # Option B (Session 18): query interpreter runs alongside the
+    # static dictionary. Stub returns None today; Session 19 swaps
+    # in the real Anthropic call behind a feature flag. None →
+    # dict-only behavior (byte-identical to pre-Session-18). See
+    # design doc §3.4.
+    interpretation = await interpret_query_llm(query)
+    expansion_terms, relevant_forms = expand_financial_terms(
+        query, interpretation=interpretation
+    )
     if expansion_terms:
         logger.info(
             "Term expansion: %s → expansions=%s, forms=%s",
@@ -1571,9 +1620,9 @@ async def answer_question(
         patched_template = db_client.client_type.system_prompt.replace(
             "Context:\n{context}", _TAX_YEAR_GUIDANCE + "\nContext:\n{context}"
         )
-        system_prompt = patched_template.format(context=context)
+        system_prompt = _assemble_system_prompt(patched_template, context)
     else:
-        system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
+        system_prompt = _assemble_system_prompt(DEFAULT_SYSTEM_PROMPT, context)
 
     if db_client and db_client.custom_instructions:
         system_prompt += (
@@ -1995,9 +2044,9 @@ async def answer_question_stream(
         patched_template = db_client.client_type.system_prompt.replace(
             "Context:\n{context}", _TAX_YEAR_GUIDANCE + "\nContext:\n{context}"
         )
-        system_prompt = patched_template.format(context=context)
+        system_prompt = _assemble_system_prompt(patched_template, context)
     else:
-        system_prompt = DEFAULT_SYSTEM_PROMPT.format(context=context)
+        system_prompt = _assemble_system_prompt(DEFAULT_SYSTEM_PROMPT, context)
 
     if db_client and db_client.custom_instructions:
         system_prompt += f"\n\nAdditional instructions for this specific client:\n{db_client.custom_instructions}"

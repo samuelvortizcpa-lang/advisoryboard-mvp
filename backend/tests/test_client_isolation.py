@@ -6,13 +6,13 @@ Verifies that documents, RAG responses, action items, timelines, and chat
 histories are fully isolated between different clients owned by the same user.
 
 Authentication — no manual token needed. This script uses TEST_MODE:
-  1. It reads CLERK_SECRET_KEY from backend/.env automatically.
+  1. It reads CLERK_SECRET_KEY from backend/.env.local automatically.
   2. It sends that key as the Bearer token.
-  3. When TEST_MODE=true in .env, the backend accepts this and returns a
+  3. When TEST_MODE=true in .env.local, the backend accepts this and returns a
      fixed test user, bypassing Clerk JWT verification entirely.
 
 Setup (one-time):
-  Add TEST_MODE=true to backend/.env, then start the backend normally.
+  Add TEST_MODE=true to backend/.env.local, then start the backend normally.
 
 Usage (direct):
     python backend/tests/test_client_isolation.py
@@ -58,7 +58,7 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _parse_dotenv(path: Path) -> dict[str, str]:
-    """Minimal .env parser — handles KEY=value and KEY="value", skips comments."""
+    """Minimal .env.local parser — handles KEY=value and KEY="value", skips comments."""
     result: dict[str, str] = {}
     if not path.exists():
         return result
@@ -81,16 +81,16 @@ def get_headers() -> dict[str, str]:
 
     Priority:
     1. CLERK_TEST_TOKEN env var — for manual runs with a short-lived JWT.
-    2. TEST_MODE bypass — reads CLERK_SECRET_KEY from backend/.env and sends
-       it as the Bearer token. Requires TEST_MODE=true in backend/.env.
+    2. TEST_MODE bypass — reads CLERK_SECRET_KEY from backend/.env.local and sends
+       it as the Bearer token. Requires TEST_MODE=true in backend/.env.local.
     """
     # 1. Explicit override still works (backwards compat)
     explicit = os.environ.get("CLERK_TEST_TOKEN", "").strip()
     if explicit:
         return {"Authorization": f"Bearer {explicit}"}
 
-    # 2. Auto-detect from .env
-    env_file = Path(__file__).parent.parent / ".env"
+    # 2. Auto-detect from .env.local
+    env_file = Path(__file__).parent.parent / ".env.local"
     env_vars = _parse_dotenv(env_file)
 
     test_mode = env_vars.get("TEST_MODE", "").lower() in ("1", "true", "yes")
@@ -553,7 +553,7 @@ def test_client_isolation():
     """
     pytest-compatible wrapper.
 
-    Requires TEST_MODE=true in backend/.env (no env vars needed at the shell).
+    Requires TEST_MODE=true in backend/.env.local (no env vars needed at the shell).
     Run with:  pytest -s backend/tests/test_client_isolation.py
     """
     assert run_tests(), "One or more isolation checks failed — see output above."

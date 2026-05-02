@@ -13,6 +13,11 @@ Each key maps to:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.query_interpreter import InterpretationResult
+
 # Maps lowercase trigger terms → expansion data.
 # The key can be a single word or a phrase.  During query expansion,
 # we check for both exact phrase matches and individual word matches.
@@ -193,10 +198,50 @@ TERM_EXPANSIONS: dict[str, dict] = {
         "expansions": ["schedule k-1", "k-1", "partnership", "s corporation"],
         "forms": ["k-1", "schedule k-1"],
     },
+
+    # ── Form 1120-S (S-corp) — Session 16 Q1/Q7/Q8 retrieval fix ──
+    "ordinary business income": {
+        "expansions": [
+            "form 1120-s line 21",
+            "schedule k line 1",
+            "s corporation income",
+        ],
+        "forms": ["1120-s", "schedule k"],
+    },
+    "1120-s": {
+        "expansions": ["s corporation", "form 1120-s", "schedule k"],
+        "forms": ["1120-s", "schedule k"],
+    },
+    "shareholder distribution": {
+        "expansions": [
+            "schedule k line 16d",
+            "schedule m-2 line 7",
+            "accumulated adjustments account",
+        ],
+        "forms": ["schedule k", "schedule m-2"],
+    },
+
+    # ── California S-corp (Form 100S) ──
+    "state tax": {
+        "expansions": [
+            "form 100s",
+            "franchise tax",
+            "form 100s line 30",
+        ],
+        "forms": ["100s", "form 100s"],
+    },
+    "franchise tax": {
+        "expansions": ["form 100s", "form 100s line 30", "state tax"],
+        "forms": ["100s", "form 100s"],
+    },
 }
 
 
-def expand_query(query: str) -> tuple[list[str], list[str]]:
+def expand_query(
+    query: str,
+    *,
+    interpretation: InterpretationResult | None = None,
+) -> tuple[list[str], list[str]]:
     """
     Expand a user query with financial term synonyms.
 
@@ -215,6 +260,19 @@ def expand_query(query: str) -> tuple[list[str], list[str]]:
         if trigger in query_lower:
             all_expansions.extend(data["expansions"])
             all_forms.extend(data["forms"])
+
+    # Option B (Session 18+): merge LLM-derived signals into the
+    # dictionary-derived signals. interpretation=None is the
+    # default and the feature-flag-off path; in that case the
+    # function returns exactly what it returned pre-Session-18.
+    # When interpretation is provided, its keywords union into
+    # expansions and its forms union into the form-boost list.
+    # line_numbers / intent / confidence are reserved for
+    # downstream consumers and not used here. See Session 17
+    # design doc §3.1, §3.4.
+    if interpretation is not None:
+        all_expansions.extend(interpretation.keywords)
+        all_forms.extend(interpretation.forms)
 
     # Deduplicate while preserving order
     seen_exp: set[str] = set()

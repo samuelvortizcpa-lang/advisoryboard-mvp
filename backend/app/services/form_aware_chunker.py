@@ -14,6 +14,7 @@ Reuses detect_voucher_chunk from chunking.py for 1040-ES detection.
 
 from __future__ import annotations
 
+import collections
 import logging
 import re
 from typing import Optional
@@ -42,7 +43,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Generalized to accept any 3-5 digit parent form, not just 1040 variants.
     (
         re.compile(
-            r"^\s*Schedule\s+([A-Z0-9]{1,4}(?:-[A-Z0-9]+)?)\s*\(Form\s+(\d{3,5}(?:-[A-Z]{1,3})?)\)",
+            r"^\s*Schedule\s+([A-Z0-9]{1,4}(?:-[A-Z0-9]+)?)\s*\(Form\s*(\d{3,5}(?:-[A-Z]{1,3})?)\)",
             re.MULTILINE | re.IGNORECASE,
         ),
         None,  # dynamic — built from match groups
@@ -58,7 +59,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Form 1040-ES (voucher — handled separately but detected here)
     (
         re.compile(
-            r"^\s*Form\s+1040-ES\b",
+            r"^\s*Form\s*1040-ES\b",
             re.MULTILINE | re.IGNORECASE,
         ),
         "Form 1040-ES",
@@ -66,7 +67,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Form 1040 variants: 1040, 1040-SR, 1040-X, 1040-NR
     (
         re.compile(
-            r"^\s*Form\s+(1040(?:-[A-Z]{1,3})?)\b",
+            r"^\s*Form\s*(1040(?:-[A-Z]{1,3})?)\b",
             re.MULTILINE | re.IGNORECASE,
         ),
         None,
@@ -79,7 +80,7 @@ _FORM_PATTERNS: list[tuple[re.Pattern, str | None]] = [
     # Generic federal forms: Form NNNN or Form NNNN-X (3-5 digits)
     (
         re.compile(
-            r"^\s*Form\s+(\d{3,5}(?:-[A-Z0-9]+)?)\b",
+            r"^\s*Form\s*(\d{3,5}(?:-[A-Z0-9]+)?)\b",
             re.MULTILINE | re.IGNORECASE,
         ),
         None,
@@ -95,6 +96,9 @@ _STATE_FORM_PREFIXES = [
     "CA-540", "CA-540NR",
     "NY-IT", "NY-IT-201",
     "540", "540NR",
+    # Layer 1 (Thread 2): CA corporate forms — Form 100 family
+    # Form 100 (C-corp) deliberately excluded — false-positive surface on bare "100"
+    "100S", "100W", "100X", "100-ES",
 ]
 _STATE_FORM_RE = re.compile(
     r"^\s*(?:Form\s+)?(" + "|".join(re.escape(p) for p in _STATE_FORM_PREFIXES) +
@@ -229,12 +233,32 @@ def _looks_like_header_tail(tail: str) -> bool:
     with a real form header line, False if it looks like a cross-reference.
 
     Empty or whitespace-only tail → accepted (form name alone on a line).
+
+    Rejection rules:
+      - Tail starts with lowercase letter (cross-reference like
+        "Form 8283 to be attached").
+      - Tail starts with "lines" / "line" (line-range reference).
+      - Tail starts with a comma followed by lowercase (sentence
+        continuation like ", see instructions").
+
+    Acceptance:
+      - Comma followed by uppercase IS accepted, because real form
+        titles often continue past a comma with a state or descriptor
+        capitalized (e.g., "Form 100S, California S Corporation
+        Franchise or Income Tax Return").
     """
     tail = tail.strip()
     if not tail:
         return True
-    # Explicit reject: starts with lowercase, comma, or "line(s)"
-    if re.match(r"^[a-z,]", tail) or re.match(r"^lines?\b", tail, re.IGNORECASE):
+    # Reject lowercase start (cross-reference)
+    if re.match(r"^[a-z]", tail):
+        return False
+    # Reject "line(s)" prefix
+    if re.match(r"^lines?\b", tail, re.IGNORECASE):
+        return False
+    # Reject comma + lowercase (sentence continuation), but allow
+    # comma + uppercase (form-title continuation).
+    if re.match(r"^,\s*[a-z]", tail):
         return False
     return True
 
@@ -439,13 +463,19 @@ def _resolve_page_form(
     Precedence:
       1. Scan the first 5 non-blank lines for a real form header.
          If found, return it.
-      2. If no header, run content-based inference (currently Form 1040
-         only). If matched, return ("Form 1040", None).
-      3. Otherwise return None — caller keeps state from previous page.
+      2. If no header in the first 5 lines, run content-based inference
+         (currently Form 1040 only). If matched, return ("Form 1040", None).
+      3. If neither succeeded, scan the entire page line-by-line for a
+         real form header. This catches forms whose header text falls
+         past the first 5 non-blank lines (e.g., when the page opens
+         with signature-block continuation from a prior form).
+      4. Otherwise return None — caller keeps state from previous page.
 
     Returns (form, parent_form) or None.
     """
     lines = page_text.split("\n")
+
+    # Tier 1: first 5 non-blank lines
     nonblank_seen = 0
     for line in lines:
         if not line.strip():
@@ -457,10 +487,87 @@ def _resolve_page_form(
         if header:
             return header
 
+    # Tier 2: Form 1040 content inference
     if _infer_form_1040_from_content(page_text):
         return ("Form 1040", None)
 
+    # Tier 3 (Layer 3): full-page line-by-line scan as last resort.
+    # Catches form headers that fall past the first 5 non-blank lines
+    # (e.g., page 16 of Tracy's 1120-S where the form header sits below
+    # 8879-CORP signature-block continuation from the preceding page).
+    for line in lines:
+        if not line.strip():
+            continue
+        header = _detect_form_header(line)
+        if header:
+            return header
+
     return None
+
+
+class _SectionFlipDetector:
+    """Logs suspicious section oscillation density in chunker output
+    without affecting chunker behavior. Produces telemetry to scope
+    Phase 2 column reconstruction.
+
+    Detection metric: revisits = runs - distinct_sections within a
+    rolling window. A revisit means a section re-appeared after
+    leaving its previous run. Catches both per-line alternation
+    (A-B-A-B) and run-based oscillation (AAA-BBB-AAA) while ignoring
+    sequential progression (A-B-C-D-E).
+
+    Refinement history (Session 11):
+      v1 (spec §5): adjacent-difference counting — fired on Form 1040
+          sequential progression (false positive)
+      v2: reversion counting (A-B-A) — silenced Form 1040 but missed
+          run-based oscillation (false negative)
+      v3 (this): revisit counting — correct for both patterns
+
+    Ref: AdvisoryBoard_ScheduleA_Oscillation_Spec.md §5 (spec to be
+    updated post-session to reflect v3 algorithm)
+    """
+
+    def __init__(self, window_lines: int = 10, flip_threshold: int = 2):
+        self.window: collections.deque = collections.deque(maxlen=window_lines)
+        self.window_lines = window_lines
+        self.flip_threshold = flip_threshold
+        self.alerts: list[dict] = []
+
+    def observe(self, section, line_no, raw_line: str,
+                form_type: str, page: int) -> None:
+        self.window.append(section)
+        if len(self.window) < self.window_lines:
+            return
+        window_list = list(self.window)
+        # Count runs of consecutive same-section lines and distinct sections.
+        # Revisits = runs - distinct. A revisit means a section re-appeared
+        # after leaving the "current run." This is structurally robust to
+        # both per-line oscillation (A-B-A-B) and run-based oscillation
+        # (AAA-BBB-AAA-BBB), unlike pure reversion counting.
+        # Form 1040-style sequential progression (A-B-C-D-...) produces
+        # runs == distinct, so revisits = 0 and the detector stays quiet.
+        runs = 1
+        for i in range(1, len(window_list)):
+            if window_list[i] != window_list[i - 1]:
+                runs += 1
+        distinct = len(set(window_list))
+        revisits = runs - distinct
+        if revisits >= self.flip_threshold:
+            self.alerts.append({
+                "form": form_type,
+                "page": page,
+                "window": window_list,
+                "raw_line": raw_line,
+                "revisit_count": revisits,
+            })
+
+    def emit(self, logger) -> None:
+        if self.alerts:
+            logger.warning(
+                "SECTION_FLIP_DETECTOR: %d suspicious windows",
+                len(self.alerts),
+                extra={"alerts": self.alerts[:20]},
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +612,7 @@ def form_aware_chunk(
     current_part: str | None = None
     current_section: str = "Unclassified"
     in_voucher_sequence: bool = False
+    flip_detector = _SectionFlipDetector()
 
     # Accumulator for the current chunk
     chunk_buf: list[str] = []
@@ -691,6 +799,14 @@ def form_aware_chunk(
                 chunk_page = page_num
                 _snapshot_state()
 
+            flip_detector.observe(
+                section=current_section,
+                line_no=line_num,
+                raw_line=line,
+                form_type=current_form,
+                page=page_num,
+            )
+
             # --- Accumulate line ---
             line_len = len(line) + 1  # +1 for newline
 
@@ -734,6 +850,8 @@ def form_aware_chunk(
 
     # Flush remaining content
     _flush()
+
+    flip_detector.emit(logger)
 
     # Warn about Unknown form chunks
     unknown_count = sum(1 for r in results if r["metadata"]["form"] == "Unknown")

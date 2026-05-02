@@ -6,7 +6,7 @@ Tests the full flow: personal orgs, firm creation, shared clients, access
 restriction, subscription enforcement, and edge cases.
 
 Authentication uses TEST_MODE (same as test_client_isolation.py):
-  - Reads CLERK_SECRET_KEY from backend/.env
+  - Reads CLERK_SECRET_KEY from backend/.env.local
   - Sends it as the Bearer token
   - Backend returns a fixed test user (user_test_isolation)
 
@@ -81,7 +81,7 @@ def get_headers() -> dict[str, str]:
     if explicit:
         return {"Authorization": f"Bearer {explicit}"}
 
-    env_file = Path(__file__).parent.parent / ".env"
+    env_file = Path(__file__).parent.parent / ".env.local"
     env_vars = _parse_dotenv(env_file)
 
     test_mode = env_vars.get("TEST_MODE", "").lower() in ("1", "true", "yes")
@@ -100,14 +100,14 @@ def get_headers() -> dict[str, str]:
 
 
 def get_db_session() -> Session:
-    """Create a DB session from DATABASE_URL env or backend/.env."""
+    """Create a DB session from DATABASE_URL env or backend/.env.local."""
     url = os.environ.get("DATABASE_URL")
     if not url:
-        env_file = Path(__file__).parent.parent / ".env"
+        env_file = Path(__file__).parent.parent / ".env.local"
         env_vars = _parse_dotenv(env_file)
         url = env_vars.get("DATABASE_URL")
     if not url:
-        print("ERROR: DATABASE_URL not found in environment or backend/.env")
+        print("ERROR: DATABASE_URL not found in environment or backend/.env.local")
         sys.exit(1)
     engine = create_engine(url, pool_pre_ping=True)
     return sessionmaker(bind=engine)()

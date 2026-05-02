@@ -1,15 +1,37 @@
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(".env.local")
 
 import logging
 from logging.config import dictConfig
 import os
+
+
+class ExtraFieldFormatter(logging.Formatter):
+    """Append structured extra fields as key=value suffix when present."""
+
+    EXTRA_FIELDS = [
+        "success", "from_cache", "confidence", "latency_ms",
+        "fallback_triggered", "forms_count", "forms", "question_hash",
+        "intent",
+    ]
+
+    def format(self, record):
+        base = super().format(record)
+        parts = []
+        for field in self.EXTRA_FIELDS:
+            if hasattr(record, field):
+                parts.append(f"{field}={getattr(record, field)}")
+        if parts:
+            return f"{base} {' '.join(parts)}"
+        return base
+
 
 dictConfig({
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
         "default": {
+            "()": ExtraFieldFormatter,
             "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         },
     },
