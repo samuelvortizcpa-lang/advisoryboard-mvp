@@ -381,6 +381,7 @@ class TestUpdateTemplate:
         )
         updated = cadence_service.update_template(
             db, template.id, "New Name", "New desc", None, user.clerk_id,
+            org_id=org.id,
         )
         assert updated.name == "New Name"
         assert updated.description == "New desc"
@@ -393,6 +394,7 @@ class TestUpdateTemplate:
         )
         cadence_service.update_template(
             db, template.id, None, None, {"kickoff_memo": False}, user.clerk_id,
+            org_id=org.id,
         )
         row = (
             db.query(CadenceTemplateDeliverable)
@@ -409,6 +411,7 @@ class TestUpdateTemplate:
         with pytest.raises(ValueError, match="system"):
             cadence_service.update_template(
                 db, full.id, "Hacked", None, None, user.clerk_id,
+                org_id=org.id,
             )
 
 
@@ -424,7 +427,7 @@ class TestDeactivateTemplate:
         template = cadence_service.create_custom_template(
             db, org.id, "Temp", None, flags, user.clerk_id,
         )
-        cadence_service.deactivate_template(db, template.id, user.clerk_id)
+        cadence_service.deactivate_template(db, template.id, user.clerk_id, org_id=org.id)
         refreshed = db.query(CadenceTemplate).filter(CadenceTemplate.id == template.id).first()
         assert refreshed.is_active is False
 
@@ -436,12 +439,101 @@ class TestDeactivateTemplate:
         )
         cadence_service.assign_cadence(db, client.id, template.id, user.clerk_id)
         with pytest.raises(ValueError, match="referenced"):
-            cadence_service.deactivate_template(db, template.id, user.clerk_id)
+            cadence_service.deactivate_template(db, template.id, user.clerk_id, org_id=org.id)
 
     def test_refuses_system_template(self, db):
         user, org, client, full, empty, quarterly = _setup(db)
         with pytest.raises(ValueError, match="system"):
-            cadence_service.deactivate_template(db, full.id, user.clerk_id)
+            cadence_service.deactivate_template(db, full.id, user.clerk_id, org_id=org.id)
+
+
+# ---------------------------------------------------------------------------
+# Cross-org scope guards
+# ---------------------------------------------------------------------------
+
+
+class TestAssignCadenceCrossOrgGuard:
+    def test_refuses_cross_org_custom_template(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        other_org = make_org(db, owner_user_id=user.clerk_id, name="Other Org")
+        db.commit()
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        other_custom = cadence_service.create_custom_template(
+            db, other_org.id, "Other Custom", None, flags, user.clerk_id,
+        )
+        with pytest.raises(ValueError, match="cross-org"):
+            cadence_service.assign_cadence(db, client.id, other_custom.id, user.clerk_id)
+
+    def test_allows_system_template_always(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        # System templates have no org_id — always allowed
+        cc = cadence_service.assign_cadence(db, client.id, full.id, user.clerk_id)
+        assert cc.template_id == full.id
+
+    def test_personal_workspace_refuses_custom_template(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        # Create a client with no org_id (personal workspace)
+        personal_client = make_client(db, user, org=None)
+        db.commit()
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        custom = cadence_service.create_custom_template(
+            db, org.id, "Custom", None, flags, user.clerk_id,
+        )
+        with pytest.raises(ValueError, match="Personal-workspace"):
+            cadence_service.assign_cadence(db, personal_client.id, custom.id, user.clerk_id)
+
+
+class TestUpdateTemplateCrossOrgGuard:
+    def test_refuses_cross_org_update(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        other_org = make_org(db, owner_user_id=user.clerk_id, name="Other Org")
+        db.commit()
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        other_custom = cadence_service.create_custom_template(
+            db, other_org.id, "Other Custom", None, flags, user.clerk_id,
+        )
+        with pytest.raises(ValueError, match="cross-org"):
+            cadence_service.update_template(
+                db, other_custom.id, "Hacked", None, None, user.clerk_id,
+                org_id=org.id,
+            )
+
+    def test_allows_same_org_update(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        custom = cadence_service.create_custom_template(
+            db, org.id, "Mine", None, flags, user.clerk_id,
+        )
+        updated = cadence_service.update_template(
+            db, custom.id, "Renamed", None, None, user.clerk_id,
+            org_id=org.id,
+        )
+        assert updated.name == "Renamed"
+
+
+class TestDeactivateTemplateCrossOrgGuard:
+    def test_refuses_cross_org_deactivation(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        other_org = make_org(db, owner_user_id=user.clerk_id, name="Other Org")
+        db.commit()
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        other_custom = cadence_service.create_custom_template(
+            db, other_org.id, "Other Custom", None, flags, user.clerk_id,
+        )
+        with pytest.raises(ValueError, match="cross-org"):
+            cadence_service.deactivate_template(
+                db, other_custom.id, user.clerk_id, org_id=org.id,
+            )
+
+    def test_allows_same_org_deactivation(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        custom = cadence_service.create_custom_template(
+            db, org.id, "Mine", None, flags, user.clerk_id,
+        )
+        cadence_service.deactivate_template(db, custom.id, user.clerk_id, org_id=org.id)
+        refreshed = db.query(CadenceTemplate).filter(CadenceTemplate.id == custom.id).first()
+        assert refreshed.is_active is False
 
 
 # ---------------------------------------------------------------------------
@@ -565,7 +657,7 @@ class TestListTemplatesForOrg:
         custom = cadence_service.create_custom_template(
             db, org.id, "Deactivatable", None, all_true, user.clerk_id,
         )
-        cadence_service.deactivate_template(db, custom.id, user.clerk_id)
+        cadence_service.deactivate_template(db, custom.id, user.clerk_id, org_id=org.id)
 
         active_only = cadence_service.list_templates_for_org(db, org.id, include_inactive=False)
         assert custom.id not in [t.id for t in active_only]
