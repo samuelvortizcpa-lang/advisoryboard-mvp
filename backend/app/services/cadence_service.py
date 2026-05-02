@@ -20,6 +20,7 @@ from app.models.cadence_template_deliverable import (
     CadenceTemplateDeliverable,
     DELIVERABLE_KEY_VALUES,
 )
+from app.models.client import Client
 from app.models.client_cadence import ClientCadence
 from app.models.organization import Organization
 
@@ -144,6 +145,21 @@ def assign_cadence(
         raise ValueError(f"Template {template_id} does not exist")
     if not template.is_active:
         raise ValueError(f"Template {template_id} is not active")
+
+    # Cross-org scope guard
+    if not template.is_system:
+        client = db.query(Client).filter(Client.id == client_id).first()
+        if client is None:
+            raise ValueError(f"Client {client_id} does not exist")
+        if client.org_id is None:
+            raise ValueError(
+                "Personal-workspace clients can only use system templates"
+            )
+        if template.org_id != client.org_id:
+            raise ValueError(
+                f"Template {template_id} belongs to org {template.org_id}, "
+                f"not {client.org_id}; cross-org assignment not allowed"
+            )
 
     # Check for existing assignment
     cc = (
@@ -333,6 +349,7 @@ def update_template(
     description: Optional[str],
     deliverable_flags: Optional[dict[str, bool]],
     updated_by: str,
+    org_id: UUID | None = None,
 ) -> CadenceTemplate:
     """Update a firm-defined template. Refuses system templates."""
     template = (
@@ -344,6 +361,11 @@ def update_template(
         raise ValueError(f"Template {template_id} does not exist")
     if template.is_system:
         raise ValueError("Cannot modify system templates")
+    if org_id is not None and template.org_id != org_id:
+        raise ValueError(
+            f"Template {template_id} belongs to org {template.org_id}, "
+            f"not {org_id}; cross-org update not allowed"
+        )
 
     if name is not None:
         template.name = name
@@ -381,7 +403,7 @@ def update_template(
 
 
 def deactivate_template(
-    db: Session, template_id: UUID, updated_by: str
+    db: Session, template_id: UUID, updated_by: str, org_id: UUID | None = None,
 ) -> None:
     """Soft-deactivate a firm-defined template."""
     template = (
@@ -393,6 +415,11 @@ def deactivate_template(
         raise ValueError(f"Template {template_id} does not exist")
     if template.is_system:
         raise ValueError("Cannot deactivate system templates")
+    if org_id is not None and template.org_id != org_id:
+        raise ValueError(
+            f"Template {template_id} belongs to org {template.org_id}, "
+            f"not {org_id}; cross-org deactivation not allowed"
+        )
 
     # Refuse if any client references this template
     ref_count = (

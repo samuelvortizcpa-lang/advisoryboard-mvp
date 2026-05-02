@@ -234,7 +234,7 @@ class TestPutCadence:
         custom = cadence_service.create_custom_template(
             db, setup["org"].id, "Temp", None, all_true, setup["user"].clerk_id,
         )
-        cadence_service.deactivate_template(db, custom.id, setup["user"].clerk_id)
+        cadence_service.deactivate_template(db, custom.id, setup["user"].clerk_id, org_id=setup["org"].id)
         r = setup["http"].put(
             _url(setup["client"].id), json={"template_id": str(custom.id)},
         )
