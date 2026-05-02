@@ -1,5 +1,5 @@
 """
-Tests for per-client cadence API endpoints (G4-P3a).
+Tests for cadence API endpoints (G4-P3a per-client + G4-P3b org-level templates).
 
 Uses TestClient with dependency overrides for auth and DB session.
 """
@@ -136,6 +136,20 @@ def setup_cross_org(setup):
     )
 
     return {**setup, "user_b": user_b, "org_b": org_b, "client_b": client_b, "auth_b": auth_b}
+
+
+@pytest.fixture
+def setup_with_member(setup):
+    """Extend setup with a non-admin (member) auth context for require_admin tests."""
+    member_user = make_user(setup["db"])
+    setup["db"].commit()
+    member_auth = AuthContext(
+        user_id=member_user.clerk_id,
+        org_id=setup["org"].id,
+        org_role="member",
+        is_personal_org=False,
+    )
+    return {**setup, "member_user": member_user, "member_auth": member_auth}
 
 
 def _url(client_id, suffix=""):
@@ -388,4 +402,384 @@ class TestEnabledDeliverables:
         s = setup_cross_org
         http = _with_auth(s, s["auth_b"])
         r = http.get(_url(s["client"].id, "/enabled-deliverables"))
+        assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# G4-P3b helpers
+# ---------------------------------------------------------------------------
+
+ALL_TRUE_FLAGS = {k: True for k in DELIVERABLE_KEY_VALUES}
+
+
+def _make_custom_template(setup_dict, name="Custom"):
+    """Create a custom template in the setup org via service layer, return id."""
+    db, org, user = setup_dict["db"], setup_dict["org"], setup_dict["user"]
+    t = cadence_service.create_custom_template(
+        db, org.id, name, None, ALL_TRUE_FLAGS, user.clerk_id,
+    )
+    return t
+
+
+def _make_cross_org_template(setup_cross_org_dict, name="Cross Org Custom"):
+    """Create a custom template in org_b via service layer, return it."""
+    db, org_b, user_b = (
+        setup_cross_org_dict["db"],
+        setup_cross_org_dict["org_b"],
+        setup_cross_org_dict["user_b"],
+    )
+    t = cadence_service.create_custom_template(
+        db, org_b.id, name, None, ALL_TRUE_FLAGS, user_b.clerk_id,
+    )
+    return t
+
+
+def _all_true_flags_json():
+    """Return all 7 deliverable keys mapped to True, as JSON-serializable dict."""
+    return {k: True for k in DELIVERABLE_KEY_VALUES}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/cadence-templates
+# ---------------------------------------------------------------------------
+
+
+class TestListCadenceTemplates:
+
+    def test_list_returns_system_plus_own_org_excludes_cross_org(self, setup_cross_org):
+        s = setup_cross_org
+        _make_custom_template(s, "Own Custom")
+        _make_cross_org_template(s, "Other Custom")
+        r = s["http"].get("/api/cadence-templates")
+        assert r.status_code == 200
+        names = [t["name"] for t in r.json()["templates"]]
+        assert "Own Custom" in names
+        assert "Other Custom" not in names
+        # 3 system + 1 own = 4
+        assert len(names) == 4
+
+    def test_list_excludes_inactive_by_default(self, setup):
+        custom = _make_custom_template(setup, "Inactive")
+        cadence_service.deactivate_template(
+            setup["db"], custom.id, setup["user"].clerk_id, org_id=setup["org"].id,
+        )
+        r = setup["http"].get("/api/cadence-templates")
+        assert r.status_code == 200
+        ids = [t["id"] for t in r.json()["templates"]]
+        assert str(custom.id) not in ids
+
+    def test_list_includes_inactive_when_flag_set(self, setup):
+        custom = _make_custom_template(setup, "Inactive2")
+        cadence_service.deactivate_template(
+            setup["db"], custom.id, setup["user"].clerk_id, org_id=setup["org"].id,
+        )
+        r = setup["http"].get("/api/cadence-templates?include_inactive=true")
+        assert r.status_code == 200
+        ids = [t["id"] for t in r.json()["templates"]]
+        assert str(custom.id) in ids
+
+    def test_list_returns_403_without_auth(self, setup):
+        http = _without_auth(setup)
+        r = http.get("/api/cadence-templates")
+        assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# GET /api/cadence-templates/{template_id}
+# ---------------------------------------------------------------------------
+
+
+class TestGetCadenceTemplate:
+
+    def test_get_system_template(self, setup):
+        r = setup["http"].get(f"/api/cadence-templates/{setup['full'].id}")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["name"] == "Full Cadence"
+        assert data["is_system"] is True
+        assert len(data["deliverable_flags"]) == 7
+
+    def test_get_own_org_template(self, setup):
+        custom = _make_custom_template(setup)
+        r = setup["http"].get(f"/api/cadence-templates/{custom.id}")
+        assert r.status_code == 200
+        assert r.json()["name"] == "Custom"
+
+    def test_get_cross_org_template_returns_403(self, setup_cross_org):
+        s = setup_cross_org
+        cross = _make_cross_org_template(s)
+        r = s["http"].get(f"/api/cadence-templates/{cross.id}")
+        assert r.status_code == 403
+
+    def test_get_returns_404_for_unknown_id(self, setup):
+        r = setup["http"].get(f"/api/cadence-templates/{uuid.uuid4()}")
+        assert r.status_code == 404
+
+    def test_get_returns_403_without_auth(self, setup):
+        http = _without_auth(setup)
+        r = http.get(f"/api/cadence-templates/{setup['full'].id}")
+        assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cadence-templates
+# ---------------------------------------------------------------------------
+
+
+class TestCreateCadenceTemplate:
+
+    def test_create_success(self, setup):
+        r = setup["http"].post(
+            "/api/cadence-templates",
+            json={"name": "New Template", "deliverable_flags": _all_true_flags_json()},
+        )
+        assert r.status_code == 201
+        data = r.json()
+        assert data["is_system"] is False
+        assert data["is_active"] is True
+        assert len(data["deliverable_flags"]) == 7
+        assert data["name"] == "New Template"
+
+    def test_create_missing_deliverable_key_returns_422(self, setup):
+        flags = _all_true_flags_json()
+        del flags["kickoff_memo"]
+        r = setup["http"].post(
+            "/api/cadence-templates",
+            json={"name": "Bad", "deliverable_flags": flags},
+        )
+        assert r.status_code == 422
+
+    def test_create_extra_deliverable_key_returns_422(self, setup):
+        flags = _all_true_flags_json()
+        flags["not_a_key"] = True
+        r = setup["http"].post(
+            "/api/cadence-templates",
+            json={"name": "Bad", "deliverable_flags": flags},
+        )
+        assert r.status_code == 422
+
+    def test_create_non_bool_value_returns_422(self, setup):
+        flags = _all_true_flags_json()
+        flags["progress_note"] = 0
+        r = setup["http"].post(
+            "/api/cadence-templates",
+            json={"name": "Bad", "deliverable_flags": flags},
+        )
+        assert r.status_code == 422
+
+    def test_create_non_admin_returns_403(self, setup_with_member):
+        s = setup_with_member
+        http = _with_auth(s, s["member_auth"])
+        r = http.post(
+            "/api/cadence-templates",
+            json={"name": "Should Fail", "deliverable_flags": _all_true_flags_json()},
+        )
+        assert r.status_code == 403
+
+    def test_create_returns_403_without_auth(self, setup):
+        http = _without_auth(setup)
+        r = http.post(
+            "/api/cadence-templates",
+            json={"name": "No Auth", "deliverable_flags": _all_true_flags_json()},
+        )
+        assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/cadence-templates/{template_id}
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateCadenceTemplate:
+
+    def test_update_name_only(self, setup):
+        custom = _make_custom_template(setup, "Original")
+        r = setup["http"].patch(
+            f"/api/cadence-templates/{custom.id}",
+            json={"name": "Renamed"},
+        )
+        assert r.status_code == 200
+        assert r.json()["name"] == "Renamed"
+
+    def test_update_deliverable_flags_only(self, setup):
+        custom = _make_custom_template(setup, "FlagTest")
+        flags = _all_true_flags_json()
+        flags["progress_note"] = False
+        r = setup["http"].patch(
+            f"/api/cadence-templates/{custom.id}",
+            json={"deliverable_flags": flags},
+        )
+        assert r.status_code == 200
+        assert r.json()["deliverable_flags"]["progress_note"] is False
+
+    def test_update_system_template_returns_403(self, setup):
+        r = setup["http"].patch(
+            f"/api/cadence-templates/{setup['full'].id}",
+            json={"name": "Hacked"},
+        )
+        assert r.status_code == 403
+
+    def test_update_cross_org_template_returns_403(self, setup_cross_org):
+        s = setup_cross_org
+        cross = _make_cross_org_template(s)
+        r = s["http"].patch(
+            f"/api/cadence-templates/{cross.id}",
+            json={"name": "Stolen"},
+        )
+        assert r.status_code == 403
+
+    def test_update_non_admin_returns_403(self, setup_with_member):
+        s = setup_with_member
+        custom = _make_custom_template(s, "AdminOnly")
+        http = _with_auth(s, s["member_auth"])
+        r = http.patch(
+            f"/api/cadence-templates/{custom.id}",
+            json={"name": "Nope"},
+        )
+        assert r.status_code == 403
+
+    def test_update_returns_404_for_unknown_id(self, setup):
+        r = setup["http"].patch(
+            f"/api/cadence-templates/{uuid.uuid4()}",
+            json={"name": "Ghost"},
+        )
+        assert r.status_code == 404
+
+    def test_update_returns_403_without_auth(self, setup):
+        http = _without_auth(setup)
+        r = http.patch(
+            f"/api/cadence-templates/{setup['full'].id}",
+            json={"name": "No Auth"},
+        )
+        assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cadence-templates/{template_id}/deactivate
+# ---------------------------------------------------------------------------
+
+
+class TestDeactivateCadenceTemplate:
+
+    def test_deactivate_success(self, setup):
+        custom = _make_custom_template(setup, "ToDeactivate")
+        r = setup["http"].post(f"/api/cadence-templates/{custom.id}/deactivate")
+        assert r.status_code == 204
+        # Verify via GET
+        r2 = setup["http"].get(f"/api/cadence-templates/{custom.id}")
+        assert r2.status_code == 200
+        assert r2.json()["is_active"] is False
+
+    def test_deactivate_system_template_returns_403(self, setup):
+        r = setup["http"].post(f"/api/cadence-templates/{setup['full'].id}/deactivate")
+        assert r.status_code == 403
+
+    def test_deactivate_referenced_template_returns_409(self, setup):
+        custom = _make_custom_template(setup, "InUse")
+        cadence_service.assign_cadence(
+            setup["db"], setup["client"].id, custom.id, setup["user"].clerk_id,
+        )
+        r = setup["http"].post(f"/api/cadence-templates/{custom.id}/deactivate")
+        assert r.status_code == 409
+
+    def test_deactivate_cross_org_returns_403(self, setup_cross_org):
+        s = setup_cross_org
+        cross = _make_cross_org_template(s)
+        r = s["http"].post(f"/api/cadence-templates/{cross.id}/deactivate")
+        assert r.status_code == 403
+
+    def test_deactivate_non_admin_returns_403(self, setup_with_member):
+        s = setup_with_member
+        custom = _make_custom_template(s, "AdminOnly")
+        http = _with_auth(s, s["member_auth"])
+        r = http.post(f"/api/cadence-templates/{custom.id}/deactivate")
+        assert r.status_code == 403
+
+    def test_deactivate_returns_404_for_unknown_id(self, setup):
+        r = setup["http"].post(f"/api/cadence-templates/{uuid.uuid4()}/deactivate")
+        assert r.status_code == 404
+
+    def test_deactivate_returns_403_without_auth(self, setup):
+        http = _without_auth(setup)
+        r = http.post(f"/api/cadence-templates/{setup['full'].id}/deactivate")
+        assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/organizations/{org_id}/cadence/default-template
+# ---------------------------------------------------------------------------
+
+
+class TestSetFirmDefault:
+
+    def _default_url(self, org_id):
+        return f"/api/organizations/{org_id}/cadence/default-template"
+
+    def test_set_firm_default_to_template(self, setup):
+        from app.models.organization import Organization
+        r = setup["http"].put(
+            self._default_url(setup["org"].id),
+            json={"template_id": str(setup["full"].id)},
+        )
+        assert r.status_code == 204
+        org = setup["db"].query(Organization).filter(
+            Organization.id == setup["org"].id
+        ).first()
+        assert org.default_cadence_template_id == setup["full"].id
+
+    def test_set_firm_default_clears_with_null(self, setup):
+        from app.models.organization import Organization
+        # Set first, then clear
+        cadence_service.set_firm_default(
+            setup["db"], setup["org"].id, setup["full"].id, setup["user"].clerk_id,
+        )
+        r = setup["http"].put(
+            self._default_url(setup["org"].id),
+            json={"template_id": None},
+        )
+        assert r.status_code == 204
+        org = setup["db"].query(Organization).filter(
+            Organization.id == setup["org"].id
+        ).first()
+        assert org.default_cadence_template_id is None
+
+    def test_set_firm_default_cross_org_template_returns_422(self, setup_cross_org):
+        s = setup_cross_org
+        cross = _make_cross_org_template(s)
+        r = s["http"].put(
+            self._default_url(s["org"].id),
+            json={"template_id": str(cross.id)},
+        )
+        assert r.status_code == 422
+
+    def test_set_firm_default_nonexistent_template_returns_422(self, setup):
+        r = setup["http"].put(
+            self._default_url(setup["org"].id),
+            json={"template_id": str(uuid.uuid4())},
+        )
+        assert r.status_code == 422
+
+    def test_set_firm_default_wrong_org_returns_403(self, setup_cross_org):
+        s = setup_cross_org
+        r = s["http"].put(
+            self._default_url(s["org_b"].id),
+            json={"template_id": str(s["full"].id)},
+        )
+        assert r.status_code == 403
+
+    def test_set_firm_default_non_admin_returns_403(self, setup_with_member):
+        s = setup_with_member
+        http = _with_auth(s, s["member_auth"])
+        r = http.put(
+            self._default_url(s["org"].id),
+            json={"template_id": str(s["full"].id)},
+        )
+        assert r.status_code == 403
+
+    def test_set_firm_default_returns_403_without_auth(self, setup):
+        http = _without_auth(setup)
+        r = http.put(
+            self._default_url(setup["org"].id),
+            json={"template_id": str(setup["full"].id)},
+        )
         assert r.status_code == 403
