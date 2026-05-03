@@ -53,6 +53,7 @@ import HelpTooltip from "@/components/ui/HelpTooltip";
 import ContradictionList from "@/components/contradictions/ContradictionList";
 import SendCheckinModal from "@/components/checkins/SendCheckinModal";
 import CheckinHistory from "@/components/checkins/CheckinHistory";
+import CadenceTab from "@/components/cadence/CadenceTab";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,13 +69,14 @@ const ENTITY_TYPES = [
   "Other",
 ];
 
-type TabId = "overview" | "documents" | "actions" | "chat" | "conversations" | "checkins" | "timeline" | "strategies" | "journal" | "data-quality" | "access";
+type TabId = "overview" | "documents" | "actions" | "chat" | "conversations" | "checkins" | "timeline" | "strategies" | "cadence" | "journal" | "data-quality" | "access";
 
 const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "documents", label: "Documents" },
   { id: "actions", label: "Actions" },
   { id: "strategies", label: "Tax Strategies" },
+  { id: "cadence", label: "Cadence" },
   { id: "journal", label: "Journal" },
   { id: "chat", label: "Chat" },
   { id: "conversations", label: "Conversations" },
@@ -1255,6 +1257,11 @@ function ClientDetailContent() {
                 />
                 <StrategyChecklist clientId={id} clientName={client?.name} profileFlags={profileFlags} onFlagsChange={setProfileFlags} />
               </div>
+            )}
+
+            {/* ── Cadence ──────────────────────────────────────────────── */}
+            {activeTab === "cadence" && (
+              <CadenceTab clientId={id} />
             )}
 
             {/* ── Journal ───────────────────────────────────────────────── */}

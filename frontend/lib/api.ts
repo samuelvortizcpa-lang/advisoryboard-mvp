@@ -3102,6 +3102,161 @@ export function createCheckinsApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Cadence types ────────────────────────────────────────────────────────────
+
+export type DeliverableKey =
+  | "kickoff_memo"
+  | "progress_note"
+  | "quarterly_memo"
+  | "mid_year_tune_up"
+  | "year_end_recap"
+  | "pre_prep_brief"
+  | "post_prep_flag";
+
+export const DELIVERABLE_KEYS: DeliverableKey[] = [
+  "kickoff_memo",
+  "progress_note",
+  "quarterly_memo",
+  "mid_year_tune_up",
+  "year_end_recap",
+  "pre_prep_brief",
+  "post_prep_flag",
+];
+
+export const DELIVERABLE_LABELS: Record<DeliverableKey, string> = {
+  kickoff_memo: "Kickoff memo",
+  progress_note: "Progress note",
+  quarterly_memo: "Quarterly memo",
+  mid_year_tune_up: "Mid-year tune-up",
+  year_end_recap: "Year-end recap",
+  pre_prep_brief: "Pre-prep brief",
+  post_prep_flag: "Post-prep flag",
+};
+
+export interface ClientCadenceResponse {
+  client_id: string;
+  template_id: string;
+  template_name: string;
+  template_is_system: boolean;
+  overrides: Partial<Record<DeliverableKey, boolean>>;
+  effective_flags: Record<DeliverableKey, boolean>;
+}
+
+export interface AssignCadenceRequest {
+  template_id: string;
+}
+
+export interface UpdateOverridesRequest {
+  overrides: Partial<Record<DeliverableKey, boolean>>;
+}
+
+export interface EnabledDeliverablesResponse {
+  enabled: DeliverableKey[];
+}
+
+export interface CadenceTemplateSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  is_active: boolean;
+}
+
+export interface CadenceTemplateListResponse {
+  templates: CadenceTemplateSummary[];
+}
+
+export interface CadenceTemplateDetailResponse {
+  id: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  is_active: boolean;
+  deliverable_flags: Record<DeliverableKey, boolean>;
+}
+
+export interface CreateCadenceTemplateRequest {
+  name: string;
+  description?: string | null;
+  deliverable_flags: Record<DeliverableKey, boolean>;
+}
+
+export interface UpdateCadenceTemplateRequest {
+  name?: string;
+  description?: string | null;
+  deliverable_flags?: Record<DeliverableKey, boolean>;
+}
+
+export interface SetFirmDefaultRequest {
+  template_id: string | null;
+}
+
+// ─── Cadence API factory ──────────────────────────────────────────────────────
+
+export function createCadenceApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    // ── Per-client endpoints ──────────────────────────────────────────────
+    getClientCadence(clientId: string) {
+      return f<ClientCadenceResponse>(`/clients/${clientId}/cadence`);
+    },
+
+    assignCadence(clientId: string, templateId: string) {
+      return f<ClientCadenceResponse>(`/clients/${clientId}/cadence`, {
+        method: "PUT",
+        body: JSON.stringify({ template_id: templateId }),
+      });
+    },
+
+    updateOverrides(clientId: string, overrides: Partial<Record<DeliverableKey, boolean>>) {
+      return f<ClientCadenceResponse>(`/clients/${clientId}/cadence/overrides`, {
+        method: "PATCH",
+        body: JSON.stringify({ overrides }),
+      });
+    },
+
+    getEnabledDeliverables(clientId: string) {
+      return f<EnabledDeliverablesResponse>(`/clients/${clientId}/cadence/enabled-deliverables`);
+    },
+
+    // ── Org-level template endpoints ──────────────────────────────────────
+    listTemplates() {
+      return f<CadenceTemplateListResponse>("/cadence-templates");
+    },
+
+    getTemplate(templateId: string) {
+      return f<CadenceTemplateDetailResponse>(`/cadence-templates/${templateId}`);
+    },
+
+    createTemplate(data: CreateCadenceTemplateRequest) {
+      return f<CadenceTemplateDetailResponse>("/cadence-templates", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateTemplate(templateId: string, data: UpdateCadenceTemplateRequest) {
+      return f<CadenceTemplateDetailResponse>(`/cadence-templates/${templateId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deactivateTemplate(templateId: string) {
+      return f<void>(`/cadence-templates/${templateId}/deactivate`, {
+        method: "POST",
+      });
+    },
+
+    setFirmDefault(orgId: string, templateId: string | null) {
+      return f<void>(`/organizations/${orgId}/cadence/default-template`, {
+        method: "PUT",
+        body: JSON.stringify({ template_id: templateId }),
+      });
+    },
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.
