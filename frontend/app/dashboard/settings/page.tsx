@@ -27,6 +27,11 @@ const settingsCards = [
     description: "Manage user tiers, AI query quotas, and billing periods.",
     href: "/dashboard/settings/subscriptions",
   },
+  {
+    title: "Cadence Templates",
+    description: "Manage templates that determine which deliverables fire for your clients.",
+    href: "/dashboard/settings/cadence-templates",
+  },
 ];
 
 export default function SettingsPage() {
