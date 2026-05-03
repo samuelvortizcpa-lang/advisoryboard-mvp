@@ -474,6 +474,9 @@ def set_firm_default(
             f"not {org_id}; cross-org assignment not allowed"
         )
 
+    if not template.is_active:
+        raise ValueError("Cannot set inactive template as firm default")
+
     org.default_cadence_template_id = template_id
     db.commit()
 

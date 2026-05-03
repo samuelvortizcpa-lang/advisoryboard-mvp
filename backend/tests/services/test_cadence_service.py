@@ -581,6 +581,30 @@ class TestSetFirmDefault:
         with pytest.raises(ValueError, match="does not exist"):
             cadence_service.set_firm_default(db, org.id, uuid.uuid4(), user.clerk_id)
 
+    def test_set_firm_default_refuses_inactive_template(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        custom = cadence_service.create_custom_template(
+            db, org.id, "Inactive Custom", None, flags, user.clerk_id,
+        )
+        custom.is_active = False
+        db.commit()
+        with pytest.raises(ValueError, match="Cannot set inactive template as firm default"):
+            cadence_service.set_firm_default(db, org.id, custom.id, user.clerk_id)
+
+    def test_set_firm_default_clear_works_when_existing_default_is_inactive(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        custom = cadence_service.create_custom_template(
+            db, org.id, "Soon Inactive", None, flags, user.clerk_id,
+        )
+        cadence_service.set_firm_default(db, org.id, custom.id, user.clerk_id)
+        custom.is_active = False
+        db.commit()
+        cadence_service.set_firm_default(db, org.id, None, user.clerk_id)
+        refreshed = db.query(Organization).filter(Organization.id == org.id).first()
+        assert refreshed.default_cadence_template_id is None
+
 
 # ---------------------------------------------------------------------------
 # get_client_cadence_detail
