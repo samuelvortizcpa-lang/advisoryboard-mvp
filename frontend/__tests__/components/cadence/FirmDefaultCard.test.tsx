@@ -109,7 +109,7 @@ describe("FirmDefaultCard", () => {
     expect(stableRefreshOrgs).toHaveBeenCalled();
   });
 
-  it("clearing default calls setFirmDefault(orgId, null)", async () => {
+  it("clearing default calls setFirmDefault(orgId, null) and refreshOrgs", async () => {
     render(<FirmDefaultCard isAdmin={true} />);
     await waitFor(() => {
       expect(screen.getByText("Change")).toBeInTheDocument();
@@ -122,5 +122,40 @@ describe("FirmDefaultCard", () => {
     await waitFor(() => {
       expect(mockSetFirmDefault).toHaveBeenCalledWith("org-1", null);
     });
+    expect(stableRefreshOrgs).toHaveBeenCalled();
+  });
+
+  it("inactive templates filtered out of picker", async () => {
+    mockListTemplates.mockResolvedValue({
+      templates: [
+        { id: "sys-1", name: "Full Cadence", description: "All 7", is_system: true, is_active: true },
+        { id: "cust-1", name: "Active Custom", description: null, is_system: false, is_active: true },
+        { id: "cust-2", name: "Inactive Custom", description: null, is_system: false, is_active: false },
+      ],
+    });
+    render(<FirmDefaultCard isAdmin={true} />);
+    await waitFor(() => {
+      expect(screen.getByText("Change")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Change"));
+    expect(screen.getByText("Full Cadence")).toBeInTheDocument();
+    expect(screen.getByText("Active Custom")).toBeInTheDocument();
+    expect(screen.queryByText("Inactive Custom")).not.toBeInTheDocument();
+  });
+
+  it("Confirm button disabled when selectedId equals currentDefaultId", async () => {
+    render(<FirmDefaultCard isAdmin={true} />);
+    await waitFor(() => {
+      expect(screen.getByText("Change")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Change"));
+    // selectedId is initialized to currentDefaultId ("sys-1"), so Confirm should be disabled
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+
+    // Select a different template — Confirm becomes enabled
+    fireEvent.click(screen.getByText("Custom One"));
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
   });
 });

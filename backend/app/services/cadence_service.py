@@ -421,6 +421,19 @@ def deactivate_template(
             f"not {org_id}; cross-org deactivation not allowed"
         )
 
+    # Refuse if any org uses this template as firm default
+    default_count = (
+        db.query(Organization)
+        .filter(Organization.default_cadence_template_id == template_id)
+        .count()
+    )
+    if default_count > 0:
+        raise ValueError(
+            f"Template {template_id} is referenced as the firm default for "
+            f"{default_count} organization(s); clear or reassign the firm default "
+            "before deactivating"
+        )
+
     # Refuse if any client references this template
     ref_count = (
         db.query(ClientCadence)

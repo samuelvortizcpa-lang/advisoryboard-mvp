@@ -446,6 +446,29 @@ class TestDeactivateTemplate:
         with pytest.raises(ValueError, match="system"):
             cadence_service.deactivate_template(db, full.id, user.clerk_id, org_id=org.id)
 
+    def test_refuses_template_set_as_firm_default(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        custom = cadence_service.create_custom_template(
+            db, org.id, "FirmDefault", None, flags, user.clerk_id,
+        )
+        cadence_service.set_firm_default(db, org.id, custom.id, user.clerk_id)
+        with pytest.raises(ValueError, match="referenced") as exc_info:
+            cadence_service.deactivate_template(db, custom.id, user.clerk_id, org_id=org.id)
+        assert "firm default" in str(exc_info.value).lower()
+
+    def test_deactivates_after_firm_default_cleared(self, db):
+        user, org, client, full, empty, quarterly = _setup(db)
+        flags = {k: True for k in DELIVERABLE_KEY_VALUES}
+        custom = cadence_service.create_custom_template(
+            db, org.id, "ClearFirst", None, flags, user.clerk_id,
+        )
+        cadence_service.set_firm_default(db, org.id, custom.id, user.clerk_id)
+        cadence_service.set_firm_default(db, org.id, None, user.clerk_id)
+        cadence_service.deactivate_template(db, custom.id, user.clerk_id, org_id=org.id)
+        refreshed = db.query(CadenceTemplate).filter(CadenceTemplate.id == custom.id).first()
+        assert refreshed.is_active is False
+
 
 # ---------------------------------------------------------------------------
 # Cross-org scope guards
