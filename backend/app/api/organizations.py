@@ -185,6 +185,7 @@ async def list_organizations(
             max_members=o["max_members"],
             member_count=o["member_count"],
             role=o["role"],
+            default_cadence_template_id=o["default_cadence_template_id"],
         )
         results.append(resp)
 
@@ -251,6 +252,7 @@ async def create_organization(
         client_count=client_count,
         created_at=org.created_at,
         updated_at=org.updated_at,
+        default_cadence_template_id=org.default_cadence_template_id,
     )
 
 
@@ -311,6 +313,7 @@ async def get_organization(
         client_count=client_count,
         created_at=org.created_at,
         updated_at=org.updated_at,
+        default_cadence_template_id=org.default_cadence_template_id,
     )
 
 
@@ -384,6 +387,7 @@ async def update_organization(
         client_count=client_count,
         created_at=org.created_at,
         updated_at=org.updated_at,
+        default_cadence_template_id=org.default_cadence_template_id,
     )
 
 

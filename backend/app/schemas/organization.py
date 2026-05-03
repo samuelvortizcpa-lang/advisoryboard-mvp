@@ -22,6 +22,7 @@ class OrgResponse(BaseModel):
     max_members: int
     member_count: int = 0
     role: Optional[str] = None  # the requesting user's role in this org
+    default_cadence_template_id: Optional[UUID] = None
 
     class Config:
         from_attributes = True

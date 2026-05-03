@@ -192,6 +192,7 @@ def get_user_orgs(user_id: str, db: Session) -> list[dict]:
             "max_members": org.max_members,
             "member_count": count,
             "role": role,
+            "default_cadence_template_id": org.default_cadence_template_id,
         }
         for org, role, count in rows
     ]

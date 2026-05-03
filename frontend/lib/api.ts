@@ -1549,6 +1549,7 @@ export interface Organization {
   max_members: number;
   member_count: number;
   role: string | null;
+  default_cadence_template_id: string | null;
 }
 
 export interface OrgMember {
