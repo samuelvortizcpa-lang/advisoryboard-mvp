@@ -108,7 +108,9 @@ async function apiFetch<T>(
     } catch {
       // ignore parse errors
     }
-    throw new Error(message);
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
 
   // 204 No Content — nothing to parse

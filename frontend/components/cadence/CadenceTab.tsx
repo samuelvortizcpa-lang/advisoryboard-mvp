@@ -37,9 +37,7 @@ export default function CadenceTab({ clientId }: CadenceTabProps) {
       const data = await api().getClientCadence(clientId);
       setCadence(data);
     } catch (err: unknown) {
-      const status = (err as { status?: number }).status;
-      const message = (err as { message?: string }).message ?? "";
-      if (status === 404 || message.includes("404")) {
+      if ((err as { status?: number }).status === 404) {
         setCadence(null);
       } else {
         setError("Failed to load cadence. Please try again.");
