@@ -1,0 +1,59 @@
+name: Mirror main to samuelvortizcpa-code/advisoryboard-mvp
+
+# Triggered on every push to main on lang repo.
+# Mirrors main branch to samuelvortizcpa-code/advisoryboard-mvp/main
+# for Vercel deployment compatibility.
+#
+# Topology rationale (2026-05-02 reconciliation, Path 1):
+# - lang repo is canonical trunk; all development happens here.
+# - code repo is a deploy mirror; Vercel watches code/main.
+# - This workflow keeps code/main strictly aligned with lang/main.
+# - Force push is used because code/main is downstream of lang/main;
+#   any divergence indicates direct pushes to code (which should not happen)
+#   and the mirror correctly overrides.
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout lang repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure SSH deploy key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.MIRROR_DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<SSH_EOF
+          Host github.com-code-mirror
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+          SSH_EOF
+
+      - name: Add code repo as remote
+        run: |
+          git remote add code-mirror git@github.com-code-mirror:samuelvortizcpa-code/advisoryboard-mvp.git
+          git remote -v
+
+      - name: Push main to code repo
+        run: |
+          git push code-mirror main:main --force
+          echo "Mirror push complete: lang/main -> code/main"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
+          rm -f ~/.ssh/config
+          rm -f ~/.ssh/known_hosts
