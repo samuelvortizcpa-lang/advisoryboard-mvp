@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -553,9 +554,16 @@ def test_client_isolation():
     """
     pytest-compatible wrapper.
 
-    Requires TEST_MODE=true in backend/.env.local (no env vars needed at the shell).
+    Requires TEST_MODE=true in backend/.env.local AND a running local backend on
+    BASE_URL (no env vars needed at the shell). Skipped automatically when the
+    backend is not reachable, so the unit test suite can run without it.
+
     Run with:  pytest -s backend/tests/test_client_isolation.py
     """
+    try:
+        httpx.get(f"{BASE_URL}/health", timeout=2)
+    except (httpx.ConnectError, httpx.TimeoutException):
+        pytest.skip(f"Backend not reachable at {BASE_URL}; start the local backend to run this test.")
     assert run_tests(), "One or more isolation checks failed — see output above."
 
 
