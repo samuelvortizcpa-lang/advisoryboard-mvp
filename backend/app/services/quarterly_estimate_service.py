@@ -19,6 +19,7 @@ from app.models.client import Client
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
+from app.services.cadence_service import is_deliverable_enabled
 from app.services.communication_service import (
     _build_email_html,
     _html_to_text,
@@ -66,6 +67,11 @@ async def draft_quarterly_estimate_email(
     client = db.query(Client).filter(Client.id == client_id).first()
     if client is None:
         raise ValueError("Client not found")
+
+    if not is_deliverable_enabled(db, client_id, "quarterly_memo"):
+        raise PermissionError(
+            f"quarterly_memo deliverable not enabled for client_id={client_id}"
+        )
 
     db_user = db.query(User).filter(User.clerk_id == user_id).first()
     preparer_name = "Your advisor"

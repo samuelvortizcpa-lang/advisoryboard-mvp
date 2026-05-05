@@ -6,11 +6,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ClientCommunication,
   CommunicationSendResponse,
+  createCadenceApi,
+  createCommunicationsApi,
+  DeliverableKey,
   DraftEmailResponse,
   EmailTemplate,
   QuarterlyEstimateDraftResponse,
   RenderedTemplate,
-  createCommunicationsApi,
 } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,6 +54,7 @@ export default function SendEmailModal({
   // Step state
   const [approach, setApproach] = useState<Approach>(initialQuarterly ? "quarterly" : null);
   const [showEditor, setShowEditor] = useState(false);
+  const [enabledDeliverables, setEnabledDeliverables] = useState<DeliverableKey[]>([]);
 
   // Template state
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -266,6 +269,23 @@ export default function SendEmailModal({
     }
   }
 
+  // ── Load enabled deliverables (cadence gate) ─────────────────────────────
+
+  useEffect(() => {
+    let mounted = true;
+    createCadenceApi(getToken)
+      .getEnabledDeliverables(clientId)
+      .then((res) => {
+        if (mounted) setEnabledDeliverables(res.enabled);
+      })
+      .catch(() => {
+        // Fail-safe: leave enabledDeliverables empty; quarterly card stays hidden
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [clientId, getToken]);
+
   // ── Escape key handler ─────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -354,6 +374,7 @@ export default function SendEmailModal({
                       </div>
                     </div>
                   </button>
+                  {enabledDeliverables.includes("quarterly_memo") && (
                   <button
                     onClick={() => selectApproach("quarterly")}
                     className="group w-full rounded-xl border border-gray-200 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/50"
@@ -368,6 +389,7 @@ export default function SendEmailModal({
                       </div>
                     </div>
                   </button>
+                  )}
                 </div>
               )}
 
