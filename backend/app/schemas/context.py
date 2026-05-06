@@ -11,6 +11,7 @@ class ContextPurposeEnum(str):
 
     CHAT = ContextPurpose.CHAT.value
     EMAIL_DRAFT = ContextPurpose.EMAIL_DRAFT.value
+    ENGAGEMENT_KICKOFF = ContextPurpose.ENGAGEMENT_KICKOFF.value
     QUARTERLY_ESTIMATE = ContextPurpose.QUARTERLY_ESTIMATE.value
     BRIEF = ContextPurpose.BRIEF.value
     STRATEGY_SUGGEST = ContextPurpose.STRATEGY_SUGGEST.value

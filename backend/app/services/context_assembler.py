@@ -17,7 +17,7 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 class ContextPurpose(str, enum.Enum):
     CHAT = "chat"
     EMAIL_DRAFT = "email_draft"
+    ENGAGEMENT_KICKOFF = "engagement_kickoff"
     QUARTERLY_ESTIMATE = "quarterly_estimate"
     BRIEF = "brief"
     STRATEGY_SUGGEST = "strategy_suggest"
@@ -61,6 +62,7 @@ class ContextPurpose(str, enum.Enum):
 TOKEN_BUDGETS: dict[ContextPurpose, int] = {
     ContextPurpose.CHAT: 8000,
     ContextPurpose.EMAIL_DRAFT: 4000,
+    ContextPurpose.ENGAGEMENT_KICKOFF: 6000,
     ContextPurpose.QUARTERLY_ESTIMATE: 6000,
     ContextPurpose.BRIEF: 12000,
     ContextPurpose.STRATEGY_SUGGEST: 6000,
@@ -166,6 +168,21 @@ async def assemble_context(
         ctx.action_items = _fetch_action_items(db, client_id, limit=None)
         ctx.strategy_status = _fetch_strategy_status(db, client_id, [current_year])
 
+    elif purpose == ContextPurpose.ENGAGEMENT_KICKOFF:
+        ctx.communication_history = _fetch_communications(db, client_id, limit=10)
+        raw_action_items = _fetch_action_items(db, client_id, limit=None)
+        ctx.action_items = [
+            ai for ai in raw_action_items
+            if ai.get("owner_role") in ("client", "third_party")
+        ]
+        raw_strategy_status = _fetch_strategy_status(db, client_id, [current_year])
+        ctx.strategy_status = {
+            "years": {
+                year: [s for s in entries if s.get("status") == "recommended"]
+                for year, entries in raw_strategy_status.get("years", {}).items()
+            }
+        }
+
     elif purpose == ContextPurpose.BRIEF:
         ctx.documents_summary = _fetch_documents_summary(db, client_id)
         ctx.action_items = _fetch_action_items(db, client_id, limit=None)
@@ -193,6 +210,7 @@ async def assemble_context(
     if purpose in (
         ContextPurpose.CHAT,
         ContextPurpose.EMAIL_DRAFT,
+        ContextPurpose.ENGAGEMENT_KICKOFF,
         ContextPurpose.QUARTERLY_ESTIMATE,
         ContextPurpose.BRIEF,
         ContextPurpose.STRATEGY_SUGGEST,
@@ -218,6 +236,12 @@ async def assemble_context(
         ctx.journal_entries = _fetch_journal_entries(
             db, client_id, since=last_estimate_date, include_pinned=True,
         )
+    elif purpose == ContextPurpose.ENGAGEMENT_KICKOFF:
+        # Last 30 days per G5 plan §2.3
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        ctx.journal_entries = _fetch_journal_entries(
+            db, client_id, since=thirty_days_ago, include_pinned=True,
+        )
     elif purpose == ContextPurpose.BRIEF:
         ctx.journal_entries = _fetch_journal_entries(
             db, client_id, limit=20, include_pinned=True,
@@ -237,6 +261,7 @@ async def assemble_context(
     if purpose in (
         ContextPurpose.CHAT,
         ContextPurpose.EMAIL_DRAFT,
+        ContextPurpose.ENGAGEMENT_KICKOFF,
         ContextPurpose.QUARTERLY_ESTIMATE,
         ContextPurpose.BRIEF,
     ):
@@ -361,6 +386,7 @@ def _fetch_action_items(
             "priority": item.priority,
             "due_date": item.due_date.isoformat() if item.due_date else None,
             "assigned_to_name": item.assigned_to_name,
+            "owner_role": item.owner_role,
             "source": item.source,
             "notes": item.notes,
         }
@@ -781,6 +807,7 @@ _SESSION_TOKEN_BUDGETS: dict[ContextPurpose, int] = {
     ContextPurpose.CHAT: 1500,
     ContextPurpose.BRIEF: 2000,
     ContextPurpose.EMAIL_DRAFT: 500,
+    ContextPurpose.ENGAGEMENT_KICKOFF: 800,
     ContextPurpose.STRATEGY_SUGGEST: 800,
     ContextPurpose.QUARTERLY_ESTIMATE: 800,
     ContextPurpose.GENERAL: 800,
