@@ -68,6 +68,7 @@ from app.api.alerts import router as alerts_router
 from app.api.client_types import router as client_types_router
 from app.api.clients import router as clients_router
 from app.api.dashboard import router as dashboard_router
+from app.api.deliverables import router as deliverables_router
 from app.api.documents import router as documents_router
 from app.api.integrations import router as integrations_router
 from app.api.rag import router as rag_router
@@ -314,6 +315,7 @@ app.include_router(strategy_dashboard_router,  prefix="/api", tags=["strategy-da
 app.include_router(audit_router,               prefix="/api", tags=["audit"])
 app.include_router(support_router,             prefix="/api", tags=["support"])
 app.include_router(communications_router,      prefix="/api", tags=["communications"])
+app.include_router(deliverables_router,        prefix="/api", tags=["deliverables"])
 app.include_router(extension_router,           prefix="/api/extension", tags=["extension"])
 app.include_router(notifications_router,       prefix="/api", tags=["notifications"])
 app.include_router(users_router,               prefix="/api", tags=["users"])

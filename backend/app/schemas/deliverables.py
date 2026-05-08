@@ -42,10 +42,17 @@ class DeliverableDraftResponse(BaseModel):
     warnings: list[str] = []
 
 
+class DraftKickoffMemoRequest(BaseModel):
+    """Request body for drafting a kickoff memo."""
+
+    tax_year: int
+
+
 class RecordDeliverableSentRequest(BaseModel):
     """Request body for recording a sent deliverable."""
 
     tax_year: int
     subject: str
     body: str
+    recipient_email: str
     gmail_message_id: Optional[str] = None
