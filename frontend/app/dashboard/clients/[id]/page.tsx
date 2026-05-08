@@ -36,6 +36,7 @@ import {
 import { useOrg } from "@/contexts/OrgContext";
 import ActionItemList from "@/components/action-items/ActionItemList";
 import SendEmailModal from "@/components/communications/SendEmailModal";
+import DraftKickoffMemoButton from "@/components/deliverables/DraftKickoffMemoButton";
 import DeadlineWidget from "@/components/action-items/DeadlineWidget";
 import BriefPanel from "@/components/briefs/BriefPanel";
 import DocumentList from "@/components/documents/DocumentList";
@@ -809,6 +810,11 @@ function ClientDetailContent() {
                   </svg>
                   Email
                 </button>
+                <DraftKickoffMemoButton
+                  clientId={id}
+                  clientName={client.name}
+                  clientEmail={client.email}
+                />
                 <button
                   onClick={handleGenerateBrief}
                   disabled={briefLoading}

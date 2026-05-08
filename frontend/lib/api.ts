@@ -3260,6 +3260,63 @@ export function createCadenceApi(getToken: GetToken, orgId?: string) {
   };
 }
 
+// ─── Deliverables types ──────────────────────────────────────────────────────
+
+export interface StrategyReference { id: string; name: string; }
+export interface TaskReference {
+  id: string;
+  name: string;
+  owner_role: string;
+  due_date: string | null;
+  strategy_name: string;
+}
+export interface ReferencesPayload {
+  strategies: StrategyReference[];
+  tasks: TaskReference[];
+}
+export interface DeliverableDraftResponse {
+  subject: string;
+  body: string;
+  references: ReferencesPayload;
+  warnings: string[];
+}
+export interface SendKickoffMemoRequest {
+  tax_year: number;
+  subject: string;
+  body: string;
+  recipient_email: string;
+  gmail_message_id?: string | null;
+}
+export interface SendKickoffMemoResponse {
+  client_communication_id: string;
+}
+
+// ─── Deliverables API factory ────────────────────────────────────────────────
+
+export function createDeliverablesApi(getToken: GetToken, orgId?: string) {
+  const f = boundFetch(getToken, orgId);
+  return {
+    draftKickoffMemo(clientId: string, taxYear: number) {
+      return f<DeliverableDraftResponse>(
+        `/clients/${clientId}/deliverables/kickoff-memo/draft`,
+        {
+          method: "POST",
+          body: JSON.stringify({ tax_year: taxYear }),
+        }
+      );
+    },
+    sendKickoffMemo(clientId: string, payload: SendKickoffMemoRequest) {
+      return f<SendKickoffMemoResponse>(
+        `/clients/${clientId}/deliverables/kickoff-memo/send`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }
+      );
+    },
+  };
+}
+
 // ─── useApi hook ─────────────────────────────────────────────────────────────
 // Reads orgId from OrgContext and returns pre-configured API instances so pages
 // don't have to manually pass orgId every time.
