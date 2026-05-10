@@ -448,6 +448,8 @@ def _fetch_strategy_status(
         strategy_name = row.strategy.name if row.strategy else "Unknown"
         category = row.strategy.category if row.strategy else "unknown"
         entry = {
+            "id": str(row.strategy.id) if row.strategy else "",
+            "name": strategy_name,
             "strategy": strategy_name,
             "category": category,
             "status": row.status,

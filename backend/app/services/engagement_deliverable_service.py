@@ -138,7 +138,7 @@ async def draft_deliverable(
 
     # Warnings
     warnings: list[str] = []
-    if not references_dict.get("strategies"):
+    if not strategies_ref:
         warnings.append("No recommended strategies found")
 
     # Journal entry

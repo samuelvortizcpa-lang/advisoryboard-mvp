@@ -123,6 +123,15 @@ def _extract_strategies_and_tasks(bundle: ContextBundle, facts: ClientFacts) -> 
         if ai.get("owner_role") in ("client", "third_party")
     ]
 
+    # Dedup tasks by text (same logical task may exist as multiple ActionItem rows)
+    seen_texts: set[str] = set()
+    deduped_tasks = []
+    for ai in client_tasks:
+        text = ai.get("text", "")
+        if text not in seen_texts:
+            seen_texts.add(text)
+            deduped_tasks.append(ai)
+
     return {
         "strategies": [
             {"id": s.get("id", ""), "name": s.get("name", s.get("strategy", ""))}
@@ -136,7 +145,7 @@ def _extract_strategies_and_tasks(bundle: ContextBundle, facts: ClientFacts) -> 
                 "due_date": ai.get("due_date"),
                 "strategy_name": ai.get("strategy_name", ""),
             }
-            for ai in client_tasks
+            for ai in deduped_tasks
         ],
     }
 

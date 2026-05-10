@@ -481,3 +481,143 @@ class TestKickoffMemoHandler:
         prompt = _build_kickoff_prompt(bundle, facts)
 
         assert "still finalizing" in prompt
+
+    def test_handler_dedup_tasks_by_text(self):
+        """Duplicate action items with same text are deduplicated."""
+        tid1 = str(uuid.uuid4())
+        tid2 = str(uuid.uuid4())
+        bundle = ContextBundle(
+            strategies=[],
+            action_items=[
+                {"id": tid1, "text": "Get appraisal", "owner_role": "client",
+                 "due_date": "2026-06-15", "strategy_name": "Cost Seg"},
+                {"id": tid2, "text": "Get appraisal", "owner_role": "client",
+                 "due_date": "2026-06-15", "strategy_name": "Cost Seg"},
+            ],
+            journal=[],
+            financials={},
+            comms=[],
+        )
+        facts = ClientFacts(name="Client", entity_type="S-Corp", tax_year=2026)
+
+        result = _extract_strategies_and_tasks(bundle, facts)
+
+        assert len(result["tasks"]) == 1
+        assert result["tasks"][0]["name"] == "Get appraisal"
+
+
+# ---------------------------------------------------------------------------
+# Regression tests (FT-2, FT-3 from May 9 v1 smoke)
+# ---------------------------------------------------------------------------
+
+
+class TestKickoffMemoRegressions:
+
+    @patch("app.services.engagement_deliverable_service.AsyncOpenAI")
+    @pytest.mark.asyncio
+    async def test_draft_kickoff_memo_strategy_references_populated(
+        self, mock_openai_cls, db: Session
+    ):
+        """FT-2 regression: recommended strategies produce non-empty references."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(
+            return_value=MagicMock(
+                choices=[MagicMock(message=MagicMock(content="Draft body"))]
+            )
+        )
+        mock_openai_cls.return_value = mock_client
+
+        user = make_user(db)
+        org = make_org(db, owner_user_id=user.clerk_id)
+        client = make_client(db, user, org=org)
+        _enable_kickoff_memo(db, client.id)
+        _seed_recommended_strategy(db, client.id)
+
+        result = await eds.draft_deliverable(
+            db,
+            client_id=client.id,
+            deliverable_key="kickoff_memo",
+            tax_year=2026,
+            requested_by=user.clerk_id,
+        )
+
+        assert len(result.references.strategies) >= 1
+        assert result.references.strategies[0].id != ""
+        assert result.references.strategies[0].name == "Augusta Rule"
+        assert result.warnings == []
+
+    @patch("app.services.engagement_deliverable_service.AsyncOpenAI")
+    @pytest.mark.asyncio
+    async def test_draft_kickoff_memo_warnings_fire_when_no_strategies_post_filter(
+        self, mock_openai_cls, db: Session
+    ):
+        """FT-2 defense-in-depth: warnings fire when post-filter strategies is empty."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(
+            return_value=MagicMock(
+                choices=[MagicMock(message=MagicMock(content="Draft body"))]
+            )
+        )
+        mock_openai_cls.return_value = mock_client
+
+        user = make_user(db)
+        org = make_org(db, owner_user_id=user.clerk_id)
+        client = make_client(db, user, org=org)
+        _enable_kickoff_memo(db, client.id)
+        # No strategies seeded — references_dict will have empty strategies list
+
+        result = await eds.draft_deliverable(
+            db,
+            client_id=client.id,
+            deliverable_key="kickoff_memo",
+            tax_year=2026,
+            requested_by=user.clerk_id,
+        )
+
+        assert result.references.strategies == []
+        assert "No recommended strategies found" in result.warnings
+
+    @patch("app.services.engagement_deliverable_service.AsyncOpenAI")
+    @pytest.mark.asyncio
+    async def test_draft_kickoff_memo_no_duplicate_tasks(
+        self, mock_openai_cls, db: Session
+    ):
+        """FT-3 regression: duplicate ActionItems with same text appear once."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(
+            return_value=MagicMock(
+                choices=[MagicMock(message=MagicMock(content="Draft body"))]
+            )
+        )
+        mock_openai_cls.return_value = mock_client
+
+        user = make_user(db)
+        org = make_org(db, owner_user_id=user.clerk_id)
+        client = make_client(db, user, org=org)
+        _enable_kickoff_memo(db, client.id)
+
+        # Seed two ActionItems with identical text
+        from app.models.action_item import ActionItem
+        for _ in range(2):
+            db.add(ActionItem(
+                id=uuid.uuid4(),
+                client_id=client.id,
+                created_by=user.clerk_id,
+                text="Get appraisal",
+                priority="medium",
+                status="pending",
+                owner_role="client",
+                source="manual",
+            ))
+        db.flush()
+
+        result = await eds.draft_deliverable(
+            db,
+            client_id=client.id,
+            deliverable_key="kickoff_memo",
+            tax_year=2026,
+            requested_by=user.clerk_id,
+        )
+
+        task_names = [t.name for t in result.references.tasks]
+        assert task_names.count("Get appraisal") == 1
