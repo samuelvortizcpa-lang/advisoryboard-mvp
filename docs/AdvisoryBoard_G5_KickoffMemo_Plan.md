@@ -315,7 +315,7 @@ Pulls from the assembled context bundle and produces a GPT-4o prompt with sectio
 
 ### §2.4 — Q5 retrofit: cadence gate on existing quarterly estimate flow
 
-**Surface.** `communication_service.draft_quarterly_estimate_email()` (confirm exact function name during build).
+**Surface.** `quarterly_estimate_service.draft_quarterly_estimate_email()` (confirm exact function name during build).
 
 **Change.** Single guard at the top of the function:
 
@@ -387,8 +387,8 @@ Five sub-phases, sequenced for independent shippability and lowest-risk warm-up 
 
 | Phase | Description | Type | Surfaces touched |
 |---|---|---|---|
-| G5-P1 | Q5 retrofit — quarterly estimate cadence gate | Backend + tiny frontend | `communication_service`, `SendEmailModal` |
-| G5-P2 | Context assembler `engagement_kickoff` purpose | Backend-only | `context_assembler_service` |
+| G5-P1 | Q5 retrofit — quarterly estimate cadence gate | Backend + tiny frontend | `quarterly_estimate_service`, `SendEmailModal` |
+| G5-P2 | Context assembler `engagement_kickoff` purpose | Backend-only | `context_assembler` |
 | G5-P3 | `engagement_deliverable_service` shell + kickoff memo handler | Backend-only | New service file, new handler module, schemas |
 | G5-P4 | Kickoff memo API endpoints | Backend-only | New FastAPI router |
 | G5-P5 | Kickoff memo modal + header trigger | Frontend-only | New components, header menu, `lib/api.ts` |
@@ -401,7 +401,7 @@ Total estimated effort: **5–7 hours of build time**. Each phase is one CC disp
 
 **Scope.**
 
-- Modify `communication_service.draft_quarterly_estimate_email()` (confirm exact function name during build via spot-check). Add `is_deliverable_enabled(db, client_id, "quarterly_memo")` guard at the top. Raise `PermissionError` if disabled.
+- Modify `quarterly_estimate_service.draft_quarterly_estimate_email()` (confirm exact function name during build via spot-check). Add `is_deliverable_enabled(db, client_id, "quarterly_memo")` guard at the top. Raise `PermissionError` if disabled.
 - Add 2 service tests:
   - `test_draft_quarterly_estimate_refuses_when_cadence_disabled`
   - `test_draft_quarterly_estimate_succeeds_when_cadence_enabled` (defensive — ensures the gate isn't accidentally always-blocking)
@@ -501,7 +501,7 @@ Total estimated effort: **5–7 hours of build time**. Each phase is one CC disp
   - 200-with-warnings when no recommended strategies
   - 403 non-admin
   - 403 cadence-disabled (PermissionError → 403)
-  - 404 cross-org client_id
+  - 403 cross-org client_id
   - 422 invalid `tax_year`
   - 403 cadence-disabled on send (symmetric gate)
 - 1 commit.
@@ -528,7 +528,7 @@ Total estimated effort: **5–7 hours of build time**. Each phase is one CC disp
 
 - Add types + `createDeliverablesApi(getToken, orgId)` factory to `frontend/lib/api.ts`. Two methods: `draftKickoffMemo(clientId, taxYear)` and `sendKickoffMemo(clientId, payload)`. Match the `createCadenceApi` precedent shape.
 - New components in `frontend/components/deliverables/`:
-  - `DraftKickoffMemoButton.tsx` — header menu entry, gates on admin + `isDeliverableEnabled("kickoff_memo")`
+  - `DraftKickoffMemoButton.tsx` — header menu entry, gates on admin + `getEnabledDeliverables(clientId).includes("kickoff_memo")`
   - `KickoffMemoDraftModal.tsx` — the modal (generation state → review state → send state)
   - `StrategiesReferencedList.tsx` — chip list
   - `ClientFacingTasksList.tsx` — chip list
@@ -630,7 +630,7 @@ No Playwright. No backend integration tests (the existing `test_client_isolation
 - `test_draft_kickoff_memo_200_with_warnings_when_no_recommended_strategies`
 - `test_draft_kickoff_memo_403_non_admin`
 - `test_draft_kickoff_memo_403_cadence_disabled`
-- `test_draft_kickoff_memo_404_cross_org_client_id`
+- `test_draft_kickoff_memo_403_cross_org_client_id`
 - `test_draft_kickoff_memo_422_invalid_tax_year`
 - `test_send_kickoff_memo_200_writes_communication_row`
 - `test_send_kickoff_memo_403_cadence_disabled`
