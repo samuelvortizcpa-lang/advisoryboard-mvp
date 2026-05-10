@@ -175,7 +175,7 @@ describe("KickoffMemoDraftModal", () => {
     fireEvent.change(subjectInput, { target: { value: "Edited Subject" } });
 
     // Click Send
-    fireEvent.click(screen.getByRole("button", { name: /send via gmail/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send email/i }));
 
     await waitFor(() => {
       expect(mockSendKickoffMemo).toHaveBeenCalledWith("c1", {
@@ -195,6 +195,47 @@ describe("KickoffMemoDraftModal", () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();
     }, { timeout: 2000 });
+  });
+
+  it("renders failure toast and keeps modal open on send rejection", async () => {
+    mockDraftKickoffMemo.mockResolvedValue(MOCK_DRAFT);
+    mockSendKickoffMemo.mockRejectedValueOnce(new Error("Send failed"));
+    const onClose = vi.fn();
+
+    render(
+      <KickoffMemoDraftModal
+        open={true}
+        onClose={onClose}
+        clientId="c1"
+        clientName="Test Client"
+        clientEmail="test@example.com"
+      />
+    );
+
+    // Wait for draft to load
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(MOCK_DRAFT.subject)).toBeInTheDocument();
+    });
+
+    // Click Send
+    fireEvent.click(screen.getByRole("button", { name: /send email/i }));
+
+    // Failure toast renders
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Failed to send\. Please try again or check the recipient address\./)
+      ).toBeInTheDocument();
+    });
+
+    // Modal still open (subject input present)
+    expect(screen.getByDisplayValue(MOCK_DRAFT.subject)).toBeInTheDocument();
+
+    // onClose not called
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Send button re-enabled
+    const sendBtn = screen.getByRole("button", { name: /send email/i });
+    expect(sendBtn).not.toBeDisabled();
   });
 
   it("Cancel closes modal without calling sendKickoffMemo", async () => {

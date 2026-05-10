@@ -712,7 +712,7 @@ export default function IntegrationsSettingsPage() {
                 <ProviderIconBubble provider="google" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-900">Gmail</p>
-                  <p className="text-xs text-gray-500">Auto-import emails from Gmail</p>
+                  <p className="text-xs text-gray-500">Sync inbound client emails into the timeline. Outbound deliverables send via Callwen.</p>
                 </div>
               </div>
               <button

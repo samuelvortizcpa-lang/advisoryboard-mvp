@@ -79,7 +79,7 @@ export default function KickoffMemoDraftModal({
       setToast({ message: "Kickoff memo sent successfully", type: "success" });
       setTimeout(() => onClose(), 1200);
     } catch {
-      setToast({ message: "Failed to send. Please try again.", type: "error" });
+      setToast({ message: "Failed to send. Please try again or check the recipient address.", type: "error" });
     } finally {
       setSending(false);
     }
@@ -219,7 +219,7 @@ export default function KickoffMemoDraftModal({
               disabled={sending || !recipientEmail}
               className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {sending ? "Sending…" : "Send via Gmail"}
+              {sending ? "Sending…" : "Send Email"}
             </button>
           </div>
         )}
