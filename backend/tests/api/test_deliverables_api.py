@@ -309,9 +309,10 @@ class TestDraftKickoffMemo:
 
 class TestSendKickoffMemo:
 
+    @patch("resend.Emails.send", return_value={"id": "resend_msg_api_test"})
     @patch("app.services.deliverables.kickoff_memo.extract_open_items_from_email")
     def test_send_kickoff_memo_200_writes_communication_row(
-        self, mock_extract, setup
+        self, mock_extract, mock_resend, setup
     ):
         mock_extract.return_value = []
         db, client = setup["db"], setup["client"]
@@ -356,3 +357,36 @@ class TestSendKickoffMemo:
             },
         )
         assert r.status_code == 403
+
+    @patch("app.services.engagement_deliverable_service.record_deliverable_sent")
+    def test_send_kickoff_memo_502_on_send_failure(self, mock_send, setup):
+        from datetime import datetime, timezone
+        from app.services.engagement_deliverable_service import (
+            SendDeliverableError,
+            SendError,
+            SendErrorKind,
+        )
+
+        mock_send.side_effect = SendDeliverableError(
+            SendError(
+                attempted_at=datetime.now(timezone.utc),
+                kind=SendErrorKind.EXCEPTION,
+                message="Resend API error",
+            )
+        )
+
+        db, client = setup["db"], setup["client"]
+        _enable_kickoff_memo(db, client.id)
+        db.commit()
+
+        r = setup["http"].post(
+            _send_url(client.id),
+            json={
+                "tax_year": 2026,
+                "subject": "Kickoff",
+                "body": "Body text",
+                "recipient_email": "client@example.com",
+            },
+        )
+        assert r.status_code == 502
+        assert r.json()["detail"] == "Send failed"

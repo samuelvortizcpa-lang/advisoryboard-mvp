@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from enum import Enum
+from typing import Literal, Optional
 from uuid import UUID
 
 from openai import AsyncOpenAI
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -34,6 +36,34 @@ from app.services.deliverables import get_handler
 from app.services.deliverables._base import ClientFacts, ContextBundle
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Send error types
+# ---------------------------------------------------------------------------
+
+
+class SendErrorKind(str, Enum):
+    API_ERROR = "api_error"
+    EXCEPTION = "exception"
+    TIMEOUT = "timeout"
+
+
+class SendError(BaseModel):
+    attempted_at: datetime
+    provider: Literal["resend"] = "resend"
+    kind: SendErrorKind
+    status_code: Optional[int] = None
+    message: str
+    raw: Optional[dict] = None
+
+
+class SendDeliverableError(Exception):
+    """Raised by record_deliverable_sent when Resend send fails."""
+
+    def __init__(self, send_error: SendError, *args):
+        self.send_error = send_error
+        super().__init__(send_error.message, *args)
 
 
 # ---------------------------------------------------------------------------
@@ -174,41 +204,28 @@ def record_deliverable_sent(
     body: str,
     sent_by: str,
     recipient_email: str,
-    gmail_message_id: Optional[str] = None,
 ) -> ClientCommunication:
     """
-    Record that a deliverable email was sent. Creates a ClientCommunication row
-    with threading, runs open-items extraction, and writes a journal entry.
+    Send a deliverable email via Resend and record the result.
 
-    Idempotent: if gmail_message_id is provided and already recorded, returns
-    the existing row without side effects.
+    Write-after-send pattern: the ClientCommunication row is written only
+    after Resend acknowledges (success) or rejects (failure). On success,
+    status='sent' with resend_message_id populated. On failure, status='failed'
+    with metadata_.send_error envelope, and SendDeliverableError is raised.
 
     Raises:
         ValueError: if deliverable_key has no registered handler.
         PermissionError: if the deliverable is cadence-disabled for this client.
+        SendDeliverableError: if the Resend API call fails.
     """
+    import resend
+
     handler = get_handler(deliverable_key)
 
     if not is_deliverable_enabled(db, client_id, deliverable_key):
         raise PermissionError(
             f"{deliverable_key} deliverable not enabled for client_id={client_id}"
         )
-
-    # Idempotency check (Python-side for SQLite portability)
-    if gmail_message_id:
-        existing = (
-            db.query(ClientCommunication)
-            .filter(
-                ClientCommunication.client_id == client_id,
-                ClientCommunication.thread_type == handler.thread_type,
-                ClientCommunication.thread_year == tax_year,
-            )
-            .all()
-        )
-        for row in existing:
-            meta = row.metadata_ or {}
-            if meta.get("gmail_message_id") == gmail_message_id:
-                return row
 
     # Thread
     thread_id = get_or_create_thread(
@@ -223,12 +240,55 @@ def record_deliverable_sent(
     client = db.query(Client).filter(Client.id == client_id).first()
     client_name = client.name if client else "Unknown"
 
-    # Build metadata
-    metadata: dict = {}
-    if gmail_message_id:
-        metadata["gmail_message_id"] = gmail_message_id
+    # Send via Resend
+    settings = get_settings()
+    resend.api_key = settings.resend_api_key
+    from_address = settings.resend_from_email
 
-    # Create communication row
+    attempted_at = datetime.now(timezone.utc)
+    try:
+        resend_response = resend.Emails.send({
+            "from": from_address,
+            "to": [recipient_email],
+            "subject": subject,
+            "html": body,
+        })
+        resend_message_id = (
+            resend_response.get("id") if isinstance(resend_response, dict) else None
+        )
+    except Exception as exc:
+        send_error = SendError(
+            attempted_at=attempted_at,
+            kind=SendErrorKind.EXCEPTION,
+            status_code=getattr(exc, "status_code", None),
+            message=str(exc),
+            raw=None,
+        )
+        # Write failed row
+        failed_comm = ClientCommunication(
+            client_id=client_id,
+            user_id=sent_by,
+            communication_type="email",
+            subject=subject,
+            body_html=body,
+            body_text=body,
+            recipient_email=recipient_email,
+            thread_id=thread_id,
+            thread_type=handler.thread_type,
+            thread_year=tax_year,
+            thread_quarter=None,
+            status="failed",
+            resend_message_id=None,
+            metadata_={"send_error": send_error.model_dump(mode="json")},
+        )
+        db.add(failed_comm)
+        db.commit()
+        logger.exception(
+            "Send failed for client %s deliverable %s", client_id, deliverable_key
+        )
+        raise SendDeliverableError(send_error)
+
+    # Success: write sent row
     comm = ClientCommunication(
         client_id=client_id,
         user_id=sent_by,
@@ -241,8 +301,9 @@ def record_deliverable_sent(
         thread_type=handler.thread_type,
         thread_year=tax_year,
         thread_quarter=None,
+        status="sent",
+        resend_message_id=resend_message_id,
         open_items=[],
-        metadata_=metadata or None,
     )
     db.add(comm)
     db.flush()
@@ -252,7 +313,7 @@ def record_deliverable_sent(
         items = handler.extract_open_items(body, comm.id, comm.created_at)
         comm.open_items = [item.model_dump(mode="json") for item in items]
 
-    # Journal entry
+    # Journal entry (success only)
     db.add(JournalEntry(
         client_id=client_id,
         user_id=sent_by,

@@ -13,6 +13,7 @@ from app.schemas.deliverables import (
 )
 from app.services.auth_context import AuthContext, check_client_access, get_auth, require_admin
 from app.services.engagement_deliverable_service import (
+    SendDeliverableError,
     draft_deliverable,
     record_deliverable_sent,
 )
@@ -82,7 +83,6 @@ def send_kickoff_memo(
             body=payload.body,
             sent_by=auth.user_id,
             recipient_email=payload.recipient_email,
-            gmail_message_id=payload.gmail_message_id,
         )
         return {"client_communication_id": str(comm.id)}
     except PermissionError as e:
@@ -91,3 +91,6 @@ def send_kickoff_memo(
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except SendDeliverableError:
+        logger.exception("Send failed for client %s", client_id)
+        raise HTTPException(status_code=502, detail="Send failed")

@@ -49,10 +49,9 @@ class DraftKickoffMemoRequest(BaseModel):
 
 
 class RecordDeliverableSentRequest(BaseModel):
-    """Request body for recording a sent deliverable."""
+    """Request body for sending a deliverable via Resend."""
 
     tax_year: int
     subject: str
     body: str
     recipient_email: str
-    gmail_message_id: Optional[str] = None

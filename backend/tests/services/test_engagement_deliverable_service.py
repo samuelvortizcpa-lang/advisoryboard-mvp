@@ -195,9 +195,10 @@ class TestEngagementDeliverableServiceShell:
         assert len(entries) == 1
         assert "Drafted" in entries[0].title
 
+    @patch("resend.Emails.send", return_value={"id": "resend_msg_thread_test"})
     @patch("app.services.deliverables.kickoff_memo.extract_open_items_from_email")
     def test_send_creates_client_communications_row_with_correct_thread_params(
-        self, mock_extract, db: Session
+        self, mock_extract, mock_resend, db: Session
     ):
         """record_deliverable_sent creates a row with correct threading."""
         mock_extract.return_value = []
@@ -223,9 +224,10 @@ class TestEngagementDeliverableServiceShell:
         assert comm.thread_quarter is None
         assert comm.thread_id is not None
 
+    @patch("resend.Emails.send", return_value={"id": "resend_msg_thread_reuse"})
     @patch("app.services.deliverables.kickoff_memo.extract_open_items_from_email")
     def test_send_creates_thread_via_get_or_create_thread(
-        self, mock_extract, db: Session
+        self, mock_extract, mock_resend, db: Session
     ):
         """Second send for same client+year reuses the first thread_id."""
         mock_extract.return_value = []
@@ -258,8 +260,9 @@ class TestEngagementDeliverableServiceShell:
 
         assert comm1.thread_id == comm2.thread_id
 
+    @patch("resend.Emails.send", return_value={"id": "resend_msg_journal_test"})
     @patch("app.services.deliverables.kickoff_memo.extract_open_items_from_email")
-    def test_send_writes_journal_entry(self, mock_extract, db: Session):
+    def test_send_writes_journal_entry(self, mock_extract, mock_resend, db: Session):
         """record_deliverable_sent writes a journal entry."""
         mock_extract.return_value = []
 
@@ -290,65 +293,158 @@ class TestEngagementDeliverableServiceShell:
         assert len(entries) == 1
         assert "Sent" in entries[0].title
 
+    # test_send_idempotent_under_retry removed — gmail_message_id idempotency
+    # feature removed in R-P2 rewrite (write-after-send eliminates the need).
+
+    @patch("resend.Emails.send", return_value={"id": "resend_msg_abc"})
     @patch("app.services.deliverables.kickoff_memo.extract_open_items_from_email")
-    def test_send_idempotent_under_retry(self, mock_extract, db: Session):
-        """Duplicate gmail_message_id returns existing row, no new side effects."""
-        mock_extract.return_value = [
-            {"question": "Confirm records?", "category": "awaiting_response"}
-        ]
+    def test_send_writes_sent_row_with_resend_message_id_on_success(
+        self, mock_extract, mock_resend, db: Session
+    ):
+        """Success path writes row with status='sent' and resend_message_id."""
+        mock_extract.return_value = []
 
         user = make_user(db)
         org = make_org(db, owner_user_id=user.clerk_id)
         client = make_client(db, user, org=org)
         _enable_kickoff_memo(db, client.id)
 
-        gmail_id = "msg_abc123"
-        comm1 = eds.record_deliverable_sent(
+        comm = eds.record_deliverable_sent(
             db,
             client_id=client.id,
             deliverable_key="kickoff_memo",
             tax_year=2026,
             subject="Kickoff",
-            body="Body with questions",
+            body="Body",
             sent_by=user.clerk_id,
             recipient_email="client@example.com",
-            gmail_message_id=gmail_id,
-        )
-        comm2 = eds.record_deliverable_sent(
-            db,
-            client_id=client.id,
-            deliverable_key="kickoff_memo",
-            tax_year=2026,
-            subject="Kickoff",
-            body="Body with questions",
-            sent_by=user.clerk_id,
-            recipient_email="client@example.com",
-            gmail_message_id=gmail_id,
         )
 
-        assert comm1.id == comm2.id
+        assert comm.status == "sent"
+        assert comm.resend_message_id == "resend_msg_abc"
+        assert comm.metadata_ is None or "send_error" not in (comm.metadata_ or {})
 
-        # Only one communication row
-        comms = (
-            db.query(ClientCommunication)
-            .filter(ClientCommunication.client_id == client.id)
-            .all()
-        )
-        assert len(comms) == 1
-
-        # Only one journal entry
+        # Journal entry written on success
         entries = (
             db.query(JournalEntry)
-            .filter(
-                JournalEntry.client_id == client.id,
-                JournalEntry.category == "deliverable",
-            )
+            .filter(JournalEntry.client_id == client.id, JournalEntry.category == "deliverable")
             .all()
         )
         assert len(entries) == 1
 
-        # Extractor called only once
-        assert mock_extract.call_count == 1
+    @patch("resend.Emails.send", side_effect=Exception("Resend API error"))
+    def test_send_writes_failed_row_with_envelope_on_resend_exception(
+        self, mock_resend, db: Session
+    ):
+        """Failure path writes row with status='failed' and send_error envelope."""
+        user = make_user(db)
+        org = make_org(db, owner_user_id=user.clerk_id)
+        client = make_client(db, user, org=org)
+        _enable_kickoff_memo(db, client.id)
+
+        with pytest.raises(eds.SendDeliverableError) as exc_info:
+            eds.record_deliverable_sent(
+                db,
+                client_id=client.id,
+                deliverable_key="kickoff_memo",
+                tax_year=2026,
+                subject="Kickoff",
+                body="Body",
+                sent_by=user.clerk_id,
+                recipient_email="client@example.com",
+            )
+
+        assert exc_info.value.send_error.message == "Resend API error"
+
+        # Verify failed row persisted
+        comm = (
+            db.query(ClientCommunication)
+            .filter(ClientCommunication.client_id == client.id)
+            .first()
+        )
+        assert comm is not None
+        assert comm.status == "failed"
+        assert comm.resend_message_id is None
+        assert comm.metadata_["send_error"]["kind"] == "exception"
+        assert comm.metadata_["send_error"]["message"] == "Resend API error"
+        assert "attempted_at" in comm.metadata_["send_error"]
+
+        # No journal entry on failure
+        entries = (
+            db.query(JournalEntry)
+            .filter(JournalEntry.client_id == client.id, JournalEntry.category == "deliverable")
+            .all()
+        )
+        assert len(entries) == 0
+
+    @patch("resend.Emails.send")
+    def test_send_writes_failed_row_with_status_code_on_resend_api_error(
+        self, mock_resend, db: Session
+    ):
+        """status_code attribute on exception is captured in send_error envelope."""
+        exc = Exception("Bad request")
+        exc.status_code = 422  # type: ignore[attr-defined]
+        mock_resend.side_effect = exc
+
+        user = make_user(db)
+        org = make_org(db, owner_user_id=user.clerk_id)
+        client = make_client(db, user, org=org)
+        _enable_kickoff_memo(db, client.id)
+
+        with pytest.raises(eds.SendDeliverableError):
+            eds.record_deliverable_sent(
+                db,
+                client_id=client.id,
+                deliverable_key="kickoff_memo",
+                tax_year=2026,
+                subject="Kickoff",
+                body="Body",
+                sent_by=user.clerk_id,
+                recipient_email="client@example.com",
+            )
+
+        comm = (
+            db.query(ClientCommunication)
+            .filter(ClientCommunication.client_id == client.id)
+            .first()
+        )
+        assert comm.metadata_["send_error"]["status_code"] == 422
+        assert comm.metadata_["send_error"]["kind"] == "exception"
+
+    @patch("resend.Emails.send", side_effect=Exception("timeout"))
+    def test_send_does_not_write_journal_entry_on_resend_failure(
+        self, mock_resend, db: Session
+    ):
+        """Defense-in-depth: no journal entry written when Resend fails."""
+        user = make_user(db)
+        org = make_org(db, owner_user_id=user.clerk_id)
+        client = make_client(db, user, org=org)
+        _enable_kickoff_memo(db, client.id)
+
+        pre_count = (
+            db.query(JournalEntry)
+            .filter(JournalEntry.client_id == client.id, JournalEntry.category == "deliverable")
+            .count()
+        )
+
+        with pytest.raises(eds.SendDeliverableError):
+            eds.record_deliverable_sent(
+                db,
+                client_id=client.id,
+                deliverable_key="kickoff_memo",
+                tax_year=2026,
+                subject="Kickoff",
+                body="Body",
+                sent_by=user.clerk_id,
+                recipient_email="client@example.com",
+            )
+
+        post_count = (
+            db.query(JournalEntry)
+            .filter(JournalEntry.client_id == client.id, JournalEntry.category == "deliverable")
+            .count()
+        )
+        assert post_count == pre_count
 
 
 # ---------------------------------------------------------------------------
