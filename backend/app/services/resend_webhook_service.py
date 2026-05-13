@@ -74,8 +74,7 @@ def _handle_delivered(
     now: datetime,
 ) -> None:
     comm.delivered_at = now
-    if comm.status == "sent":
-        comm.status = "delivered"
+    # Q4: status remains unchanged; delivered_at is the disambiguator.
 
 
 def _handle_bounced(
@@ -107,14 +106,6 @@ def _handle_complained(
     event_id: str,
     now: datetime,
 ) -> None:
-    comm.status = "complained"
-
-    db.add(JournalEntry(
-        client_id=comm.client_id,
-        user_id=comm.user_id,
-        entry_type="system",
-        category="deliverable",
-        title=f"Spam complaint: {comm.subject}",
-        content=f"Recipient: {comm.recipient_email}",
-        source_type="system",
-    ))
+    # Q5: complaint is capture-only. The webhook_events[] append happens in
+    # the dispatcher; nothing to do here beyond that.
+    pass

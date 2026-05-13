@@ -206,7 +206,8 @@ class TestResendWebhookRoute:
 class TestResendWebhookServiceDelivered:
     """Tests for email.delivered event handling."""
 
-    def test_delivered_sets_delivered_at_and_status(self, db: Session):
+    def test_delivered_sets_delivered_at_status_stays_sent(self, db: Session):
+        """Q4: delivered event sets delivered_at but status remains 'sent'."""
         user = make_user(db)
         org = make_org(db, owner_user_id=user.clerk_id)
         client = make_client(db, user, org=org)
@@ -216,10 +217,10 @@ class TestResendWebhookServiceDelivered:
 
         db.flush()
         assert comm.delivered_at is not None
-        assert comm.status == "delivered"
+        assert comm.status == "sent"
 
     def test_delivered_does_not_overwrite_failed_status(self, db: Session):
-        """A delivered event for a previously-failed comm stays failed? No — delivered wins for 'sent' only."""
+        """Q4: delivered event updates delivered_at only, never changes status."""
         user = make_user(db)
         org = make_org(db, owner_user_id=user.clerk_id)
         client = make_client(db, user, org=org)
@@ -229,7 +230,6 @@ class TestResendWebhookServiceDelivered:
 
         db.flush()
         assert comm.delivered_at is not None
-        # Status only upgrades from 'sent' → 'delivered'
         assert comm.status == "failed"
 
     def test_delivered_appends_webhook_event_to_metadata(self, db: Session):
@@ -290,9 +290,10 @@ class TestResendWebhookServiceBounced:
 
 
 class TestResendWebhookServiceComplained:
-    """Tests for email.complained event handling."""
+    """Tests for email.complained event handling (Q5: capture-only)."""
 
-    def test_complained_sets_status(self, db: Session):
+    def test_complained_does_not_flip_status(self, db: Session):
+        """Q5: complaint is capture-only, status unchanged."""
         user = make_user(db)
         org = make_org(db, owner_user_id=user.clerk_id)
         client = make_client(db, user, org=org)
@@ -301,9 +302,10 @@ class TestResendWebhookServiceComplained:
         rws.handle_event(db, "email.complained", {"email_id": "msg_abc123"}, "evt_3")
 
         db.flush()
-        assert comm.status == "complained"
+        assert comm.status == "sent"
 
-    def test_complained_creates_journal_entry(self, db: Session):
+    def test_complained_does_not_create_journal_entry(self, db: Session):
+        """Q5: capture-only — no journal entry on complaint."""
         user = make_user(db)
         org = make_org(db, owner_user_id=user.clerk_id)
         client = make_client(db, user, org=org)
@@ -313,8 +315,22 @@ class TestResendWebhookServiceComplained:
         db.flush()
 
         entries = db.query(JournalEntry).filter(JournalEntry.client_id == client.id).all()
-        assert len(entries) == 1
-        assert "spam" in entries[0].title.lower() or "complaint" in entries[0].title.lower()
+        assert len(entries) == 0
+
+    def test_complained_appends_to_webhook_events(self, db: Session):
+        """Q5: complaint captured in webhook_events[] even though no status/journal change."""
+        user = make_user(db)
+        org = make_org(db, owner_user_id=user.clerk_id)
+        client = make_client(db, user, org=org)
+        comm = _make_comm(db, user, client)
+
+        rws.handle_event(db, "email.complained", {"email_id": "msg_abc123"}, "evt_3")
+        db.flush()
+
+        events = comm.metadata_["webhook_events"]
+        assert len(events) == 1
+        assert events[0]["event_id"] == "evt_3"
+        assert events[0]["event_type"] == "email.complained"
 
 
 class TestResendWebhookServiceEdgeCases:

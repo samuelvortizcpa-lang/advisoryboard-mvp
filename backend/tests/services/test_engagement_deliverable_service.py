@@ -416,7 +416,10 @@ class TestEngagementDeliverableServiceShell:
         )
         assert comm.metadata_["send_error"]["status_code"] == 422
         assert comm.metadata_["send_error"]["kind"] == "api_error"
-        assert comm.metadata_["send_error"]["raw"] == {"error": "Bad request"}
+        assert comm.metadata_["send_error"]["raw"] == {
+            "error_type": "validation_error",
+            "suggested_action": "Check the error message\n        to see the list of missing fields.",
+        }
 
     @patch("resend.Emails.send", side_effect=Exception("timeout"))
     def test_send_does_not_write_journal_entry_on_resend_failure(

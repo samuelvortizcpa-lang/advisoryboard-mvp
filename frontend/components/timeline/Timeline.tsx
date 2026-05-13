@@ -247,7 +247,7 @@ function CommunicationCard({ item }: { item: CommunicationTimelineItem }) {
       <div className="rounded-lg border border-gray-200 px-3 py-2.5 transition hover:border-green-200 hover:bg-green-50/40">
         <div className="flex items-center gap-1.5">
           <p className="truncate text-sm font-medium text-gray-900">{item.title}</p>
-          {item.status && item.status !== "sent" && item.status !== "delivered" && (
+          {item.status && item.status !== "sent" && (
             <StatusBadge status={item.status} />
           )}
           {item.metadata?.ai_drafted && (

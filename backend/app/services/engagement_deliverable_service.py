@@ -263,7 +263,10 @@ def record_deliverable_sent(
             kind=SendErrorKind.API_ERROR,
             status_code=getattr(exc, "status_code", None),
             message=str(exc),
-            raw={"error": exc.message} if hasattr(exc, "message") else None,
+            raw={
+                "error_type": getattr(exc, "error_type", None),
+                "suggested_action": getattr(exc, "suggested_action", None),
+            },
         )
         # Write failed row
         failed_comm = ClientCommunication(
