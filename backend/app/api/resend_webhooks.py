@@ -21,28 +21,33 @@ async def resend_webhook(request: Request):
         raise HTTPException(status_code=503, detail="Webhook not configured")
 
     payload = await request.body()
-    headers = {
-        "svix-id": request.headers.get("svix-id", ""),
-        "svix-timestamp": request.headers.get("svix-timestamp", ""),
-        "svix-signature": request.headers.get("svix-signature", ""),
-    }
+    svix_id = request.headers.get("svix-id", "")
+    svix_timestamp = request.headers.get("svix-timestamp", "")
+    svix_signature = request.headers.get("svix-signature", "")
+
+    if not (svix_id and svix_timestamp and svix_signature):
+        raise HTTPException(status_code=401, detail="Missing signature headers")
 
     # Verify Svix signature
     from resend import Webhooks
 
     try:
-        event = Webhooks.verify(
-            payload=payload.decode("utf-8"),
-            headers=headers,
-            webhook_secret=settings.resend_webhook_secret,
-        )
-    except ValueError:
+        event = Webhooks.verify({
+            "payload": payload.decode("utf-8"),
+            "headers": {
+                "id": svix_id,
+                "timestamp": svix_timestamp,
+                "signature": svix_signature,
+            },
+            "webhook_secret": settings.resend_webhook_secret,
+        })
+    except (ValueError, TypeError, KeyError, AttributeError):
         logger.warning("Resend webhook signature verification failed")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     event_type = event.get("type", "")
     event_data = event.get("data", {})
-    event_id = headers["svix-id"]
+    event_id = svix_id
 
     db = SessionLocal()
     try:

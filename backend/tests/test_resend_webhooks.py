@@ -199,6 +199,68 @@ class TestResendWebhookRoute:
         # event_id is the 4th positional arg (db, event_type, event_data, event_id)
         assert call_args[0][3] == "evt_unique_42"
 
+    @patch("app.api.resend_webhooks.get_settings")
+    def test_returns_401_on_missing_svix_headers(self, mock_settings):
+        """No svix headers → 401 before verify is called."""
+        from fastapi.testclient import TestClient
+        from app.api.resend_webhooks import router
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(router)
+
+        settings = MagicMock()
+        settings.resend_webhook_secret = "whsec_test123"
+        mock_settings.return_value = settings
+
+        client = TestClient(app)
+        resp = client.post("/resend", json={"type": "email.delivered"})
+        assert resp.status_code == 401
+
+    @patch("app.api.resend_webhooks.get_settings")
+    @patch("resend.Webhooks.verify")
+    @patch("app.api.resend_webhooks.handle_event")
+    def test_calls_verify_with_correct_options_shape(self, mock_handle, mock_verify, mock_settings):
+        """Regression: verify called with single positional dict, not kwargs.
+        Prevents repeat of the 94c33bd production 500 (TypeError).
+        """
+        from fastapi.testclient import TestClient
+        from app.api.resend_webhooks import router
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(router)
+
+        settings = MagicMock()
+        settings.resend_webhook_secret = "whsec_test123"
+        mock_settings.return_value = settings
+        mock_verify.return_value = {"type": "email.delivered", "data": {"email_id": "msg_abc"}}
+
+        client = TestClient(app)
+        client.post(
+            "/resend",
+            json={"type": "email.delivered"},
+            headers={
+                "svix-id": "evt_1",
+                "svix-timestamp": "1234567890",
+                "svix-signature": "v1,good",
+            },
+        )
+
+        assert mock_verify.called
+        call_args = mock_verify.call_args
+        assert len(call_args.args) == 1, f"Expected 1 positional arg, got {len(call_args.args)}"
+        assert len(call_args.kwargs) == 0, f"Expected 0 kwargs, got {call_args.kwargs}"
+        options = call_args.args[0]
+        assert "payload" in options
+        assert "headers" in options
+        assert "webhook_secret" in options
+        # SDK uses 'id', 'timestamp', 'signature' (not svix- prefix)
+        headers = options["headers"]
+        assert headers["id"] == "evt_1"
+        assert headers["timestamp"] == "1234567890"
+        assert headers["signature"] == "v1,good"
+
 
 # ── Service-level tests ────────────────────────────────────────────────────
 
