@@ -68,9 +68,9 @@ The synchronous send-call result is the source of truth. The write happens *afte
 | State | When written | Required fields | Semantics |
 |---|---|---|---|
 | `sent` | Synchronously, after Resend returns success | `resend_message_id` populated, `sent_at` populated, `metadata_` may include provider response details | Resend accepted the API call. NB: this does not mean the recipient's mail server accepted delivery — that observability lands with 2B. |
-| `failed` | Synchronously, after Resend returns error or call throws | `resend_message_id = NULL`, `sent_at = NULL`, `metadata_` populated with error envelope | Send call did not succeed. The CPA was informed via toast; the row exists for audit. |
+| `failed` | Synchronously, after Resend returns error or call throws | `resend_message_id = NULL`, `sent_at` populated (NOT NULL, `server_default=now()`), `metadata` populated with error envelope | Send call did not succeed. The CPA was informed via toast; the row exists for audit. |
 
-`sent_at` is populated only on `sent`. A `failed` row's `sent_at` stays NULL — the column reflects "when delivery succeeded," not "when an attempt was made." Attempt timestamp goes in `metadata_.attempted_at` (see error envelope below).
+`sent_at` is NOT NULL with `server_default=func.now()` — both `sent` and `failed` rows have `sent_at` populated. `resend_message_id IS NULL` is the disambiguator between successful and failed sends. Attempt timestamp also appears in `metadata.send_error.attempted_at` (see error envelope below).
 
 ### Error envelope (`metadata_` JSONB shape on `failed` rows)
 
@@ -263,9 +263,9 @@ Manual end-to-end exercise of the kickoff memo deliverable, mirroring the May 9 
 
 **Service-level (`test_engagement_deliverable_service.py`):**
 
-- `test_send_deliverable_writes_sent_row_on_resend_success` — Resend mock returns success; assert `client_communications` row written with `status='sent'`, `resend_message_id` populated, `sent_at` populated, `metadata_.send_error` not present. Journal entry written.
-- `test_send_deliverable_writes_failed_row_on_resend_api_error` — Resend mock returns 4xx/5xx; assert row written with `status='failed'`, `resend_message_id=NULL`, `sent_at=NULL`, `metadata_.send_error.kind='api_error'` populated. **Journal entry NOT written.** Service raises typed exception.
-- `test_send_deliverable_writes_failed_row_on_resend_exception` — Resend mock raises; same assertion shape with `metadata_.send_error.kind='exception'`. Service raises typed exception.
+- `test_send_deliverable_writes_sent_row_on_resend_success` — Resend mock returns success; assert `client_communications` row written with `status='sent'`, `resend_message_id` populated, `sent_at` populated, `metadata.send_error` not present. Journal entry written.
+- `test_send_deliverable_writes_failed_row_on_resend_api_error` — Resend mock returns 4xx/5xx; assert row written with `status='failed'`, `resend_message_id=NULL`, `sent_at` populated (NOT NULL), `metadata.send_error.kind='api_error'` populated. **Journal entry NOT written.** Service raises typed exception.
+- `test_send_deliverable_writes_failed_row_on_resend_exception` — Resend mock raises; same assertion shape with `metadata.send_error.kind='exception'`. Service raises typed exception.
 - `test_send_deliverable_does_not_write_journal_entry_on_failure` — explicit assertion that journal is untouched on failure. Defense in depth.
 
 **API-level (`test_deliverables_api.py`):**
