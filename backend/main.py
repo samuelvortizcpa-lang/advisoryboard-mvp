@@ -101,6 +101,7 @@ from app.api.sessions import router as sessions_router
 from app.api.contradictions import router as contradictions_router
 from app.api.checkins import checkin_router, checkin_public_router
 from app.api.pdf_export import router as pdf_export_router
+from app.api.resend_webhooks import router as resend_webhooks_router
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -330,3 +331,4 @@ app.include_router(checkin_router,             prefix="/api", tags=["checkins"])
 app.include_router(checkin_public_router,      prefix="/api/checkins/public", tags=["checkins-public"])
 app.include_router(pdf_export_router,          prefix="/api", tags=["pdf-export"])
 app.include_router(cadence_router,             prefix="/api", tags=["cadence"])
+app.include_router(resend_webhooks_router,     prefix="/api/webhooks", tags=["webhooks"])

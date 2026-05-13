@@ -36,6 +36,7 @@ class CommunicationTimelineItem(BaseModel):
     title: str
     subtitle: str
     icon_hint: str = "email"
+    status: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
     model_config = {"from_attributes": True}

@@ -142,6 +142,7 @@ async def get_client_timeline(
                     title=f"Email sent: {comm.subject}",
                     subtitle=f"To {comm.recipient_name or comm.recipient_email}",
                     icon_hint="email",
+                    status=comm.status,
                     metadata=meta,
                 )
             )

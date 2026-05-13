@@ -381,8 +381,14 @@ class TestEngagementDeliverableServiceShell:
     def test_send_writes_failed_row_with_status_code_on_resend_api_error(
         self, mock_resend, db: Session
     ):
-        """status_code attribute on exception is captured in send_error envelope."""
-        exc = Exception("Bad request")
+        """ResendError is captured as kind=api_error with status_code and raw."""
+        from resend.exceptions import ValidationError as ResendValidationError
+
+        exc = ResendValidationError(
+            message="Bad request",
+            error_type="validation_error",
+            code=422,
+        )
         exc.status_code = 422  # type: ignore[attr-defined]
         mock_resend.side_effect = exc
 
@@ -409,7 +415,8 @@ class TestEngagementDeliverableServiceShell:
             .first()
         )
         assert comm.metadata_["send_error"]["status_code"] == 422
-        assert comm.metadata_["send_error"]["kind"] == "exception"
+        assert comm.metadata_["send_error"]["kind"] == "api_error"
+        assert comm.metadata_["send_error"]["raw"] == {"error": "Bad request"}
 
     @patch("resend.Emails.send", side_effect=Exception("timeout"))
     def test_send_does_not_write_journal_entry_on_resend_failure(

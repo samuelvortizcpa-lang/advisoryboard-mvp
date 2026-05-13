@@ -14,6 +14,7 @@ from uuid import UUID
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel
+from resend.exceptions import ResendError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -256,6 +257,37 @@ def record_deliverable_sent(
         resend_message_id = (
             resend_response.get("id") if isinstance(resend_response, dict) else None
         )
+    except ResendError as exc:
+        send_error = SendError(
+            attempted_at=attempted_at,
+            kind=SendErrorKind.API_ERROR,
+            status_code=getattr(exc, "status_code", None),
+            message=str(exc),
+            raw={"error": exc.message} if hasattr(exc, "message") else None,
+        )
+        # Write failed row
+        failed_comm = ClientCommunication(
+            client_id=client_id,
+            user_id=sent_by,
+            communication_type="email",
+            subject=subject,
+            body_html=body,
+            body_text=body,
+            recipient_email=recipient_email,
+            thread_id=thread_id,
+            thread_type=handler.thread_type,
+            thread_year=tax_year,
+            thread_quarter=None,
+            status="failed",
+            resend_message_id=None,
+            metadata_={"send_error": send_error.model_dump(mode="json")},
+        )
+        db.add(failed_comm)
+        db.commit()
+        logger.exception(
+            "Resend API error for client %s deliverable %s", client_id, deliverable_key
+        )
+        raise SendDeliverableError(send_error)
     except Exception as exc:
         send_error = SendError(
             attempted_at=attempted_at,

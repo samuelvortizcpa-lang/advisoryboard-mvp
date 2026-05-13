@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     # ── Resend (transactional email) ─────────────────────────────────────
     resend_api_key: str | None = None
     resend_from_email: str | None = None
+    resend_webhook_secret: str | None = None
 
     # ── Encryption ───────────────────────────────────────────────────────────
     encryption_key: str = ""

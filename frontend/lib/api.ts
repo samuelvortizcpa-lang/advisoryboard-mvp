@@ -1161,6 +1161,7 @@ export interface CommunicationTimelineItem {
   title: string;
   subtitle: string;
   icon_hint: string;
+  status?: string;
   metadata: {
     communication_id: string;
     ai_drafted: boolean;

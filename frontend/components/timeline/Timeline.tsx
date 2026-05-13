@@ -149,6 +149,8 @@ const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700",
   completed: "bg-green-50 text-green-700",
   cancelled: "bg-gray-100 text-gray-500",
+  failed: "bg-red-50 text-red-700",
+  bounced: "bg-red-50 text-red-700",
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -245,6 +247,9 @@ function CommunicationCard({ item }: { item: CommunicationTimelineItem }) {
       <div className="rounded-lg border border-gray-200 px-3 py-2.5 transition hover:border-green-200 hover:bg-green-50/40">
         <div className="flex items-center gap-1.5">
           <p className="truncate text-sm font-medium text-gray-900">{item.title}</p>
+          {item.status && item.status !== "sent" && item.status !== "delivered" && (
+            <StatusBadge status={item.status} />
+          )}
           {item.metadata?.ai_drafted && (
             <span className="inline-flex items-center rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
               AI
